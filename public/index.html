@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>FocusTube — distraction-free courses</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%237c5cff'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header id="topbar" class="hidden">
+    <button id="backBtn" class="icon-btn hidden" title="All courses"></button>
+    <button id="sideToggle" class="icon-btn hidden" title="Toggle playlist  [ "></button>
+    <div class="brand" id="brand">Focus<span class="accent">Tube</span></div>
+    <div class="spacer"></div>
+    <button id="resyncBtn" class="icon-btn hidden" title="Re-sync playlist from YouTube"></button>
+    <button id="streakChip" class="streak-chip" title="Streak & stats">🔥 <b id="streakNum">0</b></button>
+    <button id="dashboardBtn" class="topbar-command" title="Learning dashboard">Dashboard</button>
+    <button id="profileBtn" class="profile-chip" title="Profile"><span id="profileAvatar">G</span><b id="profileName">Guest</b></button>
+  </header>
+
+  <main id="authView" class="auth-view">
+    <section class="auth-shell">
+      <div class="auth-brand">Focus<span class="accent">Tube</span></div>
+      <h1>Keep your focus. Keep your progress.</h1>
+      <p>Sign in to sync courses, streaks, watch history, and certificates on this device.</p>
+      <div class="auth-tabs" role="tablist">
+        <button id="loginTab" class="active" type="button">Sign in</button>
+        <button id="registerTab" type="button">Create account</button>
+      </div>
+      <form id="authForm" class="auth-form">
+        <label>Username<input id="authUsername" type="text" autocomplete="username" minlength="3" maxlength="32" required /></label>
+        <label>Password<input id="authPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
+        <button id="authSubmit" class="btn" type="submit">Sign in</button>
+      </form>
+      <div id="authError" class="add-error hidden"></div>
+      <div class="auth-divider"><span>or</span></div>
+      <button id="guestLogin" class="btn ghost auth-guest" type="button">Continue as guest</button>
+      <p class="auth-footnote">Guest progress is kept for 90 days of inactivity and can be upgraded later.</p>
+    </section>
+  </main>
+
+  <main id="homeView" class="view hidden">
+    <section class="hero">
+      <h1>Learn without the <span class="accent">noise</span>.</h1>
+      <p class="sub">Paste a YouTube playlist or a single video and turn it into a clean, trackable course. No feed, no comments, no “recommended for you” rabbit holes.</p>
+      <form id="addForm" class="add-form">
+        <input id="urlInput" type="text" placeholder="Paste a YouTube playlist or video link…" autocomplete="off" spellcheck="false" />
+        <button id="addBtn" class="btn" type="submit">Create course</button>
+      </form>
+      <div id="addError" class="add-error hidden"></div>
+    </section>
+    <section class="courses-section">
+      <h2 id="coursesHeading" class="hidden">Your courses</h2>
+      <div id="courseGrid" class="course-grid"></div>
+    </section>
+  </main>
+
+  <main id="courseView" class="view hidden">
+    <aside id="sidebar">
+      <div class="sidebar-head">
+        <div class="side-title-row">
+          <div class="course-title" id="sideTitle"></div>
+          <button id="sideRefresh" class="icon-btn small" title="Refresh playlist — pulls newly added videos from YouTube"></button>
+        </div>
+        <div class="course-meta" id="sideMeta"></div>
+        <div class="progress-track"><div id="sideProgressFill" class="progress-fill"></div></div>
+        <div class="progress-label" id="sideProgressLabel"></div>
+      </div>
+      <ol id="videoList"></ol>
+      <div class="sidebar-foot">
+        <button id="courseDownloadBtn" class="btn ghost download-course-btn">Download course</button>
+        <button id="certBtn" class="btn cert-btn" disabled>🏆 Finish every video to unlock</button>
+      </div>
+    </aside>
+
+    <section class="stage">
+      <div id="playerShell">
+        <div id="ytWrap">
+          <div id="ytFrame"></div>
+          <div id="shield"></div>
+          <div id="posterOverlay" class="overlay hidden">
+            <button id="posterPlay" class="giant-play" title="Play"></button>
+            <div id="posterTitle" class="overlay-title"></div>
+          </div>
+          <div id="pauseOverlay" class="pause-cover hidden" title="Click to resume">
+            <div class="cover-bar top"></div>
+            <div class="cover-bar bottom">
+              <span class="pause-hint">Paused — press <kbd>space</kbd> or click to resume</span>
+              <button id="peekBtn" class="peek-btn" type="button">Show full frame</button>
+            </div>
+            <button id="peekRestore" class="peek-restore" type="button">Hide YouTube UI</button>
+          </div>
+          <div id="endedOverlay" class="overlay hidden">
+            <div class="overlay-emoji">🎉</div>
+            <div class="overlay-title" id="endedTitle">Video complete!</div>
+            <div class="overlay-sub hidden" id="endedCountdown"></div>
+            <div class="overlay-actions">
+              <button id="endedReplay" class="btn ghost">Replay</button>
+              <button id="endedNext" class="btn hidden">Next video ▸</button>
+              <button id="endedCancel" class="btn ghost hidden">Stay here</button>
+              <button id="endedCert" class="btn hidden">🏆 Get certificate</button>
+            </div>
+          </div>
+          <div id="errorOverlay" class="overlay hidden">
+            <div class="overlay-emoji">😕</div>
+            <div class="overlay-title">This video can’t be embedded</div>
+            <div class="overlay-sub">The creator disabled playback outside YouTube.</div>
+            <div class="overlay-actions">
+              <a id="errorLink" class="btn ghost" target="_blank" rel="noopener">Open on YouTube</a>
+              <button id="errorSkip" class="btn">Skip to next ▸</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="controls">
+          <div class="seek-row">
+            <span id="curTime" class="time">0:00</span>
+            <div class="seek-wrap"><input id="seekBar" type="range" min="0" max="1000" step="1" value="0" /><div id="seekMarkers"></div></div>
+            <span id="durTime" class="time">0:00</span>
+          </div>
+          <div class="btn-row">
+            <button id="prevBtn" class="icon-btn" title="Previous  (P)"></button>
+            <button id="playBtn" class="icon-btn big" title="Play / pause  (space or K)"></button>
+            <button id="nextBtn" class="icon-btn" title="Next  (N)"></button>
+            <button id="back10" class="icon-btn" title="Back 10s  (J)"></button>
+            <button id="fwd10" class="icon-btn" title="Forward 10s  (L)"></button>
+            <div class="spacer"></div>
+            <button id="ccBtn" class="icon-btn" title="Captions  (C)"></button>
+            <select id="speedSel" title="Playback speed  ( <  > )">
+              <option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+              <option value="1.75">1.75×</option><option value="2">2×</option><option value="2.5">2.5×</option>
+              <option value="3">3×</option><option value="4">4×</option>
+            </select>
+            <select id="qualitySel" title="Video quality"><option value="default">Auto</option></select>
+            <button id="muteBtn" class="icon-btn" title="Mute  (M)"></button>
+            <input id="volBar" type="range" min="0" max="100" value="100" title="Volume" />
+            <button id="fsBtn" class="icon-btn" title="Fullscreen  (F)"></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="now-playing">
+        <div class="np-text"><h2 id="npTitle"></h2><div id="npMeta" class="np-meta"></div><div id="npChapter" class="np-chapter"></div></div>
+        <button id="npComplete" class="btn ghost">✓ Mark complete</button>
+      </div>
+      <div id="videoExtras" class="video-extras">
+        <div id="chaptersSection" class="extras-section open hidden">
+          <button id="chaptersToggle" class="extras-toggle">Chapters<span class="chev">▾</span></button>
+          <div id="chaptersList" class="section-body chapters-list"></div>
+        </div>
+        <div id="descSection" class="extras-section hidden">
+          <button id="descToggle" class="extras-toggle">Description<span class="chev">▾</span></button>
+          <div id="descBody" class="section-body desc-body"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <main id="dashboardView" class="view hidden">
+    <section class="dashboard-shell">
+      <div class="dashboard-heading">
+        <div><h1>Learning dashboard</h1><p>Time, consistency, course progress, and your complete watch history.</p></div>
+        <select id="dashboardRange" title="Dashboard time range"><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
+      </div>
+      <div class="dashboard-stats">
+        <div><strong id="dashSiteTime">0m</strong><span>time on FocusTube</span></div>
+        <div><strong id="dashWatchTime">0m</strong><span>video watch time</span></div>
+        <div><strong id="dashStreak">0</strong><span>day streak</span></div>
+        <div><strong id="dashBest">0</strong><span>best streak</span></div>
+        <div><strong id="dashVideos">0</strong><span>videos completed</span></div>
+        <div><strong id="dashCourses">0</strong><span>courses completed</span></div>
+      </div>
+      <div id="dashboardLoading" class="dashboard-loading">Loading your history…</div>
+      <div id="dashboardContent" class="hidden">
+        <section class="dashboard-grid">
+          <div class="dash-panel wide">
+            <div class="panel-heading"><h2>Daily activity</h2><span>Minutes on FocusTube vs. video watch time</span></div>
+            <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+          </div>
+          <div class="dash-panel">
+            <div class="panel-heading"><h2>Course focus</h2><span>Watch time by course</span></div>
+            <div class="chart-wrap donut"><canvas id="courseChart"></canvas></div>
+          </div>
+          <div class="dash-panel">
+            <div class="panel-heading"><h2>Consistency</h2><span>Last 20 weeks</span></div>
+            <div id="dashboardHeatmap" class="heatmap dashboard-heatmap"></div>
+            <div class="hm-legend"><span>Less</span><i class="hm-cell l0"></i><i class="hm-cell l1"></i><i class="hm-cell l2"></i><i class="hm-cell l3"></i><i class="hm-cell l4"></i><span>More</span></div>
+          </div>
+        </section>
+        <section class="dash-section">
+          <div class="panel-heading"><h2>Course progress</h2><span id="courseProgressSummary"></span></div>
+          <div id="dashboardCourses" class="dashboard-courses"></div>
+        </section>
+        <section class="dash-section history-section">
+          <div class="panel-heading"><h2>Watch history</h2><span>What you watched, when, and for how long</span></div>
+          <div id="historyList" class="history-list"></div>
+          <button id="historyMore" class="btn ghost hidden">Load older activity</button>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="statsModal" class="modal-backdrop hidden">
+    <div class="modal">
+      <button class="modal-close" data-close="statsModal">✕</button><h2>Your learning stats</h2>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num" id="statStreak">0</div><div class="stat-label">day streak 🔥</div></div>
+        <div class="stat-card"><div class="stat-num" id="statBest">0</div><div class="stat-label">best streak</div></div>
+        <div class="stat-card"><div class="stat-num" id="statTime">0m</div><div class="stat-label">total watch time</div></div>
+        <div class="stat-card"><div class="stat-num" id="statDays">0</div><div class="stat-label">days active</div></div>
+      </div>
+      <h3>Last 20 weeks</h3><div id="heatmap" class="heatmap"></div>
+      <div class="hm-legend"><span>Less</span><i class="hm-cell l0"></i><i class="hm-cell l1"></i><i class="hm-cell l2"></i><i class="hm-cell l3"></i><i class="hm-cell l4"></i><span>More</span></div>
+      <h3>Keyboard shortcuts</h3>
+      <div class="kbd-list"><span><kbd>space</kbd>/<kbd>K</kbd> play·pause</span><span><kbd>J</kbd>/<kbd>L</kbd> ±10s</span><span><kbd>←</kbd>/<kbd>→</kbd> ±5s</span><span><kbd>↑</kbd>/<kbd>↓</kbd> volume</span><span><kbd>&lt;</kbd>/<kbd>&gt;</kbd> speed</span><span><kbd>M</kbd> mute</span><span><kbd>C</kbd> captions</span><span><kbd>F</kbd> fullscreen</span><span><kbd>N</kbd>/<kbd>P</kbd> next·prev</span><span><kbd>[</kbd> sidebar</span></div>
+    </div>
+  </div>
+
+  <div id="certModal" class="modal-backdrop hidden">
+    <div class="modal cert">
+      <button class="modal-close" data-close="certModal">✕</button><div class="cert-emoji">🏆</div><h2>Course complete!</h2>
+      <p id="certCourseName" class="cert-course"></p><p class="muted">You finished an entire YouTube course without falling into the recommendation abyss. Legendary focus.</p>
+      <label class="cert-label">Name on certificate<input id="certName" type="text" placeholder="Your name" maxlength="60" /></label>
+      <button id="certDownload" class="btn">Download certificate (PDF)</button>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal-backdrop hidden">
+    <div class="modal profile-modal">
+      <button class="modal-close" data-close="profileModal">✕</button>
+      <div class="profile-identity"><div id="profileModalAvatar" class="profile-avatar-large">G</div><div><h2 id="profileModalName">Guest</h2><p id="profileModalType" class="muted">Guest profile</p></div></div>
+      <div id="upgradeBlock" class="upgrade-block hidden">
+        <h3>Keep this progress permanently</h3>
+        <form id="upgradeForm" class="auth-form compact">
+          <label>Username<input id="upgradeUsername" type="text" autocomplete="username" minlength="3" maxlength="32" required /></label>
+          <label>Password<input id="upgradePassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
+          <button class="btn" type="submit">Create account from guest</button>
+        </form>
+        <div id="upgradeError" class="add-error hidden"></div>
+      </div>
+      <div class="profile-data-block">
+        <h3>Your data</h3>
+        <p>Download your courses, videos, progress, settings, activity totals, and complete watch history. Passwords and session data are never included.</p>
+        <button id="exportDataBtn" class="btn ghost profile-export" type="button">Export my data (JSON)</button>
+      </div>
+      <button id="logoutBtn" class="btn danger profile-logout" type="button">Sign out</button>
+    </div>
+  </div>
+
+  <div id="downloadModal" class="modal-backdrop hidden">
+    <div class="modal download-modal">
+      <button class="modal-close" data-close="downloadModal">✕</button><h2>Download course</h2><p id="downloadCourseName" class="muted"></p>
+      <div id="downloadSetup" class="download-setup hidden"><strong>Download tools are not installed</strong><p>Install them in Terminal, then reopen this dialog:</p><code id="downloadInstallCommand">brew install yt-dlp ffmpeg</code></div>
+      <div id="downloadFormBlock">
+        <label class="field-label">Quality<select id="downloadQuality"><option value="1080">1080p</option><option value="720" selected>720p (default)</option><option value="480">480p</option><option value="360">360p</option><option value="audio">Audio only (M4A)</option></select></label>
+        <label class="permission-check"><input id="downloadAuthorized" type="checkbox" /> I own these videos or have permission to download them.</label>
+        <button id="downloadStart" class="btn" type="button" disabled>Start download</button>
+      </div>
+      <div id="downloadProgress" class="download-progress hidden">
+        <div class="download-progress-head"><strong id="downloadStatus">Preparing…</strong><span id="downloadPercent">0%</span></div>
+        <div class="progress-track"><div id="downloadProgressFill" class="progress-fill"></div></div><p id="downloadNow" class="muted"></p>
+        <div class="download-actions"><button id="downloadCancel" class="btn danger" type="button">Cancel</button><a id="downloadFile" class="btn hidden">Save ZIP</a></div>
+      </div>
+      <div id="downloadError" class="add-error hidden"></div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+  <script src="/vendor/confetti.js" defer></script>
+  <script src="/vendor/jspdf.js" defer></script>
+  <script src="/vendor/chart.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

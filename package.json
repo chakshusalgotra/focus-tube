@@ -1,0 +1,21 @@
+{
+  "name": "focustube",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Turn any YouTube playlist into a distraction-free course with progress tracking, streaks and a completion certificate.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^8.0.0",
+    "better-sqlite3": "^13.0.2",
+    "canvas-confetti": "^1.9.3",
+    "chart.js": "^4.4.9",
+    "express": "^4.19.2",
+    "jspdf": "^4.2.1"
+  }
+}
