@@ -209,16 +209,15 @@ Then open [http://localhost:3001](http://localhost:3001).
 
 ### Docker Compose
 
-The Docker image includes Node.js 24, ffmpeg, and a pinned yt-dlp release, so course downloads work without installing host-level media tools.
+The Docker setup is intentionally basic and intended only for local use. The app listens on port `3000` inside the container and is exposed only at `127.0.0.1:3002` on the host.
 
 ```bash
 git clone https://github.com/chakshusalgotra/focus-tube.git
 cd focus-tube
-cp .env.example .env
 docker compose up --build -d
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3002](http://localhost:3002).
 
 Useful operations:
 
@@ -226,26 +225,24 @@ Useful operations:
 # Follow application logs
 docker compose logs -f app
 
-# Inspect health
+# Check the app
 docker compose ps
-curl http://localhost:3000/api/health
+curl http://localhost:3002/api/health
 
 # Stop containers while preserving data
 docker compose down
 
-# Stop containers and permanently delete application data/download temp files
+# Stop containers and permanently delete application data
 docker compose down -v
 ```
 
-Compose stores SQLite data in the `focustube-data` volume and temporary course-download files in `focustube-temp`. The root filesystem is read-only and the process runs as the non-root `node` user.
+Compose stores SQLite data in the `focustube-data` volume. The fixed port mapping is:
 
-To expose a different local port:
-
-```bash
-FOCUSTUBE_PORT=3001 docker compose up -d
+```text
+127.0.0.1:3002 -> container:3000
 ```
 
-To intentionally bind beyond loopback, set `BIND_ADDRESS=0.0.0.0` and configure `ALLOWED_HOSTS` in `.env`. Use this only behind a trusted network boundary or HTTPS reverse proxy.
+The basic local image does not bundle the optional `yt-dlp` and `ffmpeg` tools, so course ZIP downloads are unavailable in this container. All other application features work normally. For downloads, run FocusTube natively after installing the tools listed under [Optional: course ZIP downloads](#optional-course-zip-downloads).
 
 ### First-run workflow
 
@@ -409,10 +406,9 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 ```text
 focus-tube/
-├── Dockerfile              # Multi-stage, non-root production image
-├── compose.yaml            # Persistent local Docker deployment
+├── Dockerfile              # Basic local application image
+├── compose.yaml            # Local port 3002 and persistent SQLite volume
 ├── .dockerignore           # Minimal Docker build context
-├── .env.example            # Compose configuration template
 ├── auth.js                 # Password hashing, sessions, auth routes, rate limits
 ├── db.js                   # SQLite schema, persistence, analytics, export queries
 ├── downloads.js            # yt-dlp/ffmpeg job manager and ZIP streaming
