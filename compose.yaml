@@ -1,0 +1,41 @@
+name: focustube
+
+services:
+  app:
+    image: focustube:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        YT_DLP_VERSION: ${YT_DLP_VERSION:-2026.7.4}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: ${FOCUSTUBE_PORT:-3000}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      HOME: /tmp
+      XDG_CACHE_HOME: /tmp/.cache
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${FOCUSTUBE_PORT:-3000}:${FOCUSTUBE_PORT:-3000}"
+    volumes:
+      - focustube-data:/app/data
+      - focustube-temp:/tmp
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+volumes:
+  focustube-data:
+  focustube-temp:

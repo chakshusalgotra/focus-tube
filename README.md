@@ -207,6 +207,46 @@ PORT=3001 npm start
 
 Then open [http://localhost:3001](http://localhost:3001).
 
+### Docker Compose
+
+The Docker image includes Node.js 24, ffmpeg, and a pinned yt-dlp release, so course downloads work without installing host-level media tools.
+
+```bash
+git clone https://github.com/chakshusalgotra/focus-tube.git
+cd focus-tube
+cp .env.example .env
+docker compose up --build -d
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Useful operations:
+
+```bash
+# Follow application logs
+docker compose logs -f app
+
+# Inspect health
+docker compose ps
+curl http://localhost:3000/api/health
+
+# Stop containers while preserving data
+docker compose down
+
+# Stop containers and permanently delete application data/download temp files
+docker compose down -v
+```
+
+Compose stores SQLite data in the `focustube-data` volume and temporary course-download files in `focustube-temp`. The root filesystem is read-only and the process runs as the non-root `node` user.
+
+To expose a different local port:
+
+```bash
+FOCUSTUBE_PORT=3001 docker compose up -d
+```
+
+To intentionally bind beyond loopback, set `BIND_ADDRESS=0.0.0.0` and configure `ALLOWED_HOSTS` in `.env`. Use this only behind a trusted network boundary or HTTPS reverse proxy.
+
 ### First-run workflow
 
 1. Choose **Create account**, **Sign in**, or **Continue as guest**.
@@ -326,6 +366,7 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/health` | Report process and SQLite readiness for health checks. |
 | `GET` | `/api/playlist?url=...` | Resolve a playlist, playlist ID, or single video into a course. |
 | `GET` | `/api/video/:id` | Fetch a video's description, duration, and chapter markers. |
 
@@ -368,6 +409,10 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 ```text
 focus-tube/
+├── Dockerfile              # Multi-stage, non-root production image
+├── compose.yaml            # Persistent local Docker deployment
+├── .dockerignore           # Minimal Docker build context
+├── .env.example            # Compose configuration template
 ├── auth.js                 # Password hashing, sessions, auth routes, rate limits
 ├── db.js                   # SQLite schema, persistence, analytics, export queries
 ├── downloads.js            # yt-dlp/ffmpeg job manager and ZIP streaming
