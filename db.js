@@ -133,6 +133,10 @@ const stmts = {
       active_seconds = active_seconds + excluded.active_seconds,
       last_active_at = excluded.last_active_at
   `),
+  insertActivity: db.prepare(`
+    INSERT INTO activity_log (user_id, date, active_seconds, last_active_at)
+    VALUES (?, ?, ?, ?)
+  `),
   watchRow: db.prepare(`
     SELECT completed_at FROM watch_log WHERE user_id = ? AND date = ? AND course_id = ? AND video_id = ?
   `),
@@ -151,6 +155,18 @@ const stmts = {
       completed_at = excluded.completed_at,
       last_watched_at = excluded.last_watched_at
   `),
+  insertWatch: db.prepare(`
+    INSERT INTO watch_log (
+      user_id, date, course_id, course_title, video_id, video_title,
+      seconds_watched, completed_at, last_watched_at
+    ) VALUES (
+      @userId, @date, @courseId, @courseTitle, @videoId, @videoTitle,
+      @seconds, @completedAt, @lastWatchedAt
+    )
+  `),
+  deleteActivity: db.prepare('DELETE FROM activity_log WHERE user_id = ?'),
+  deleteWatch: db.prepare('DELETE FROM watch_log WHERE user_id = ?'),
+  deleteBatches: db.prepare('DELETE FROM activity_batches WHERE user_id = ?'),
   activityRows: db.prepare(`
     SELECT date, active_seconds FROM activity_log WHERE user_id = ? ORDER BY date ASC
   `),
@@ -321,6 +337,47 @@ const saveUserDataTx = db.transaction(
 
 function saveUserData(userId, data, expectedRevision, importLegacy = false) {
   return saveUserDataTx(userId, data, expectedRevision, importLegacy);
+}
+
+const importUserDataTx = db.transaction((userId, data, expectedRevision) => {
+  const importedAt = now();
+  stmts.createData.run(userId, importedAt);
+  const result = stmts.saveData.run({
+    userId,
+    courses: JSON.stringify(data.courses),
+    stats: JSON.stringify(data.stats),
+    settings: JSON.stringify(data.settings),
+    expectedRevision,
+    updatedAt: importedAt,
+  });
+  if (!result.changes) return null;
+
+  stmts.deleteActivity.run(userId);
+  stmts.deleteWatch.run(userId);
+  stmts.deleteBatches.run(userId);
+  for (const row of data.dailyActivity) {
+    stmts.insertActivity.run(userId, row.date, row.activeSeconds, importedAt);
+  }
+  for (const row of data.watchHistory) {
+    stmts.insertWatch.run({
+      userId,
+      date: row.date,
+      courseId: row.courseId,
+      courseTitle: row.courseTitle,
+      videoId: row.videoId,
+      videoTitle: row.videoTitle,
+      seconds: row.secondsWatched,
+      completedAt: row.completedAt,
+      lastWatchedAt: row.lastWatchedAt,
+    });
+  }
+  if (data.downloadQuality) stmts.setQuality.run(data.downloadQuality, userId);
+  stmts.touchUser.run(importedAt, userId);
+  return Number(stmts.dataByUser.get(userId).revision);
+});
+
+function importUserData(userId, data, expectedRevision) {
+  return importUserDataTx(userId, data, expectedRevision);
 }
 
 const trackTx = db.transaction((userId, payload) => {
@@ -528,6 +585,7 @@ module.exports = {
   revokeUserSessions,
   getUserData,
   saveUserData,
+  importUserData,
   track,
   getStatsSummary,
   getDailyStats,

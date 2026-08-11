@@ -49,6 +49,7 @@ app.use((req, res, next) => {
   });
   next();
 });
+app.use('/api/import', express.json({ limit: '25mb' }));
 app.use(express.json({ limit: '3mb' }));
 app.use('/api', (req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
@@ -473,6 +474,94 @@ function parseChaptersFromDescription(desc, durationSeconds) {
   return [];
 }
 
+function profileSnapshot(value) {
+  const courses = value?.courses;
+  const stats = value?.stats;
+  const settings = value?.settings ?? {};
+  if (!courses || typeof courses !== 'object' || Array.isArray(courses)) {
+    throw new HttpError(400, 'Courses must be an object.');
+  }
+  if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
+    throw new HttpError(400, 'Stats must be an object.');
+  }
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    throw new HttpError(400, 'Settings must be an object.');
+  }
+  const courseList = Object.values(courses);
+  if (courseList.length > 250) throw new HttpError(413, 'A profile can store up to 250 courses.');
+  let videoCount = 0;
+  for (const course of courseList) {
+    if (!course || typeof course !== 'object' || !Array.isArray(course.videos)) {
+      throw new HttpError(400, 'A course has invalid videos.');
+    }
+    videoCount += course.videos.length;
+    if (course.videos.length > 5000) throw new HttpError(413, 'A course can contain up to 5,000 videos.');
+  }
+  if (videoCount > 20_000) throw new HttpError(413, 'A profile can store up to 20,000 videos.');
+  return { courses, stats, settings };
+}
+
+function importedExport(value) {
+  if (value?.schema !== 'focustube-user-export' || value?.schemaVersion !== 1) {
+    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1).');
+  }
+  const snapshot = profileSnapshot(value);
+  const dailyActivity = value.dashboard?.dailyActivity;
+  const watchHistory = value.dashboard?.watchHistory;
+  if (!Array.isArray(dailyActivity) || !Array.isArray(watchHistory)) {
+    throw new HttpError(400, 'The export is missing dashboard history.');
+  }
+  if (dailyActivity.length > 50_000 || watchHistory.length > 200_000) {
+    throw new HttpError(413, 'The export contains too many history records.');
+  }
+
+  const activityDates = new Set();
+  for (const row of dailyActivity) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(row?.date || '') || !Number.isFinite(row?.activeSeconds) || row.activeSeconds < 0) {
+      throw new HttpError(400, 'The export contains invalid daily activity.');
+    }
+    if (activityDates.has(row.date)) throw new HttpError(400, 'The export contains duplicate daily activity.');
+    activityDates.add(row.date);
+  }
+
+  const watchRows = new Set();
+  for (const row of watchHistory) {
+    const completedAtValid =
+      row?.completedAt === null ||
+      (typeof row?.completedAt === 'string' && row.completedAt.length <= 40 && Number.isFinite(Date.parse(row.completedAt)));
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(row?.date || '') ||
+      typeof row?.courseId !== 'string' ||
+      !row.courseId ||
+      row.courseId.length > 128 ||
+      typeof row?.courseTitle !== 'string' ||
+      row.courseTitle.length > 500 ||
+      typeof row?.videoId !== 'string' ||
+      !row.videoId ||
+      row.videoId.length > 32 ||
+      typeof row?.videoTitle !== 'string' ||
+      row.videoTitle.length > 500 ||
+      !Number.isFinite(row?.secondsWatched) ||
+      row.secondsWatched < 0 ||
+      !completedAtValid ||
+      typeof row?.lastWatchedAt !== 'string' ||
+      row.lastWatchedAt.length > 40 ||
+      !Number.isFinite(Date.parse(row.lastWatchedAt))
+    ) {
+      throw new HttpError(400, 'The export contains invalid watch history.');
+    }
+    const key = `${row.date}\u0000${row.courseId}\u0000${row.videoId}`;
+    if (watchRows.has(key)) throw new HttpError(400, 'The export contains duplicate watch history.');
+    watchRows.add(key);
+  }
+
+  const allowedQualities = new Set(['1080', '720', '480', '360', 'audio']);
+  const downloadQuality = allowedQualities.has(value.profile?.downloadQuality)
+    ? value.profile.downloadQuality
+    : null;
+  return { ...snapshot, dailyActivity, watchHistory, downloadQuality };
+}
+
 /* ---------- routes ---------- */
 
 app.get('/api/data', auth.requireAuth, (req, res) => {
@@ -488,26 +577,23 @@ app.get('/api/export', auth.requireAuth, (req, res) => {
   res.type('application/json').send(JSON.stringify(store.getExportData(req.user.id), null, 2));
 });
 
+app.post('/api/import', auth.requireAuth, (req, res) => {
+  try {
+    const revision = Number(req.query.revision);
+    if (!Number.isInteger(revision) || revision < 0) throw new HttpError(400, 'A profile revision is required.');
+    const nextRevision = store.importUserData(req.user.id, importedExport(req.body), revision);
+    if (nextRevision === null) {
+      return res.status(409).json({ error: 'Progress changed in another tab. Try importing again.' });
+    }
+    res.json({ ok: true, revision: nextRevision, user: store.publicUser(store.getUserById(req.user.id)) });
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Could not import this export.' });
+  }
+});
+
 app.put('/api/data', auth.requireAuth, (req, res) => {
   try {
-    const courses = req.body?.courses;
-    const stats = req.body?.stats;
-    const settings = req.body?.settings;
-    if (!courses || typeof courses !== 'object' || Array.isArray(courses)) {
-      throw new HttpError(400, 'Courses must be an object.');
-    }
-    if (!stats || typeof stats !== 'object' || Array.isArray(stats)) {
-      throw new HttpError(400, 'Stats must be an object.');
-    }
-    const courseList = Object.values(courses);
-    if (courseList.length > 250) throw new HttpError(413, 'A profile can store up to 250 courses.');
-    let videoCount = 0;
-    for (const course of courseList) {
-      if (!course || !Array.isArray(course.videos)) throw new HttpError(400, 'A course has invalid videos.');
-      videoCount += course.videos.length;
-      if (course.videos.length > 5000) throw new HttpError(413, 'A course can contain up to 5,000 videos.');
-    }
-    if (videoCount > 20_000) throw new HttpError(413, 'A profile can store up to 20,000 videos.');
+    const { courses, stats, settings } = profileSnapshot(req.body);
     const revision = Number(req.body?.revision);
     if (!Number.isInteger(revision) || revision < 0) throw new HttpError(400, 'A profile revision is required.');
     const nextRevision = store.saveUserData(

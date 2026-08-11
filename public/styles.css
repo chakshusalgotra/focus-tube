@@ -425,7 +425,8 @@ input[type="range"]::-moz-range-thumb {
 .profile-data-block { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 16px; }
 .profile-data-block h3 { margin: 0 0 5px; color: var(--text); text-transform: none; letter-spacing: 0; font-size: 14px; }
 .profile-data-block p { margin: 0 0 13px; color: var(--muted); font-size: 12.5px; }
-.profile-export { width: 100%; }
+.profile-data-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.profile-data-actions .btn { width: 100%; }
 .profile-logout { width: 100%; margin-top: 20px; }
 
 /* ---------- dashboard ---------- */
