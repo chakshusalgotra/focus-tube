@@ -116,6 +116,8 @@ The profile menu can export a pretty-printed, versioned JSON file containing:
 
 Password hashes, salts, session cookies, and session tokens are never included.
 
+The same menu can import a FocusTube schema-version-1 JSON export. Importing atomically replaces the current profile's courses, progress, settings, daily activity, and watch history while preserving its username, password, and sessions. A confirmation shows the number of courses and history records before anything changes.
+
 ### Optional course downloads
 
 When `yt-dlp` and `ffmpeg` are installed, users can download a course as a ZIP with a selectable quality:

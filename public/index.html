@@ -243,8 +243,12 @@
       </div>
       <div class="profile-data-block">
         <h3>Your data</h3>
-        <p>Download your courses, videos, progress, settings, activity totals, and complete watch history. Passwords and session data are never included.</p>
-        <button id="exportDataBtn" class="btn ghost profile-export" type="button">Export my data (JSON)</button>
+        <p>Create a backup or restore one. Importing replaces this profile's courses, progress, settings, and history; account credentials are unchanged.</p>
+        <div class="profile-data-actions">
+          <button id="exportDataBtn" class="btn ghost" type="button">Export data (JSON)</button>
+          <button id="importDataBtn" class="btn ghost" type="button">Import data (JSON)</button>
+        </div>
+        <input id="importDataInput" class="hidden" type="file" accept=".json,application/json" aria-label="Choose FocusTube JSON export" />
       </div>
       <button id="logoutBtn" class="btn danger profile-logout" type="button">Sign out</button>
     </div>
