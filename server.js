@@ -70,6 +70,15 @@ app.use('/api/auth', auth.router);
 app.use('/api', auth.optionalAuth);
 const downloads = createDownloads(store, auth.requireAuth);
 app.use('/api/downloads', downloads.router);
+app.get('/api/health', (_req, res) => {
+  try {
+    store.db.prepare('SELECT 1').get();
+    res.json({ status: 'ok', database: 'ok', uptimeSeconds: Math.floor(process.uptime()) });
+  } catch (err) {
+    console.error('Health check failed:', err);
+    res.status(503).json({ status: 'error', database: 'unavailable' });
+  }
+});
 app.get('/vendor/confetti.js', (_req, res) =>
   res.sendFile(path.join(__dirname, 'node_modules/canvas-confetti/dist/confetti.browser.js'))
 );

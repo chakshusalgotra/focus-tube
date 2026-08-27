@@ -1,0 +1,15 @@
+name: focustube
+
+services:
+  app:
+    build: .
+    environment:
+      ALLOWED_HOSTS: localhost:3002,127.0.0.1:3002
+    ports:
+      - "127.0.0.1:3002:3000"
+    volumes:
+      - focustube-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  focustube-data:

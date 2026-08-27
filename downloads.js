@@ -20,8 +20,8 @@ const MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024;
 const VIDEO_TIMEOUT_MS = 2 * 60 * 60_000;
 const JOB_TIMEOUT_MS = 12 * 60 * 60_000;
 
-function commandAvailable(command) {
-  return spawnSync(command, ['--version'], { stdio: 'ignore' }).status === 0;
+function commandAvailable(command, args = ['--version']) {
+  return spawnSync(command, args, { stdio: 'ignore' }).status === 0;
 }
 
 function safeName(value, fallback = 'course') {
@@ -74,7 +74,7 @@ function createDownloads(store, requireAuth) {
   function prerequisites() {
     if (toolsCache && Date.now() - toolsCache.checkedAt < 60_000) return toolsCache.value;
     const ytDlp = commandAvailable('yt-dlp');
-    const ffmpeg = commandAvailable('ffmpeg');
+    const ffmpeg = commandAvailable('ffmpeg', ['-version']);
     const value = {
       ready: ytDlp && ffmpeg,
       ytDlp,

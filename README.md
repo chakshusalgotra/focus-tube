@@ -209,6 +209,43 @@ PORT=3001 npm start
 
 Then open [http://localhost:3001](http://localhost:3001).
 
+### Docker Compose
+
+The Docker setup is intentionally basic and intended only for local use. The app listens on port `3000` inside the container and is exposed only at `127.0.0.1:3002` on the host.
+
+```bash
+git clone https://github.com/chakshusalgotra/focus-tube.git
+cd focus-tube
+docker compose up --build -d
+```
+
+Open [http://localhost:3002](http://localhost:3002).
+
+Useful operations:
+
+```bash
+# Follow application logs
+docker compose logs -f app
+
+# Check the app
+docker compose ps
+curl http://localhost:3002/api/health
+
+# Stop containers while preserving data
+docker compose down
+
+# Stop containers and permanently delete application data
+docker compose down -v
+```
+
+Compose stores SQLite data in the `focustube-data` volume. The fixed port mapping is:
+
+```text
+127.0.0.1:3002 -> container:3000
+```
+
+The basic local image does not bundle the optional `yt-dlp` and `ffmpeg` tools, so course ZIP downloads are unavailable in this container. All other application features work normally. For downloads, run FocusTube natively after installing the tools listed under [Optional: course ZIP downloads](#optional-course-zip-downloads).
+
 ### First-run workflow
 
 1. Choose **Create account**, **Sign in**, or **Continue as guest**.
@@ -328,6 +365,7 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| `GET` | `/api/health` | Report process and SQLite readiness for health checks. |
 | `GET` | `/api/playlist?url=...` | Resolve a playlist, playlist ID, or single video into a course. |
 | `GET` | `/api/video/:id` | Fetch a video's description, duration, and chapter markers. |
 
@@ -370,6 +408,9 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 ```text
 focus-tube/
+├── Dockerfile              # Basic local application image
+├── compose.yaml            # Local port 3002 and persistent SQLite volume
+├── .dockerignore           # Minimal Docker build context
 ├── auth.js                 # Password hashing, sessions, auth routes, rate limits
 ├── db.js                   # SQLite schema, persistence, analytics, export queries
 ├── downloads.js            # yt-dlp/ffmpeg job manager and ZIP streaming
