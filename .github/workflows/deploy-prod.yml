@@ -1,0 +1,35 @@
+name: Deploy prod
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Connect to tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          APP_DIR: /mnt/c/Users/csalg/projects/server/focustube/focus-tube
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          # Windows OpenSSH entry point; inner double quotes survive cmd/powershell parsing
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
+            "wsl -e bash -lc \"cd $APP_DIR && git fetch origin main && git reset --hard origin/main && docker compose -f compose.prod.yaml up -d --build && docker image prune -f\""

@@ -1,0 +1,18 @@
+name: focustube-prod
+
+services:
+  app:
+    build: .
+    environment:
+      ALLOWED_HOSTS: focustube.neuralnest.co.in
+      TRUST_PROXY: "1"
+    ports:
+      # Cloudflare tunnel ingress: focustube.neuralnest.co.in -> localhost:3003
+      - "127.0.0.1:3003:3000"
+    volumes:
+      - focustube-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  # Namespaced by project name -> focustube-prod_focustube-data (separate DB from dev)
+  focustube-data:

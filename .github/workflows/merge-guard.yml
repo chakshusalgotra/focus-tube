@@ -1,0 +1,17 @@
+name: Merge flow guard
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  merge-flow-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only allow dev -> main
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "::error::PRs into main are only allowed from 'dev'. Merge '${{ github.head_ref }}' into dev first."
+            exit 1
+          fi
+          echo "OK: dev -> main"
