@@ -52,7 +52,12 @@
       <div id="addError" class="add-error hidden"></div>
     </section>
     <section class="courses-section">
-      <h2 id="coursesHeading" class="hidden">Your courses</h2>
+      <div class="courses-toolbar">
+        <h2 id="coursesHeading" class="hidden">Your courses</h2>
+        <button id="pinnedFilterBtn" class="pinned-filter-btn hidden" type="button" title="Show only bookmarked courses">
+          <span id="pinnedFilterIcon" class="pin-ic"></span>Bookmarked
+        </button>
+      </div>
       <div id="courseGrid" class="course-grid"></div>
     </section>
   </main>

@@ -61,6 +61,7 @@ const I = {
   trash: '<svg viewBox="0 0 24 24"><path d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6zm3-9h2v7H9zm4 0h2v7h-2zM15.5 4l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
   check: '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>',
   cc: '<svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H4zm5.1 5.4c.4 0 .8.2 1 .5l1.3-1.2a3.3 3.3 0 0 0-2.4-1c-2 0-3.4 1.5-3.4 3.3s1.4 3.3 3.4 3.3c1 0 1.8-.4 2.4-1l-1.3-1.2c-.2.3-.6.5-1 .5-1 0-1.6-.7-1.6-1.6s.7-1.6 1.6-1.6zm7 0c.4 0 .8.2 1 .5l1.3-1.2a3.3 3.3 0 0 0-2.4-1c-2 0-3.4 1.5-3.4 3.3s1.4 3.3 3.4 3.3c1 0 1.8-.4 2.4-1l-1.3-1.2c-.2.3-.6.5-1 .5-1 0-1.6-.7-1.6-1.6s.7-1.6 1.6-1.6z"/></svg>',
+  pin: '<svg viewBox="0 0 24 24"><path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/></svg>',
 };
 
 /* ================= storage ================= */
@@ -92,6 +93,7 @@ let profileRevision = 0;
 let pendingLegacyImport = false;
 let sessionGeneration = 0;
 let appBooted = false;
+let showPinnedOnly = false;
 
 const saveCourses = () => scheduleRemoteSave();
 const saveStats = () => scheduleRemoteSave();
@@ -313,6 +315,8 @@ const addBtn = $('#addBtn');
 const addError = $('#addError');
 const courseGrid = $('#courseGrid');
 const coursesHeading = $('#coursesHeading');
+const pinnedFilterBtn = $('#pinnedFilterBtn');
+const pinnedFilterIcon = $('#pinnedFilterIcon');
 const videoListEl = $('#videoList');
 const sideTitle = $('#sideTitle');
 const sideMeta = $('#sideMeta');
@@ -387,6 +391,12 @@ $('#posterPlay').innerHTML = I.play;
 ccBtn.innerHTML = I.cc;
 ccBtn.classList.toggle('active', captionsOn);
 sideRefreshBtn.innerHTML = I.sync;
+pinnedFilterIcon.innerHTML = I.pin;
+pinnedFilterBtn.addEventListener('click', () => {
+  showPinnedOnly = !showPinnedOnly;
+  pinnedFilterBtn.classList.toggle('active', showPinnedOnly);
+  renderHome();
+});
 
 /* ================= toasts & confetti ================= */
 function toast(msg, opts = {}) {
@@ -657,16 +667,25 @@ function openStats() {
 
 /* ================= home view ================= */
 function renderHome() {
-  const list = Object.values(courses).sort((a, b) => b.addedAt - a.addedAt);
-  coursesHeading.classList.toggle('hidden', list.length === 0);
+  const all = Object.values(courses);
+  pinnedFilterBtn.classList.toggle('hidden', all.length === 0);
+  const list = (showPinnedOnly ? all.filter((c) => c.pinned) : all).sort(
+    (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.addedAt - a.addedAt
+  );
+  coursesHeading.classList.toggle('hidden', all.length === 0);
   courseGrid.innerHTML = '';
+  if (showPinnedOnly && list.length === 0) {
+    courseGrid.append(el('p', { class: 'empty-pinned' }, 'No bookmarked courses yet. Pin a course to see it here.'));
+    return;
+  }
   for (const c of list) {
     const done = c.videos.filter((v) => c.completed[v.id]).length;
     const pct = c.videos.length ? Math.round((done / c.videos.length) * 100) : 0;
     const thumbId = c.videos[0]?.id;
     const card = el(
       'div',
-      { class: 'course-card', onclick: () => (location.hash = '#c=' + c.id) },
+      { class: 'course-card' + (c.pinned ? ' is-pinned' : ''), onclick: () => (location.hash = '#c=' + c.id) },
+      c.pinned ? el('div', { class: 'card-pin-badge', html: I.pin }) : null,
       thumbId
         ? el('img', {
             class: 'card-thumb',
@@ -697,19 +716,34 @@ function renderHome() {
           pct === 100
             ? el('span', { class: 'card-done-badge' }, '✓ Completed')
             : el('span', { class: 'card-meta' }, `${done} / ${c.videos.length} done`),
-          el('button', {
-            class: 'card-del',
-            title: 'Remove course',
-            html: I.trash,
-            onclick: (e) => {
-              e.stopPropagation();
-              if (confirm(`Remove "${c.title}"?\nYour progress for it will be deleted.`)) {
-                delete courses[c.id];
+          el(
+            'span',
+            {},
+            el('button', {
+              class: 'card-pin' + (c.pinned ? ' active' : ''),
+              title: c.pinned ? 'Unpin course' : 'Pin course to top',
+              html: I.pin,
+              onclick: (e) => {
+                e.stopPropagation();
+                c.pinned = !c.pinned;
                 saveCourses();
                 renderHome();
-              }
-            },
-          })
+              },
+            }),
+            el('button', {
+              class: 'card-del',
+              title: 'Remove course',
+              html: I.trash,
+              onclick: (e) => {
+                e.stopPropagation();
+                if (confirm(`Remove "${c.title}"?\nYour progress for it will be deleted.`)) {
+                  delete courses[c.id];
+                  saveCourses();
+                  renderHome();
+                }
+              },
+            })
+          )
         )
       )
     );
@@ -738,6 +772,7 @@ async function addCourse(url) {
       lastVideoId: existing?.lastVideoId || null,
       speed: existing?.speed || 1,
       completedAt: existing?.completedAt || null,
+      pinned: existing?.pinned || false,
     };
     saveCourses();
     urlInput.value = '';
@@ -1402,7 +1437,7 @@ setInterval(() => {
     seekBar.value = pct;
     seekBar.style.setProperty('--fill', pct / 10 + '%');
     curTime.textContent = fmtDuration(t);
-    durTime.textContent = fmtDuration(dur);
+    durTime.textContent = '-' + fmtDuration(dur - t);
   }
 
   // current chapter tracking
