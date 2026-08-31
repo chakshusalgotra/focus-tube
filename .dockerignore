@@ -11,3 +11,4 @@ npm-debug.log*
 Dockerfile*
 compose*.yaml
 compose*.yml
+.ssh/
