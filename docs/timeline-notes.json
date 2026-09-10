@@ -23,7 +23,7 @@
       "id": "timeline",
       "title": "Publish a traceable release timeline",
       "recordedDate": "2026-09-10",
-      "commits": [],
+      "commits": ["2f80577"],
       "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
       "changes": [
         "Provide a standalone HTML timeline with search and stage filters.",

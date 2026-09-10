@@ -141,8 +141,8 @@
 {
   "version": 1,
   "repository": "https://github.com/chakshusalgotra/focus-tube",
-  "generatedAt": "2026-09-10T11:56:18.971Z",
-  "head": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+  "generatedAt": "2026-09-10T12:01:33.760Z",
+  "head": "2f80577cbf584fc7d60cff39ce6dd24060e32dba",
   "branch": "feature/workspace-discovery-timeline",
   "refs": {
     "prod": {
@@ -154,8 +154,53 @@
       "hash": "8caa854d543e610e2a46d4454d1115a8b3db194d"
     }
   },
-  "commitCount": 16,
+  "commitCount": 17,
   "entries": [
+    {
+      "id": "timeline",
+      "title": "Publish a traceable release timeline",
+      "recordedDate": "2026-09-10",
+      "commits": [
+        {
+          "hash": "2f80577cbf584fc7d60cff39ce6dd24060e32dba",
+          "date": "2026-09-10T17:31:04+05:30",
+          "authoredAt": "2026-09-10T17:31:04+05:30",
+          "subject": "Add a Git-backed release timeline and feature documentation",
+          "parents": [
+            "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
+          ],
+          "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "docs/timeline-notes.json",
+            "docs/timeline.md",
+            "package.json",
+            "scripts/update-timeline.js",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
+      "changes": [
+        "Provide a standalone HTML timeline with search and stage filters.",
+        "Generate commit dates and branch containment from Git rather than treating a merge as proof of deployment.",
+        "Keep feature rationale and dated bug or pending-work observations alongside the generated history."
+      ],
+      "files": [
+        "README.md",
+        "docs/timeline-notes.json",
+        "docs/timeline.md",
+        "package.json",
+        "scripts/update-timeline.js",
+        "test/timeline.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-10T17:31:04+05:30",
+      "dateKind": "commit",
+      "stage": "branch"
+    },
     {
       "id": "workspace-discovery",
       "title": "Plan learning and discover YouTube courses",
@@ -436,31 +481,28 @@
             "server.js",
             "test/workspace-persistence.test.js"
           ]
+        },
+        {
+          "hash": "2f80577cbf584fc7d60cff39ce6dd24060e32dba",
+          "date": "2026-09-10T17:31:04+05:30",
+          "authoredAt": "2026-09-10T17:31:04+05:30",
+          "subject": "Add a Git-backed release timeline and feature documentation",
+          "parents": [
+            "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
+          ],
+          "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "docs/timeline-notes.json",
+            "docs/timeline.md",
+            "package.json",
+            "scripts/update-timeline.js",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
         }
       ]
-    },
-    {
-      "id": "timeline",
-      "title": "Publish a traceable release timeline",
-      "recordedDate": "2026-09-10",
-      "commits": [],
-      "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
-      "changes": [
-        "Provide a standalone HTML timeline with search and stage filters.",
-        "Generate commit dates and branch containment from Git rather than treating a merge as proof of deployment.",
-        "Keep feature rationale and dated bug or pending-work observations alongside the generated history."
-      ],
-      "files": [
-        "README.md",
-        "docs/timeline-notes.json",
-        "package.json",
-        "scripts/update-timeline.js",
-        "test/timeline.test.js",
-        "timeline.html"
-      ],
-      "date": "2026-09-10",
-      "dateKind": "recorded",
-      "stage": "pending"
     },
     {
       "id": "image-scan",
