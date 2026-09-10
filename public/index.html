@@ -16,6 +16,7 @@
     <div class="spacer"></div>
     <button id="resyncBtn" class="icon-btn hidden" title="Re-sync playlist from YouTube"></button>
     <button id="streakChip" class="streak-chip" title="Streak & stats">🔥 <b id="streakNum">0</b></button>
+    <button id="tasksPanelBtn" class="topbar-command" title="Quick tasks & notes">✓ Tasks</button>
     <button id="dashboardBtn" class="topbar-command" title="Learning dashboard">Dashboard</button>
     <button id="profileBtn" class="profile-chip" title="Profile"><span id="profileAvatar">G</span><b id="profileName">Guest</b></button>
   </header>
@@ -42,23 +43,70 @@
   </main>
 
   <main id="homeView" class="view hidden">
-    <section class="hero">
+    <section class="hero discovery">
       <h1>Learn without the <span class="accent">noise</span>.</h1>
-      <p class="sub">Paste a YouTube playlist or a single video and turn it into a clean, trackable course. No feed, no comments, no “recommended for you” rabbit holes.</p>
+      <p class="sub">What do you want to learn next?</p>
       <form id="addForm" class="add-form">
-        <input id="urlInput" type="text" placeholder="Paste a YouTube playlist or video link…" autocomplete="off" spellcheck="false" />
-        <button id="addBtn" class="btn" type="submit">Create course</button>
+        <input id="urlInput" type="search" placeholder="Search a topic or paste a YouTube link..." aria-label="Search YouTube or paste a video or playlist link" maxlength="2048" autocomplete="off" spellcheck="false" required />
+        <button id="addBtn" class="btn" type="submit">Search</button>
       </form>
-      <div id="addError" class="add-error hidden"></div>
+      <fieldset id="searchFilters" class="search-filters" aria-label="YouTube result type">
+        <label><input type="radio" name="searchType" value="all" checked /><span>All</span></label>
+        <label><input type="radio" name="searchType" value="video" /><span>Videos</span></label>
+        <label><input type="radio" name="searchType" value="playlist" /><span>Playlists</span></label>
+        <label title="Full-course videos and playlists"><input type="radio" name="searchType" value="course" /><span>Courses</span></label>
+      </fieldset>
+      <div id="addError" class="add-error hidden" role="alert"></div>
+    </section>
+    <section id="searchSection" class="search-section hidden" aria-labelledby="searchHeading">
+      <div class="search-toolbar">
+        <div class="search-heading-wrap">
+          <h2 id="searchHeading">YouTube results</h2>
+          <p id="searchSummary" class="search-summary" role="status" aria-live="polite"></p>
+        </div>
+        <div class="search-toolbar-actions">
+          <a id="searchYoutubeLink" class="search-link" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
+          <button id="clearSearchBtn" class="icon-btn" type="button" title="Back to library" aria-label="Back to library"></button>
+        </div>
+      </div>
+      <div id="searchError" class="add-error hidden" role="alert"></div>
+      <button id="retrySearchBtn" class="btn ghost slim hidden" type="button">Retry search</button>
+      <div id="searchResults" class="search-results" aria-busy="false"></div>
+    </section>
+    <section id="roadmapsSection" class="roadmaps-section hidden">
+      <div class="courses-toolbar">
+        <h2>Roadmaps</h2>
+        <button id="newRoadmapBtn" class="btn ghost slim" type="button">＋ Roadmap</button>
+      </div>
+      <div id="roadmapStrip" class="roadmap-strip"></div>
     </section>
     <section class="courses-section">
       <div class="courses-toolbar">
         <h2 id="coursesHeading" class="hidden">Your courses</h2>
-        <button id="pinnedFilterBtn" class="pinned-filter-btn hidden" type="button" title="Show only bookmarked courses">
-          <span id="pinnedFilterIcon" class="pin-ic"></span>Bookmarked
-        </button>
+        <div class="toolbar-actions">
+          <button id="pinnedFilterBtn" class="pinned-filter-btn hidden" type="button" title="Show only bookmarked courses">
+            <span id="pinnedFilterIcon" class="pin-ic"></span>Bookmarked
+          </button>
+          <div id="homeViewToggle" class="seg-toggle hidden">
+            <button id="gridModeBtn" class="active" type="button" title="Card grid">Grid</button>
+            <button id="boardModeBtn" type="button" title="Kanban board">Board</button>
+          </div>
+        </div>
       </div>
       <div id="courseGrid" class="course-grid"></div>
+      <div id="boardWrap" class="board-wrap hidden">
+        <div class="board-toolbar">
+          <div id="boardModeToggle" class="seg-toggle">
+            <button id="statusBoardBtn" class="active" type="button" title="Columns by status">Status</button>
+            <button id="sprintBoardBtn" type="button" title="Time-boxed sprint columns">Sprints</button>
+          </div>
+          <div class="spacer"></div>
+          <button id="newTaskBtn" class="btn ghost slim" type="button">＋ Task</button>
+          <button id="addColumnBtn" class="btn ghost slim" type="button">＋ Column</button>
+          <button id="sprintSetupBtn" class="btn ghost slim hidden" type="button">Set up sprints</button>
+        </div>
+        <div id="board" class="board"></div>
+      </div>
     </section>
   </main>
 
@@ -75,7 +123,15 @@
       </div>
       <ol id="videoList"></ol>
       <div class="sidebar-foot">
-        <button id="courseDownloadBtn" class="btn ghost download-course-btn">Download course</button>
+        <div id="courseChecklistBlock" class="course-checklist">
+          <button id="courseChecklistToggle" class="extras-toggle" type="button">Checklist <span id="courseChecklistCount" class="muted"></span><span class="chev">▾</span></button>
+          <div id="courseChecklistBody" class="course-checklist-body hidden">
+            <div id="courseChecklistItems"></div>
+            <form id="courseChecklistForm" class="checklist-add">
+              <input id="courseChecklistInput" type="text" placeholder="Add a checklist item…" maxlength="300" />
+            </form>
+          </div>
+        </div>
         <button id="certBtn" class="btn cert-btn" disabled>🏆 Finish every video to unlock</button>
       </div>
     </aside>
@@ -161,6 +217,49 @@
           <div id="descBody" class="section-body desc-body"></div>
         </div>
       </div>
+    </section>
+  </main>
+
+  <main id="roadmapView" class="view hidden">
+    <section class="roadmap-shell">
+      <div class="roadmap-heading">
+        <div class="roadmap-heading-main">
+          <h1 id="roadmapTitle"></h1>
+          <p id="roadmapMeta"></p>
+        </div>
+        <div class="roadmap-actions">
+          <button id="roadmapContinueBtn" class="btn" type="button">▶ Continue</button>
+          <button id="roadmapRenameBtn" class="btn ghost slim" type="button">Rename</button>
+          <button id="roadmapDeleteBtn" class="btn danger slim" type="button">Delete</button>
+        </div>
+      </div>
+      <div class="roadmap-progress">
+        <div class="progress-track"><div id="roadmapProgressFill" class="progress-fill"></div></div>
+        <span id="roadmapProgressLabel"></span>
+      </div>
+      <div id="roadmapCourses" class="roadmap-courses"></div>
+      <div class="roadmap-add">
+        <select id="roadmapAddSelect"><option value="">＋ Add a course to this roadmap…</option></select>
+      </div>
+    </section>
+  </main>
+
+  <main id="tasksView" class="view hidden">
+    <section class="tasks-shell">
+      <div class="tasks-heading">
+        <div><h1>Tasks &amp; notes</h1><p>Everything on your plate — across all courses and beyond.</p></div>
+        <button id="tasksPageNew" class="btn" type="button">＋ New task</button>
+      </div>
+      <div class="tasks-filters">
+        <select id="taskFilterCourse" title="Filter by course"><option value="">All courses</option></select>
+        <select id="taskFilterPriority" title="Filter by priority">
+          <option value="">Any priority</option>
+          <option value="high">High</option>
+          <option value="med">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div id="tasksPageList" class="tasks-page-list"></div>
     </section>
   </main>
 
@@ -259,23 +358,87 @@
     </div>
   </div>
 
-  <div id="downloadModal" class="modal-backdrop hidden">
-    <div class="modal download-modal">
-      <button class="modal-close" data-close="downloadModal">✕</button><h2>Download course</h2><p id="downloadCourseName" class="muted"></p>
-      <div id="downloadSetup" class="download-setup hidden"><strong>Download tools are not installed</strong><p>Install them in Terminal, then reopen this dialog:</p><code id="downloadInstallCommand">brew install yt-dlp ffmpeg</code></div>
-      <div id="downloadFormBlock">
-        <label class="field-label">Quality<select id="downloadQuality"><option value="1080">1080p</option><option value="720" selected>720p (default)</option><option value="480">480p</option><option value="360">360p</option><option value="audio">Audio only (M4A)</option></select></label>
-        <label class="permission-check"><input id="downloadAuthorized" type="checkbox" /> I own these videos or have permission to download them.</label>
-        <button id="downloadStart" class="btn" type="button" disabled>Start download</button>
-      </div>
-      <div id="downloadProgress" class="download-progress hidden">
-        <div class="download-progress-head"><strong id="downloadStatus">Preparing…</strong><span id="downloadPercent">0%</span></div>
-        <div class="progress-track"><div id="downloadProgressFill" class="progress-fill"></div></div><p id="downloadNow" class="muted"></p>
-        <div class="download-actions"><button id="downloadCancel" class="btn danger" type="button">Cancel</button><a id="downloadFile" class="btn hidden">Save ZIP</a></div>
-      </div>
-      <div id="downloadError" class="add-error hidden"></div>
+  <div id="taskModal" class="modal-backdrop hidden">
+    <div class="modal task-modal">
+      <button class="modal-close" data-close="taskModal">✕</button>
+      <h2 id="taskModalTitle">New task</h2>
+      <form id="taskForm" class="auth-form compact">
+        <label>Title<input id="taskTitle" type="text" maxlength="200" required /></label>
+        <label>Notes<textarea id="taskNotes" rows="3" maxlength="2000" placeholder="Optional details…"></textarea></label>
+        <div class="task-form-row">
+          <label>Due date<input id="taskDue" type="date" /></label>
+          <label>Priority<select id="taskPriority">
+            <option value="low">Low</option>
+            <option value="med" selected>Medium</option>
+            <option value="high">High</option>
+          </select></label>
+        </div>
+        <div class="task-form-row">
+          <label>Status<select id="taskStatus">
+            <option value="todo">To do</option>
+            <option value="doing">In progress</option>
+            <option value="done">Done</option>
+          </select></label>
+          <label>Course<select id="taskCourse"><option value="">None</option></select></label>
+        </div>
+        <div class="task-form-actions">
+          <button id="taskDeleteBtn" class="btn danger hidden" type="button">Delete</button>
+          <span class="spacer"></span>
+          <button id="taskSaveBtn" class="btn" type="submit">Save task</button>
+        </div>
+      </form>
     </div>
   </div>
+
+  <div id="sprintModal" class="modal-backdrop hidden">
+    <div class="modal sprint-modal">
+      <button class="modal-close" data-close="sprintModal">✕</button>
+      <h2>Sprint setup</h2>
+      <p class="muted">Generate time-boxed sprint columns. New sprints continue after your last one.</p>
+      <form id="sprintForm" class="auth-form compact">
+        <div class="task-form-row">
+          <label>Cadence<select id="sprintCadence">
+            <option value="week" selected>Weekly</option>
+            <option value="biweek">Bi-weekly</option>
+            <option value="month">Monthly</option>
+          </select></label>
+          <label>How many<input id="sprintCount" type="number" min="1" max="12" value="4" /></label>
+        </div>
+        <label>Start date<input id="sprintStart" type="date" /></label>
+        <div class="task-form-actions">
+          <button id="sprintClearBtn" class="btn danger hidden" type="button">Remove all</button>
+          <span class="spacer"></span>
+          <button class="btn" type="submit">Generate sprints</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="roadmapModal" class="modal-backdrop hidden">
+    <div class="modal roadmap-modal">
+      <button class="modal-close" data-close="roadmapModal">✕</button>
+      <h2>New roadmap</h2>
+      <p class="muted">An ordered path through several courses with combined progress.</p>
+      <form id="roadmapForm" class="auth-form compact">
+        <label>Name<input id="roadmapName" type="text" maxlength="80" required placeholder="e.g. Backend fundamentals" /></label>
+        <div id="roadmapCoursePick" class="roadmap-pick"></div>
+        <button class="btn" type="submit">Create roadmap</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="taskPanelBackdrop" class="panel-backdrop hidden"></div>
+  <aside id="taskPanel" class="task-panel" aria-hidden="true">
+    <div class="task-panel-head">
+      <h2>Quick tasks</h2>
+      <button id="taskPanelAllBtn" class="btn ghost slim" type="button">All tasks</button>
+      <button id="taskPanelClose" class="icon-btn" title="Close  (Esc)">✕</button>
+    </div>
+    <form id="quickTaskForm" class="quick-task-form">
+      <input id="quickTaskInput" type="text" placeholder="Add a task, press Enter…" maxlength="200" />
+    </form>
+    <div id="taskPanelList" class="task-panel-list"></div>
+  </aside>
 
   <div id="toasts"></div>
   <script src="/vendor/confetti.js" defer></script>

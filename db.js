@@ -35,6 +35,7 @@ db.exec(`
     courses_json TEXT NOT NULL DEFAULT '{}',
     stats_json TEXT NOT NULL DEFAULT '{}',
     settings_json TEXT NOT NULL DEFAULT '{}',
+    workspace_json TEXT NOT NULL DEFAULT '{}',
     revision INTEGER NOT NULL DEFAULT 0,
     updated_at TEXT NOT NULL
   );
@@ -77,6 +78,12 @@ try {
   if (!String(err.message).includes('duplicate column')) throw err;
 }
 
+try {
+  db.exec("ALTER TABLE user_data ADD COLUMN workspace_json TEXT NOT NULL DEFAULT '{}'");
+} catch (err) {
+  if (!String(err.message).includes('duplicate column')) throw err;
+}
+
 const now = () => new Date().toISOString();
 
 function parseJson(value, fallback) {
@@ -93,8 +100,8 @@ const stmts = {
     VALUES (@username, @passwordHash, @salt, @isGuest, @createdAt, @createdAt)
   `),
   createData: db.prepare(`
-    INSERT OR IGNORE INTO user_data (user_id, courses_json, stats_json, settings_json, revision, updated_at)
-    VALUES (?, '{}', '{}', '{}', 0, ?)
+    INSERT OR IGNORE INTO user_data (user_id, courses_json, stats_json, settings_json, workspace_json, revision, updated_at)
+    VALUES (?, '{}', '{}', '{}', '{}', 0, ?)
   `),
   userById: db.prepare('SELECT * FROM users WHERE id = ?'),
   userByName: db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE'),
@@ -119,6 +126,7 @@ const stmts = {
       courses_json = @courses,
       stats_json = @stats,
       settings_json = @settings,
+      workspace_json = @workspace,
       revision = revision + 1,
       updated_at = @updatedAt
     WHERE user_id = @userId AND revision = @expectedRevision
@@ -286,6 +294,7 @@ function getUserData(userId) {
       lastStreakToast: parsedStats.lastStreakToast || '',
     },
     settings: parseJson(row.settings_json, {}),
+    workspace: parseJson(row.workspace_json, {}),
     revision: Number(row.revision || 0),
     updatedAt: row.updated_at,
   };
@@ -320,12 +329,13 @@ function importLegacyRows(userId, courses, stats) {
 }
 
 const saveUserDataTx = db.transaction(
-  (userId, { courses = {}, stats = {}, settings = {} }, expectedRevision, importLegacy) => {
+  (userId, { courses = {}, stats = {}, settings = {}, workspace = {} }, expectedRevision, importLegacy) => {
   const result = stmts.saveData.run({
     userId,
     courses: JSON.stringify(courses),
     stats: JSON.stringify(stats),
     settings: JSON.stringify(settings),
+    workspace: JSON.stringify(workspace),
     expectedRevision,
     updatedAt: now(),
   });
@@ -347,6 +357,7 @@ const importUserDataTx = db.transaction((userId, data, expectedRevision) => {
     courses: JSON.stringify(data.courses),
     stats: JSON.stringify(data.stats),
     settings: JSON.stringify(data.settings),
+    workspace: JSON.stringify(data.workspace || {}),
     expectedRevision,
     updatedAt: importedAt,
   });
@@ -543,6 +554,7 @@ function getExportData(userId) {
     courses: data.courses,
     stats: data.stats,
     settings: data.settings,
+    workspace: data.workspace,
     dashboard: {
       summary: getStatsSummary(userId),
       dailyActivity: activity,

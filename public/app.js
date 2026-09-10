@@ -94,12 +94,21 @@ let pendingLegacyImport = false;
 let sessionGeneration = 0;
 let appBooted = false;
 let showPinnedOnly = false;
+let searchType = 'all';
+let searchQuery = '';
+let searchData = [];
+let searchController = null;
+let searchBusy = false;
+let importingLink = false;
+const pendingCourseImports = new Set();
+let workspace = defaultWorkspace(); // board columns, tasks, checklists, sprints
+let homeMode = 'grid'; // 'grid' | 'board' — persisted in profile settings
 
 const saveCourses = () => scheduleRemoteSave();
 const saveStats = () => scheduleRemoteSave();
 
 function settingsSnapshot() {
-  return { userName, volume, captionsOn, prefQuality };
+  return { userName, volume, captionsOn, prefQuality, homeMode };
 }
 
 function scheduleRemoteSave() {
@@ -139,6 +148,7 @@ function mergeRemoteState(remote) {
     seconds: mergedSeconds,
     lastStreakToast: stats.lastStreakToast || remoteStats.lastStreakToast || '',
   };
+  mergeWorkspaceState(remote.workspace);
 }
 
 async function persistRemoteData({ importLegacy = false } = {}) {
@@ -163,6 +173,7 @@ async function persistRemoteData({ importLegacy = false } = {}) {
             courses,
             stats,
             settings: settingsSnapshot(),
+            workspace,
             revision: profileRevision,
             importLegacy: useLegacyImport,
           }),
@@ -313,6 +324,13 @@ const streakNum = $('#streakNum');
 const urlInput = $('#urlInput');
 const addBtn = $('#addBtn');
 const addError = $('#addError');
+const searchFilters = $('#searchFilters');
+const searchSection = $('#searchSection');
+const searchSummary = $('#searchSummary');
+const searchResults = $('#searchResults');
+const searchError = $('#searchError');
+const searchYoutubeLink = $('#searchYoutubeLink');
+const retrySearchBtn = $('#retrySearchBtn');
 const courseGrid = $('#courseGrid');
 const coursesHeading = $('#coursesHeading');
 const pinnedFilterBtn = $('#pinnedFilterBtn');
@@ -361,7 +379,13 @@ const dashboardBtn = $('#dashboardBtn');
 const profileBtn = $('#profileBtn');
 const profileName = $('#profileName');
 const profileAvatar = $('#profileAvatar');
-const courseDownloadBtn = $('#courseDownloadBtn');
+const tasksView = $('#tasksView');
+const roadmapView = $('#roadmapView');
+const boardWrap = $('#boardWrap');
+const boardEl = $('#board');
+const homeViewToggle = $('#homeViewToggle');
+const taskPanel = $('#taskPanel');
+const taskPanelBackdrop = $('#taskPanelBackdrop');
 
 async function api(url, options = {}) {
   const res = await fetch(url, options);
@@ -447,6 +471,7 @@ function setAuthMode(mode) {
 
 function resetSessionState() {
   sessionGeneration++;
+  resetDiscovery();
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = null;
   remoteSaveQueued = false;
@@ -455,12 +480,11 @@ function resetSessionState() {
   profileRevision = 0;
   pendingActivity.clear();
   failedActivityBatches.length = 0;
-  downloadEvents?.close();
-  downloadEvents = null;
-  activeDownloadId = null;
   destroyCharts();
   courses = {};
   stats = { seconds: {}, lastStreakToast: '' };
+  workspace = defaultWorkspace();
+  homeMode = 'grid';
   historyItems = [];
   userName = '';
   volume = 100;
@@ -482,6 +506,12 @@ function showAuth() {
   homeView.classList.add('hidden');
   courseView.classList.add('hidden');
   dashboardView.classList.add('hidden');
+  tasksView.classList.add('hidden');
+  roadmapView.classList.add('hidden');
+  closeTaskPanel();
+  $('#taskModal').classList.add('hidden');
+  $('#sprintModal').classList.add('hidden');
+  $('#roadmapModal').classList.add('hidden');
   authView.classList.remove('hidden');
   document.title = 'Sign in — FocusTube';
 }
@@ -526,6 +556,8 @@ async function loadProfileData(transition, userId) {
   volume = Number.isFinite(settings.volume) ? settings.volume : 100;
   captionsOn = typeof settings.captionsOn === 'boolean' ? settings.captionsOn : false;
   prefQuality = settings.prefQuality || 'default';
+  homeMode = settings.homeMode === 'board' ? 'board' : 'grid';
+  workspace = normalizeWorkspace(remote.workspace);
   volBar.value = volume;
   volBar.style.setProperty('--fill', volume + '%');
   ccBtn.classList.toggle('active', captionsOn);
@@ -667,12 +699,24 @@ function openStats() {
 
 /* ================= home view ================= */
 function renderHome() {
+  updateSearchLibraryState();
   const all = Object.values(courses);
-  pinnedFilterBtn.classList.toggle('hidden', all.length === 0);
+  const hasBoardContent = all.length > 0 || Object.keys(workspace.tasks).length > 0;
+  homeViewToggle.classList.toggle('hidden', !hasBoardContent);
+  if (!hasBoardContent && homeMode === 'board') homeMode = 'grid';
+  const boardMode = homeMode === 'board';
+  $('#gridModeBtn').classList.toggle('active', !boardMode);
+  $('#boardModeBtn').classList.toggle('active', boardMode);
+  coursesHeading.textContent = boardMode ? 'Your board' : 'Your courses';
+  coursesHeading.classList.toggle('hidden', !hasBoardContent);
+  boardWrap.classList.toggle('hidden', !boardMode);
+  courseGrid.classList.toggle('hidden', boardMode);
+  pinnedFilterBtn.classList.toggle('hidden', boardMode || all.length === 0);
+  renderRoadmapStrip();
+  if (boardMode) return renderBoard();
   const list = (showPinnedOnly ? all.filter((c) => c.pinned) : all).sort(
     (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.addedAt - a.addedAt
   );
-  coursesHeading.classList.toggle('hidden', all.length === 0);
   courseGrid.innerHTML = '';
   if (showPinnedOnly && list.length === 0) {
     courseGrid.append(el('p', { class: 'empty-pinned' }, 'No bookmarked courses yet. Pin a course to see it here.'));
@@ -738,6 +782,7 @@ function renderHome() {
                 e.stopPropagation();
                 if (confirm(`Remove "${c.title}"?\nYour progress for it will be deleted.`)) {
                   delete courses[c.id];
+                  cleanupCourseWorkspace(c.id);
                   saveCourses();
                   renderHome();
                 }
@@ -751,14 +796,178 @@ function renderHome() {
   }
 }
 
-async function addCourse(url) {
+function isCourseLink(value) {
+  return /^(?:https?:\/\/|(?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\/)/i.test(value)
+    || /^(?:PL|UU|FL|OL|RD)[A-Za-z0-9_-]{5,}$/.test(value);
+}
+
+function updateDiscoveryControls() {
+  const isLink = isCourseLink(urlInput.value.trim());
+  addBtn.textContent = importingLink ? 'Creating course...' : isLink ? 'Create course' : searchBusy ? 'Searching...' : 'Search';
+  addBtn.disabled = importingLink || (searchBusy && urlInput.value.trim() === searchQuery);
+  urlInput.disabled = importingLink;
+  searchFilters.disabled = isLink || importingLink;
+}
+
+function clearCourseSearch({ clearInput = false } = {}) {
+  searchController?.abort();
+  searchController = null;
+  searchBusy = false;
+  searchQuery = '';
+  searchData = [];
+  searchSection.classList.add('hidden');
+  searchResults.replaceChildren();
+  searchResults.setAttribute('aria-busy', 'false');
+  searchSummary.textContent = '';
+  searchError.classList.add('hidden');
+  retrySearchBtn.classList.add('hidden');
+  if (clearInput) urlInput.value = '';
+  updateDiscoveryControls();
+}
+
+function resetDiscovery() {
+  pendingCourseImports.clear();
+  importingLink = false;
+  searchType = 'all';
+  for (const input of searchFilters.querySelectorAll('input')) input.checked = input.value === searchType;
   addError.classList.add('hidden');
-  addBtn.disabled = true;
-  addBtn.textContent = 'Fetching playlist…';
+  clearCourseSearch({ clearInput: true });
+}
+
+function youtubeSearchUrl(query, type) {
+  const url = new URL('https://www.youtube.com/results');
+  url.searchParams.set('search_query', type === 'course' && !/\bcourse\b/i.test(query) ? `${query} full course` : query);
+  url.searchParams.set('hl', 'en');
+  if (type === 'video') url.searchParams.set('sp', 'EgIQAQ==');
+  if (type === 'playlist') url.searchParams.set('sp', 'EgIQAw==');
+  return url.href;
+}
+
+function updateSearchLibraryState() {
+  for (const row of searchResults.querySelectorAll('.search-result')) {
+    const saved = Boolean(courses[row.dataset.resultId]);
+    const pending = pendingCourseImports.has(row.dataset.resultUrl);
+    const button = $('.search-create-btn', row);
+    button.disabled = pending;
+    button.textContent = pending ? 'Creating course...' : saved ? 'Open course' : 'Create course';
+    $('.search-saved', row).classList.toggle('hidden', !saved);
+  }
+}
+
+function renderSearchResults() {
+  searchResults.replaceChildren();
+  for (const result of searchData) {
+    const error = el('div', { class: 'add-error hidden', role: 'alert' });
+    const button = el('button', {
+      type: 'button',
+      class: 'btn search-create-btn',
+      onclick: () => {
+        if (courses[result.id]) location.hash = '#c=' + result.id;
+        else addCourse(result.url, { button, errorTarget: error, open: false });
+      },
+    }, 'Create course');
+    const countLabel = result.isCourse ? 'lesson' : 'video';
+    const badge = result.type === 'video' ? result.duration
+      : result.videoCount === null ? '' : `${result.videoCount} ${countLabel}${result.videoCount === 1 ? '' : 's'}`;
+    const youtubeLink = { href: result.url, target: '_blank', rel: 'noopener noreferrer' };
+    searchResults.append(el('article', {
+      class: 'search-result',
+      'data-result-id': result.id,
+      'data-result-url': result.url,
+    },
+    el('a', { ...youtubeLink, class: 'search-thumb', 'aria-label': `Open ${result.title} on YouTube` },
+      el('span', { class: 'search-thumb-placeholder', html: result.type === 'video' ? I.play : I.menu, 'aria-hidden': 'true' }),
+      result.thumbnail ? el('img', {
+        src: result.thumbnail, alt: '', loading: 'lazy', width: '320', height: '180',
+        onerror: event => event.currentTarget.remove(),
+      }) : null,
+      badge ? el('span', { class: 'search-thumb-label' }, badge) : null
+    ),
+    el('div', { class: 'search-result-body' },
+      el('div', { class: 'search-result-kicker' },
+        el('span', { class: 'search-result-type' }, result.isCourse ? 'Course' : result.type === 'video' ? 'Video' : 'Playlist'),
+        el('span', { class: 'search-saved hidden' }, el('span', { html: I.check, 'aria-hidden': 'true' }), 'In library')
+      ),
+      el('h3', {}, el('a', { ...youtubeLink, class: 'search-result-title' }, result.title)),
+      el('p', { class: 'search-result-author' }, result.author || 'YouTube'),
+      result.metadata ? el('p', { class: 'search-result-meta' }, result.metadata) : null
+    ),
+    result.description ? el('p', { class: 'search-result-description' }, result.description) : null,
+    el('div', { class: 'search-result-actions' }, button, error)
+    ));
+  }
+  updateSearchLibraryState();
+}
+
+async function searchYouTube(query, type = searchType) {
+  query = query.trim();
+  if (!query) return;
+  addError.classList.add('hidden');
+  if (query.length > 200) {
+    clearCourseSearch();
+    addError.textContent = 'Enter a search term between 1 and 200 characters.';
+    addError.classList.remove('hidden');
+    return;
+  }
+  searchController?.abort();
+  const controller = new AbortController();
+  const generation = sessionGeneration;
+  searchController = controller;
+  searchQuery = query;
+  searchBusy = true;
+  searchData = [];
+  searchSection.classList.remove('hidden');
+  searchResults.replaceChildren();
+  searchResults.setAttribute('aria-busy', 'true');
+  searchError.classList.add('hidden');
+  retrySearchBtn.classList.add('hidden');
+  searchSummary.textContent = `Searching for "${query}"...`;
+  searchYoutubeLink.href = youtubeSearchUrl(query, type);
+  updateDiscoveryControls();
   try {
-    const res = await fetch('/api/playlist?url=' + encodeURIComponent(url));
+    const data = await api('/api/search?' + new URLSearchParams({ q: query, type }), { signal: controller.signal });
+    if (searchController !== controller || generation !== sessionGeneration) return;
+    searchData = data.results;
+    searchYoutubeLink.href = data.youtubeUrl;
+    const label = { all: 'result', video: 'video result', playlist: 'playlist result', course: 'course-focused result' }[type]
+      + (searchData.length === 1 ? '' : 's');
+    searchSummary.textContent = searchData.length ? `${searchData.length} ${label} for "${data.query}"` : `No ${label} for "${data.query}".`;
+    renderSearchResults();
+  } catch (err) {
+    if (controller.signal.aborted || searchController !== controller || generation !== sessionGeneration) return;
+    if (err.status === 401) return showAuth();
+    searchSummary.textContent = `Search unavailable for "${query}"`;
+    searchError.textContent = err.message;
+    searchError.classList.remove('hidden');
+    retrySearchBtn.classList.remove('hidden');
+  } finally {
+    if (searchController === controller) {
+      searchController = null;
+      searchBusy = false;
+      searchResults.setAttribute('aria-busy', 'false');
+      updateDiscoveryControls();
+    }
+  }
+}
+
+async function addCourse(url, { button = addBtn, errorTarget = addError, open = true } = {}) {
+  if (pendingCourseImports.has(url)) return;
+  const generation = sessionGeneration;
+  const direct = button === addBtn;
+  pendingCourseImports.add(url);
+  errorTarget.classList.add('hidden');
+  button.disabled = true;
+  button.textContent = 'Creating course...';
+  if (direct) {
+    importingLink = true;
+    clearCourseSearch();
+  }
+  try {
+    const source = /^(?:(?:www|m|music)\.)?(?:youtube\.com|youtu\.be|youtube-nocookie\.com)\//i.test(url) ? 'https://' + url : url;
+    const res = await fetch('/api/playlist?url=' + encodeURIComponent(source));
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not load that playlist.');
+    if (generation !== sessionGeneration) return;
+    if (!res.ok) throw new Error(data.error || 'Could not load that video or playlist.');
     const existing = courses[data.id];
     courses[data.id] = {
       id: data.id,
@@ -775,18 +984,1216 @@ async function addCourse(url) {
       pinned: existing?.pinned || false,
     };
     saveCourses();
-    urlInput.value = '';
+    if (direct) urlInput.value = '';
     if (data.skipped) toast(`${data.skipped} private/deleted video(s) were skipped.`);
-    const target = '#c=' + data.id;
-    if (location.hash === target) route(); // same hash → no hashchange event
-    else location.hash = target;
+    if (open) {
+      const target = '#c=' + data.id;
+      if (location.hash === target) route(); // same hash → no hashchange event
+      else location.hash = target;
+    } else {
+      renderHome();
+      toast(`Added "${data.title}" to your library.`);
+    }
   } catch (err) {
-    addError.textContent = err.message;
-    addError.classList.remove('hidden');
+    if (generation !== sessionGeneration) return;
+    errorTarget.textContent = err.message;
+    errorTarget.classList.remove('hidden');
+    if (!errorTarget.isConnected) toast(err.message, { error: true });
   } finally {
-    addBtn.disabled = false;
-    addBtn.textContent = 'Create course';
+    if (generation === sessionGeneration) {
+      pendingCourseImports.delete(url);
+      if (direct) importingLink = false;
+      button.disabled = false;
+      button.textContent = 'Create course';
+      updateDiscoveryControls();
+      updateSearchLibraryState();
+    }
   }
+}
+
+/* ================= workspace: kanban board, tasks, checklists, sprints ================= */
+const AUTO_COLUMNS = [
+  { id: 'backlog', title: 'Backlog', kind: 'auto' },
+  { id: 'learning', title: 'Learning', kind: 'auto' },
+  { id: 'done', title: 'Completed', kind: 'auto' },
+];
+const PRIORITY_LABEL = { low: 'Low', med: 'Med', high: 'High' };
+const PRIORITY_RANK = { high: 0, med: 1, low: 2 };
+const expandedChecklists = new Set(); // board cards with an open checklist (session-only)
+let editingTaskId = null;
+let pendingNewColumnId = null; // column awaiting its first name via inline edit
+
+const uid = () =>
+  window.crypto?.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+function defaultWorkspace() {
+  return normalizeWorkspace({});
+}
+
+/** Coerce anything the server (or an older client) stored into a safe workspace shape. */
+function normalizeWorkspace(raw) {
+  const src = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const board = src.board && typeof src.board === 'object' ? src.board : {};
+  const sprints = src.sprints && typeof src.sprints === 'object' ? src.sprints : {};
+
+  const reserved = new Set(['backlog', 'learning', 'done', 'unassigned']);
+  const columns = [];
+  for (const col of Array.isArray(board.columns) ? board.columns : []) {
+    const id = typeof col?.id === 'string' ? col.id : '';
+    if (!id || reserved.has(id)) continue;
+    reserved.add(id);
+    columns.push({ id, title: String(col.title || 'Untitled').slice(0, 60) });
+  }
+
+  const overrides = {};
+  if (board.overrides && typeof board.overrides === 'object') {
+    for (const [key, value] of Object.entries(board.overrides)) {
+      if (typeof value === 'string') overrides[key] = value;
+    }
+  }
+  const cardOrder = {};
+  if (board.cardOrder && typeof board.cardOrder === 'object') {
+    for (const [key, value] of Object.entries(board.cardOrder)) {
+      if (Array.isArray(value)) cardOrder[key] = value.filter((item) => typeof item === 'string');
+    }
+  }
+
+  const tasks = {};
+  if (src.tasks && typeof src.tasks === 'object') {
+    for (const [id, t] of Object.entries(src.tasks)) {
+      if (!t || typeof t !== 'object' || !String(t.title || '').trim()) continue;
+      tasks[id] = {
+        id,
+        title: String(t.title).slice(0, 200),
+        notes: String(t.notes || '').slice(0, 2000),
+        status: ['todo', 'doing', 'done'].includes(t.status) ? t.status : 'todo',
+        priority: ['low', 'med', 'high'].includes(t.priority) ? t.priority : 'med',
+        dueDate: /^\d{4}-\d{2}-\d{2}$/.test(t.dueDate || '') ? t.dueDate : null,
+        courseId: typeof t.courseId === 'string' && t.courseId ? t.courseId : null,
+        createdAt: Number(t.createdAt) || Date.now(),
+        completedAt: Number(t.completedAt) || null,
+      };
+    }
+  }
+
+  const checklists = {};
+  if (src.checklists && typeof src.checklists === 'object') {
+    for (const [courseId, items] of Object.entries(src.checklists)) {
+      if (!Array.isArray(items)) continue;
+      const list = items
+        .filter((item) => item && typeof item === 'object' && item.id && String(item.text || '').trim())
+        .map((item) => ({ id: String(item.id), text: String(item.text).slice(0, 300), done: !!item.done }));
+      if (list.length) checklists[courseId] = list;
+    }
+  }
+
+  const sprintItems = (Array.isArray(sprints.items) ? sprints.items : [])
+    .filter(
+      (s) =>
+        s && s.id && /^\d{4}-\d{2}-\d{2}$/.test(s.startDate || '') && /^\d{4}-\d{2}-\d{2}$/.test(s.endDate || '')
+    )
+    .map((s) => ({
+      id: String(s.id),
+      title: String(s.title || 'Sprint').slice(0, 60),
+      startDate: s.startDate,
+      endDate: s.endDate,
+    }));
+  const assignments = {};
+  if (sprints.assignments && typeof sprints.assignments === 'object') {
+    for (const [key, value] of Object.entries(sprints.assignments)) {
+      if (typeof value === 'string') assignments[key] = value;
+    }
+  }
+
+  const roadmaps = {};
+  if (src.roadmaps && typeof src.roadmaps === 'object') {
+    for (const [id, r] of Object.entries(src.roadmaps)) {
+      if (!r || typeof r !== 'object' || !String(r.title || '').trim()) continue;
+      roadmaps[id] = {
+        id,
+        title: String(r.title).slice(0, 80),
+        courseIds: Array.isArray(r.courseIds) ? r.courseIds.filter((item) => typeof item === 'string') : [],
+        createdAt: Number(r.createdAt) || Date.now(),
+      };
+    }
+  }
+
+  return {
+    board: { mode: board.mode === 'sprint' ? 'sprint' : 'status', columns, overrides, cardOrder },
+    sprints: {
+      cadence: ['week', 'biweek', 'month'].includes(sprints.cadence) ? sprints.cadence : 'week',
+      items: sprintItems,
+      assignments,
+    },
+    tasks,
+    checklists,
+    roadmaps,
+  };
+}
+
+/** Conflict merge (409): union by id, local edits win. */
+function mergeWorkspaceState(remoteRaw) {
+  const remote = normalizeWorkspace(remoteRaw);
+  const local = workspace;
+  const columns = [...local.board.columns];
+  for (const col of remote.board.columns) {
+    if (!columns.some((existing) => existing.id === col.id)) columns.push(col);
+  }
+  const checklists = { ...remote.checklists };
+  for (const [courseId, items] of Object.entries(local.checklists)) {
+    const merged = new Map((checklists[courseId] || []).map((item) => [item.id, item]));
+    for (const item of items) merged.set(item.id, item);
+    checklists[courseId] = [...merged.values()];
+  }
+  workspace = {
+    board: {
+      mode: local.board.mode,
+      columns,
+      overrides: { ...remote.board.overrides, ...local.board.overrides },
+      cardOrder: { ...remote.board.cardOrder, ...local.board.cardOrder },
+    },
+    sprints: {
+      cadence: local.sprints.cadence,
+      items: local.sprints.items.length ? local.sprints.items : remote.sprints.items,
+      assignments: { ...remote.sprints.assignments, ...local.sprints.assignments },
+    },
+    tasks: { ...remote.tasks, ...local.tasks },
+    checklists,
+    roadmaps: { ...remote.roadmaps, ...local.roadmaps },
+  };
+}
+
+function cleanupCourseWorkspace(courseId) {
+  const key = 'c:' + courseId;
+  delete workspace.board.overrides[key];
+  delete workspace.sprints.assignments[key];
+  delete workspace.checklists[courseId];
+  for (const list of Object.values(workspace.board.cardOrder)) {
+    const at = list.indexOf(key);
+    if (at !== -1) list.splice(at, 1);
+  }
+  for (const t of Object.values(workspace.tasks)) if (t.courseId === courseId) t.courseId = null;
+  for (const r of Object.values(workspace.roadmaps)) {
+    r.courseIds = r.courseIds.filter((item) => item !== courseId);
+  }
+}
+
+/* ---------- column & placement helpers ---------- */
+function statusColumns() {
+  return [...AUTO_COLUMNS, ...workspace.board.columns.map((col) => ({ ...col, kind: 'custom' }))];
+}
+
+function sprintColumns() {
+  return [{ id: 'unassigned', title: 'Unassigned' }, ...workspace.sprints.items];
+}
+
+function courseAutoColumnId(c) {
+  const done = countDone(c);
+  if (c.videos.length && done === c.videos.length) return 'done';
+  return done > 0 ? 'learning' : 'backlog';
+}
+
+function cardColumnId(key) {
+  const override = workspace.board.overrides[key];
+  if (override && statusColumns().some((col) => col.id === override)) return override;
+  if (key.startsWith('c:')) {
+    const c = courses[key.slice(2)];
+    return c ? courseAutoColumnId(c) : 'backlog';
+  }
+  const t = workspace.tasks[key.slice(2)];
+  if (!t) return 'backlog';
+  return t.status === 'done' ? 'done' : t.status === 'doing' ? 'learning' : 'backlog';
+}
+
+function orderCards(columnId, keys) {
+  const order = workspace.board.cardOrder[columnId] || [];
+  const rank = new Map(order.map((key, index) => [key, index]));
+  return keys.sort((a, b) => (rank.has(a) ? rank.get(a) : 1e9) - (rank.has(b) ? rank.get(b) : 1e9));
+}
+
+function allCardKeys() {
+  const courseKeys = Object.values(courses)
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.addedAt - a.addedAt)
+    .map((c) => 'c:' + c.id);
+  const taskKeys = Object.values(workspace.tasks)
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((t) => 't:' + t.id);
+  return [...courseKeys, ...taskKeys];
+}
+
+function setTaskStatus(t, status) {
+  if (t.status === status) return;
+  t.status = status;
+  t.completedAt = status === 'done' ? Date.now() : null;
+}
+
+/* ---------- card moves ---------- */
+function moveCardToColumn(key, columnId, beforeKey = null, visibleOrder = null) {
+  if (beforeKey === key) beforeKey = null;
+  if (key.startsWith('t:')) {
+    const t = workspace.tasks[key.slice(2)];
+    if (!t) return;
+    const autoStatus = { backlog: 'todo', learning: 'doing', done: 'done' }[columnId];
+    if (autoStatus) {
+      setTaskStatus(t, autoStatus);
+      delete workspace.board.overrides[key];
+    } else {
+      workspace.board.overrides[key] = columnId;
+    }
+  } else {
+    const c = courses[key.slice(2)];
+    if (!c) return;
+    if (columnId === courseAutoColumnId(c)) delete workspace.board.overrides[key];
+    else workspace.board.overrides[key] = columnId;
+  }
+  for (const list of Object.values(workspace.board.cardOrder)) {
+    const at = list.indexOf(key);
+    if (at !== -1) list.splice(at, 1);
+  }
+  if (visibleOrder) workspace.board.cardOrder[columnId] = visibleOrder.filter((item) => item !== key);
+  const list = (workspace.board.cardOrder[columnId] ||= []);
+  const at = beforeKey ? list.indexOf(beforeKey) : -1;
+  if (at === -1) list.push(key);
+  else list.splice(at, 0, key);
+  scheduleRemoteSave();
+  refreshTaskUIs();
+}
+
+function assignCardToSprint(key, columnId) {
+  if (columnId === 'unassigned') delete workspace.sprints.assignments[key];
+  else workspace.sprints.assignments[key] = columnId;
+  scheduleRemoteSave();
+  refreshTaskUIs();
+}
+
+/* ---------- board rendering ---------- */
+function renderBoard() {
+  boardEl.innerHTML = '';
+  const sprintMode = workspace.board.mode === 'sprint';
+  $('#statusBoardBtn').classList.toggle('active', !sprintMode);
+  $('#sprintBoardBtn').classList.toggle('active', sprintMode);
+  $('#addColumnBtn').classList.toggle('hidden', sprintMode);
+  $('#sprintSetupBtn').classList.toggle('hidden', !sprintMode);
+  if (sprintMode) renderSprintBoard();
+  else renderStatusBoard();
+}
+
+function renderStatusBoard() {
+  const cols = statusColumns();
+  const buckets = new Map(cols.map((col) => [col.id, []]));
+  for (const key of allCardKeys()) {
+    (buckets.get(cardColumnId(key)) || buckets.get('backlog')).push(key);
+  }
+  for (const col of cols) {
+    const keys = orderCards(col.id, buckets.get(col.id) || []);
+    boardEl.append(buildColumn(col, keys, { custom: col.kind === 'custom' }));
+  }
+  if (pendingNewColumnId) {
+    const id = pendingNewColumnId;
+    pendingNewColumnId = null;
+    const head = boardEl.querySelector(`.board-column[data-col="${CSS.escape(id)}"] .board-col-head`);
+    if (head) {
+      editColumnTitleInline(head, '', {
+        commit: (name) => {
+          const col = workspace.board.columns.find((item) => item.id === id);
+          if (col) col.title = name;
+          scheduleRemoteSave();
+          renderBoard();
+        },
+        cancel: () => {
+          workspace.board.columns = workspace.board.columns.filter((item) => item.id !== id);
+          renderBoard();
+        },
+      });
+    }
+  }
+}
+
+function renderSprintBoard() {
+  if (!workspace.sprints.items.length) {
+    boardEl.append(
+      el(
+        'div',
+        { class: 'board-col-empty', style: 'flex:1;padding:34px 20px' },
+        'No sprints yet. ',
+        el('button', { class: 'btn ghost slim', type: 'button', onclick: openSprintModal }, 'Set up sprints')
+      )
+    );
+    return;
+  }
+  const cols = sprintColumns();
+  const colIds = new Set(cols.map((col) => col.id));
+  const buckets = new Map(cols.map((col) => [col.id, []]));
+  for (const key of allCardKeys()) {
+    const sprintId = workspace.sprints.assignments[key];
+    buckets.get(colIds.has(sprintId) ? sprintId : 'unassigned').push(key);
+  }
+  const today = todayKey();
+  for (const col of cols) {
+    const isSprint = col.id !== 'unassigned';
+    boardEl.append(
+      buildColumn(col, buckets.get(col.id), {
+        currentSprint: isSprint && col.startDate <= today && today <= col.endDate,
+        ended: isSprint && col.endDate < today,
+        dates: isSprint ? `${shortDate(col.startDate)} – ${shortDate(col.endDate)}` : null,
+      })
+    );
+  }
+}
+
+function buildColumn(col, keys, opts = {}) {
+  const body = el('div', { class: 'board-col-body' });
+  for (const key of keys) {
+    const card = buildCard(key);
+    if (card) body.append(card);
+  }
+  if (!body.children.length) body.append(el('div', { class: 'board-col-empty' }, 'Drop cards here'));
+  const head = el(
+    'div',
+    { class: 'board-col-head' },
+    el('h3', {}, col.title),
+    el('span', { class: 'board-col-count' }, String(keys.length)),
+    el('span', { class: 'spacer' }),
+    opts.currentSprint ? el('span', { class: 'board-col-badge now' }, 'Now') : null,
+    opts.ended ? el('span', { class: 'board-col-badge ended' }, 'Ended') : null,
+    opts.custom
+      ? el('button', {
+          class: 'board-col-menu',
+          type: 'button',
+          title: 'Rename column',
+          onclick: (e) => renameColumn(col.id, e.target.closest('.board-col-head')),
+        }, '✎')
+      : null,
+    opts.custom
+      ? el('button', { class: 'board-col-menu', type: 'button', title: 'Delete column', onclick: () => deleteColumn(col.id) }, '✕')
+      : null
+  );
+  const column = el(
+    'div',
+    { class: 'board-column' + (opts.currentSprint ? ' current-sprint' : ''), 'data-col': col.id },
+    head,
+    opts.dates ? el('div', { class: 'board-col-dates' }, opts.dates) : null,
+    body
+  );
+  column.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    column.classList.add('drag-over');
+  });
+  column.addEventListener('dragleave', (e) => {
+    if (!column.contains(e.relatedTarget)) column.classList.remove('drag-over');
+  });
+  column.addEventListener('drop', (e) => {
+    e.preventDefault();
+    column.classList.remove('drag-over');
+    const key = e.dataTransfer.getData('text/plain');
+    if (!key || !(key.startsWith('c:') || key.startsWith('t:'))) return;
+    if (workspace.board.mode === 'sprint') {
+      assignCardToSprint(key, col.id);
+    } else {
+      const beforeKey = e.target.closest?.('.board-card')?.dataset.key || null;
+      const visibleOrder = [...body.querySelectorAll('.board-card')].map((node) => node.dataset.key);
+      moveCardToColumn(key, col.id, beforeKey, visibleOrder);
+    }
+  });
+  return column;
+}
+
+function buildCard(key) {
+  if (key.startsWith('c:')) {
+    const c = courses[key.slice(2)];
+    return c ? buildCourseBoardCard(c) : null;
+  }
+  const t = workspace.tasks[key.slice(2)];
+  return t ? buildTaskBoardCard(t) : null;
+}
+
+function makeCardDraggable(card, key) {
+  card.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', key);
+    e.dataTransfer.effectAllowed = 'move';
+    card.classList.add('dragging');
+  });
+  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+}
+
+function moveButtons(key) {
+  const sprintMode = workspace.board.mode === 'sprint';
+  const cols = sprintMode ? sprintColumns() : statusColumns();
+  let currentId;
+  if (sprintMode) {
+    const assigned = workspace.sprints.assignments[key];
+    currentId = cols.some((col) => col.id === assigned) ? assigned : 'unassigned';
+  } else {
+    currentId = cardColumnId(key);
+  }
+  const index = cols.findIndex((col) => col.id === currentId);
+  const make = (dir, glyph, label) => {
+    const target = cols[index + dir];
+    return el(
+      'button',
+      {
+        class: 'card-move',
+        type: 'button',
+        title: target ? `${label}: ${target.title}` : label,
+        disabled: target ? null : '',
+        onclick: (e) => {
+          e.stopPropagation();
+          if (!target) return;
+          if (sprintMode) assignCardToSprint(key, target.id);
+          else moveCardToColumn(key, target.id);
+        },
+      },
+      glyph
+    );
+  };
+  return [make(-1, '◀', 'Move left'), make(1, '▶', 'Move right')];
+}
+
+function pinnedPill(key) {
+  if (workspace.board.mode !== 'status' || !workspace.board.overrides[key]) return null;
+  return el(
+    'button',
+    {
+      class: 'pill pinned-pill',
+      type: 'button',
+      title: 'Placed manually — click to return to automatic placement',
+      onclick: (e) => {
+        e.stopPropagation();
+        delete workspace.board.overrides[key];
+        scheduleRemoteSave();
+        refreshTaskUIs();
+      },
+    },
+    '📌 Manual'
+  );
+}
+
+function buildCourseBoardCard(c) {
+  const key = 'c:' + c.id;
+  const done = countDone(c);
+  const pct = c.videos.length ? Math.round((done / c.videos.length) * 100) : 0;
+  const thumbId = c.videos[0]?.id;
+  const list = workspace.checklists[c.id] || [];
+  const expanded = expandedChecklists.has(c.id);
+  const checkedCount = list.filter((item) => item.done).length;
+
+  const children = [
+    el(
+      'div',
+      { class: 'board-card-thumbrow' },
+      thumbId
+        ? el('img', {
+            class: 'board-card-thumb',
+            src: `https://i.ytimg.com/vi/${thumbId}/mqdefault.jpg`,
+            alt: '',
+            loading: 'lazy',
+            onerror: (e) => (e.target.style.display = 'none'),
+          })
+        : null,
+      el(
+        'div',
+        { style: 'min-width:0;flex:1' },
+        el('div', { class: 'board-card-title' }, c.title),
+        el(
+          'div',
+          { class: 'card-meta' },
+          pct === 100 ? '✓ Completed' : `${done} / ${c.videos.length} done`
+        )
+      )
+    ),
+    el(
+      'div',
+      { class: 'card-progress' },
+      el(
+        'div',
+        { class: 'progress-track' },
+        el('div', { class: 'progress-fill' + (pct === 100 ? ' full' : ''), style: `width:${pct}%` })
+      ),
+      el('span', { class: 'card-pct' }, pct + '%')
+    ),
+    el(
+      'button',
+      {
+        class: 'card-checklist-toggle',
+        type: 'button',
+        onclick: (e) => {
+          e.stopPropagation();
+          if (expanded) expandedChecklists.delete(c.id);
+          else expandedChecklists.add(c.id);
+          renderBoard();
+        },
+      },
+      list.length ? `☑ Checklist ${checkedCount}/${list.length}` : '＋ Checklist'
+    ),
+  ];
+  if (expanded) {
+    const itemsWrap = el('div', { class: 'card-checklist' });
+    for (const item of list) itemsWrap.append(checklistItemEl(c.id, item, renderBoard));
+    children.push(
+      itemsWrap,
+      el(
+        'form',
+        {
+          class: 'checklist-add',
+          onsubmit: (e) => {
+            e.preventDefault();
+            const input = e.target.querySelector('input');
+            const text = input.value.trim();
+            if (!text) return;
+            (workspace.checklists[c.id] ||= []).push({ id: 'cl_' + uid(), text: text.slice(0, 300), done: false });
+            scheduleRemoteSave();
+            renderBoard();
+            boardEl.querySelector(`.board-card[data-key="${CSS.escape(key)}"] .checklist-add input`)?.focus();
+          },
+        },
+        el('input', { type: 'text', placeholder: 'Add checklist item…', maxlength: '300' })
+      )
+    );
+  }
+  children.push(
+    el('div', { class: 'board-card-foot' }, pinnedPill(key), el('span', { class: 'spacer' }), ...moveButtons(key))
+  );
+
+  const card = el('div', { class: 'board-card', draggable: 'true', 'data-key': key }, ...children);
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button, input, form, a, select')) return;
+    location.hash = '#c=' + c.id;
+  });
+  makeCardDraggable(card, key);
+  return card;
+}
+
+function buildTaskBoardCard(t) {
+  const key = 't:' + t.id;
+  const card = el(
+    'div',
+    { class: 'board-card' + (t.status === 'done' ? ' done-card' : ''), draggable: 'true', 'data-key': key },
+    el(
+      'div',
+      { class: 'board-card-taskrow' },
+      taskCheckButton(t),
+      el(
+        'div',
+        { style: 'min-width:0;flex:1' },
+        el('div', { class: 'board-card-title' }, t.title),
+        t.notes ? el('div', { class: 'card-meta' }, t.notes.length > 90 ? t.notes.slice(0, 90) + '…' : t.notes) : null
+      )
+    ),
+    el('div', { class: 'board-card-meta' }, priorityPill(t), duePill(t), courseChipFor(t), pinnedPill(key)),
+    el('div', { class: 'board-card-foot' }, el('span', { class: 'spacer' }), ...moveButtons(key))
+  );
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('button, input, form, a, select')) return;
+    openTaskModal(t.id);
+  });
+  makeCardDraggable(card, key);
+  return card;
+}
+
+/* ---------- custom columns ---------- */
+function editColumnTitleInline(headEl, initial, { commit, cancel }) {
+  const h3 = headEl.querySelector('h3');
+  if (!h3) return;
+  const input = el('input', {
+    class: 'col-name-input',
+    type: 'text',
+    maxlength: '60',
+    placeholder: 'Column name…',
+    value: initial,
+  });
+  h3.replaceWith(input);
+  input.focus();
+  input.select();
+  let settled = false;
+  const finish = (save) => {
+    if (settled) return;
+    settled = true;
+    const name = input.value.trim();
+    if (save && name) commit(name.slice(0, 60));
+    else cancel();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
+}
+
+function addCustomColumn() {
+  if (workspace.board.columns.length >= 8) return toast('Up to 8 custom columns are supported.', { error: true });
+  const id = 'col_' + uid();
+  workspace.board.columns.push({ id, title: 'New column' });
+  pendingNewColumnId = id;
+  renderBoard();
+}
+
+function renameColumn(columnId, headEl) {
+  const col = workspace.board.columns.find((item) => item.id === columnId);
+  if (!col || !headEl) return;
+  editColumnTitleInline(headEl, col.title, {
+    commit: (name) => {
+      col.title = name;
+      scheduleRemoteSave();
+      renderBoard();
+    },
+    cancel: () => renderBoard(),
+  });
+}
+
+function deleteColumn(columnId) {
+  const col = workspace.board.columns.find((item) => item.id === columnId);
+  if (!col) return;
+  if (!confirm(`Delete column "${col.title}"? Cards on it return to their automatic column.`)) return;
+  workspace.board.columns = workspace.board.columns.filter((item) => item.id !== columnId);
+  for (const [key, target] of Object.entries(workspace.board.overrides)) {
+    if (target === columnId) delete workspace.board.overrides[key];
+  }
+  delete workspace.board.cardOrder[columnId];
+  scheduleRemoteSave();
+  renderBoard();
+}
+
+/* ---------- sprints ---------- */
+function addDays(dateKey, amount) {
+  const d = new Date(dateKey + 'T12:00:00');
+  d.setDate(d.getDate() + amount);
+  return todayKey(d);
+}
+
+function addMonths(dateKey, amount) {
+  const d = new Date(dateKey + 'T12:00:00');
+  d.setMonth(d.getMonth() + amount);
+  return todayKey(d);
+}
+
+function shortDate(dateKey) {
+  return new Date(dateKey + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function generateSprints(cadence, count, startKey) {
+  const items = workspace.sprints.items;
+  let start = items.length ? addDays(items[items.length - 1].endDate, 1) : startKey;
+  for (let i = 0; i < count; i++) {
+    const end = cadence === 'month' ? addDays(addMonths(start, 1), -1) : addDays(start, cadence === 'biweek' ? 13 : 6);
+    items.push({ id: 'sp_' + uid(), title: `Sprint ${items.length + 1}`, startDate: start, endDate: end });
+    start = addDays(end, 1);
+  }
+  workspace.sprints.cadence = cadence;
+}
+
+function openSprintModal() {
+  $('#sprintStart').value = todayKey();
+  $('#sprintCadence').value = workspace.sprints.cadence;
+  $('#sprintClearBtn').classList.toggle('hidden', !workspace.sprints.items.length);
+  $('#sprintModal').classList.remove('hidden');
+}
+
+/* ---------- tasks ---------- */
+function createTask(fields = {}) {
+  const id = 'tk_' + uid();
+  workspace.tasks[id] = {
+    id,
+    title: '',
+    notes: '',
+    status: 'todo',
+    priority: 'med',
+    dueDate: null,
+    courseId: null,
+    createdAt: Date.now(),
+    completedAt: null,
+    ...fields,
+  };
+  return workspace.tasks[id];
+}
+
+function deleteTask(id) {
+  delete workspace.tasks[id];
+  const key = 't:' + id;
+  delete workspace.board.overrides[key];
+  delete workspace.sprints.assignments[key];
+  for (const list of Object.values(workspace.board.cardOrder)) {
+    const at = list.indexOf(key);
+    if (at !== -1) list.splice(at, 1);
+  }
+}
+
+function taskCompare(a, b) {
+  const dueA = a.dueDate || '9999-99-99';
+  const dueB = b.dueDate || '9999-99-99';
+  if (dueA !== dueB) return dueA < dueB ? -1 : 1;
+  if (PRIORITY_RANK[a.priority] !== PRIORITY_RANK[b.priority]) {
+    return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+  }
+  return a.createdAt - b.createdAt;
+}
+
+function taskCheckButton(t) {
+  return el('button', {
+    class: 'task-check' + (t.status === 'done' ? ' checked' : ''),
+    type: 'button',
+    title: t.status === 'done' ? 'Mark as not done' : 'Mark done',
+    html: I.check,
+    onclick: (e) => {
+      e.stopPropagation();
+      setTaskStatus(t, t.status === 'done' ? 'todo' : 'done');
+      scheduleRemoteSave();
+      refreshTaskUIs();
+    },
+  });
+}
+
+function priorityPill(t) {
+  return el('span', { class: 'pill p-' + t.priority }, PRIORITY_LABEL[t.priority]);
+}
+
+function duePill(t) {
+  if (!t.dueDate) return null;
+  const overdue = t.status !== 'done' && t.dueDate < todayKey();
+  return el(
+    'span',
+    { class: 'pill due' + (overdue ? ' overdue' : '') },
+    (overdue ? 'Overdue · ' : 'Due ') + shortDate(t.dueDate)
+  );
+}
+
+function courseChipFor(t) {
+  const c = t.courseId ? courses[t.courseId] : null;
+  if (!c) return null;
+  return el(
+    'button',
+    {
+      class: 'course-chip',
+      type: 'button',
+      title: c.title,
+      onclick: (e) => {
+        e.stopPropagation();
+        closeTaskPanel();
+        location.hash = '#c=' + c.id;
+      },
+    },
+    c.title
+  );
+}
+
+/** Re-render every surface that shows tasks/board data. */
+function refreshTaskUIs() {
+  if (!homeView.classList.contains('hidden')) renderHome();
+  if (!tasksView.classList.contains('hidden')) renderTasksPage();
+  if (taskPanel.classList.contains('open')) renderTaskPanel();
+  if (current?.course && !courseView.classList.contains('hidden')) renderCourseChecklist();
+}
+
+/* ---------- task editor modal ---------- */
+function fillCourseSelect(select, keepValue) {
+  const keep = keepValue !== undefined ? keepValue : select.value;
+  while (select.options.length > 1) select.remove(1);
+  for (const c of Object.values(courses).sort((a, b) => b.addedAt - a.addedAt)) {
+    select.append(el('option', { value: c.id }, c.title.slice(0, 80)));
+  }
+  select.value = keep && courses[keep] ? keep : '';
+}
+
+function openTaskModal(taskId = null, defaults = {}) {
+  editingTaskId = taskId;
+  const t = taskId ? workspace.tasks[taskId] : null;
+  $('#taskModalTitle').textContent = t ? 'Edit task' : 'New task';
+  $('#taskDeleteBtn').classList.toggle('hidden', !t);
+  fillCourseSelect($('#taskCourse'), t?.courseId || defaults.courseId || '');
+  $('#taskTitle').value = t?.title || defaults.title || '';
+  $('#taskNotes').value = t?.notes || '';
+  $('#taskDue').value = t?.dueDate || '';
+  $('#taskPriority').value = t?.priority || 'med';
+  $('#taskStatus').value = t?.status || defaults.status || 'todo';
+  $('#taskModal').classList.remove('hidden');
+  $('#taskTitle').focus();
+}
+
+/* ---------- tasks page ---------- */
+function renderTasksPage() {
+  fillCourseSelect($('#taskFilterCourse'));
+  const wrap = $('#tasksPageList');
+  wrap.innerHTML = '';
+  const courseFilter = $('#taskFilterCourse').value;
+  const priorityFilter = $('#taskFilterPriority').value;
+  const all = Object.values(workspace.tasks).filter(
+    (t) => (!courseFilter || t.courseId === courseFilter) && (!priorityFilter || t.priority === priorityFilter)
+  );
+  if (!all.length) {
+    wrap.append(
+      el('p', { class: 'empty-state' }, 'No tasks here yet. Add one with “＋ New task” — you can link it to a course.')
+    );
+    return;
+  }
+  const groups = [
+    ['todo', 'To do'],
+    ['doing', 'In progress'],
+    ['done', 'Done'],
+  ];
+  for (const [status, label] of groups) {
+    const group = all.filter((t) => t.status === status).sort(taskCompare);
+    if (!group.length) continue;
+    wrap.append(el('div', { class: 'tasks-group-title' }, `${label} · ${group.length}`));
+    for (const t of group) wrap.append(buildTaskRow(t));
+  }
+}
+
+function buildTaskRow(t, { compact = false } = {}) {
+  return el(
+    'div',
+    { class: 'task-row' + (t.status === 'done' ? ' done' : ''), onclick: () => openTaskModal(t.id) },
+    taskCheckButton(t),
+    el(
+      'div',
+      { class: 'task-row-main' },
+      el('div', { class: 'task-row-title' }, t.title),
+      t.notes && !compact ? el('div', { class: 'task-row-notes' }, t.notes) : null,
+      el(
+        'div',
+        { class: 'task-row-meta' },
+        priorityPill(t),
+        duePill(t),
+        courseChipFor(t),
+        t.status === 'doing' ? el('span', { class: 'pill p-low' }, 'In progress') : null
+      )
+    ),
+    el('button', {
+      class: 'task-row-del',
+      type: 'button',
+      title: 'Delete task',
+      html: I.trash,
+      onclick: (e) => {
+        e.stopPropagation();
+        if (!confirm(`Delete "${t.title}"?`)) return;
+        deleteTask(t.id);
+        scheduleRemoteSave();
+        refreshTaskUIs();
+      },
+    })
+  );
+}
+
+/* ---------- quick task panel ---------- */
+function openTaskPanel() {
+  taskPanel.classList.add('open');
+  taskPanel.setAttribute('aria-hidden', 'false');
+  taskPanelBackdrop.classList.remove('hidden');
+  renderTaskPanel();
+  $('#quickTaskInput').focus();
+}
+
+function closeTaskPanel() {
+  taskPanel.classList.remove('open');
+  taskPanel.setAttribute('aria-hidden', 'true');
+  taskPanelBackdrop.classList.add('hidden');
+}
+
+function renderTaskPanel() {
+  const wrap = $('#taskPanelList');
+  wrap.innerHTML = '';
+  const all = Object.values(workspace.tasks);
+  if (!all.length) {
+    wrap.append(el('p', { class: 'empty-state' }, 'Nothing here yet — add your first task above.'));
+    return;
+  }
+  const open = all.filter((t) => t.status !== 'done').sort(taskCompare);
+  const done = all
+    .filter((t) => t.status === 'done')
+    .sort((a, b) => (b.completedAt || 0) - (a.completedAt || 0))
+    .slice(0, 20);
+  if (open.length) wrap.append(el('div', { class: 'panel-group-title' }, `Open · ${open.length}`));
+  for (const t of open) wrap.append(buildTaskRow(t, { compact: true }));
+  if (done.length) wrap.append(el('div', { class: 'panel-group-title' }, 'Recently done'));
+  for (const t of done) wrap.append(buildTaskRow(t, { compact: true }));
+}
+
+/* ---------- course checklists ---------- */
+function checklistItemEl(courseId, item, rerender) {
+  return el(
+    'div',
+    { class: 'checklist-item' + (item.done ? ' done' : '') },
+    el('button', {
+      class: 'task-check' + (item.done ? ' checked' : ''),
+      type: 'button',
+      title: item.done ? 'Mark as not done' : 'Mark done',
+      html: I.check,
+      onclick: (e) => {
+        e.stopPropagation();
+        item.done = !item.done;
+        scheduleRemoteSave();
+        rerender();
+      },
+    }),
+    el('span', {}, item.text),
+    el('button', {
+      class: 'checklist-del',
+      type: 'button',
+      title: 'Remove item',
+      onclick: (e) => {
+        e.stopPropagation();
+        const list = workspace.checklists[courseId] || [];
+        const at = list.indexOf(item);
+        if (at !== -1) list.splice(at, 1);
+        if (!list.length) delete workspace.checklists[courseId];
+        scheduleRemoteSave();
+        rerender();
+      },
+    }, '✕')
+  );
+}
+
+function renderCourseChecklist() {
+  const c = current?.course;
+  if (!c) return;
+  const list = workspace.checklists[c.id] || [];
+  $('#courseChecklistCount').textContent = list.length
+    ? `${list.filter((item) => item.done).length}/${list.length}`
+    : '';
+  const wrap = $('#courseChecklistItems');
+  wrap.innerHTML = '';
+  if (!list.length) {
+    wrap.append(el('p', { class: 'empty-state', style: 'padding:4px 0' }, 'Notes and mini to-dos for this course.'));
+  }
+  for (const item of list) wrap.append(checklistItemEl(c.id, item, renderCourseChecklist));
+}
+
+/* ---------- roadmaps ---------- */
+let currentRoadmapId = null;
+
+function roadmapStats(r) {
+  let total = 0;
+  let done = 0;
+  for (const courseId of r.courseIds) {
+    const c = courses[courseId];
+    if (!c) continue;
+    total += c.videos.length;
+    done += countDone(c);
+  }
+  return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
+}
+
+function roadmapNextCourse(r) {
+  for (const courseId of r.courseIds) {
+    const c = courses[courseId];
+    if (c && countDone(c) < c.videos.length) return c;
+  }
+  return null;
+}
+
+function renderRoadmapStrip() {
+  const section = $('#roadmapsSection');
+  const strip = $('#roadmapStrip');
+  const list = Object.values(workspace.roadmaps).sort((a, b) => a.createdAt - b.createdAt);
+  const hasCourses = Object.keys(courses).length > 0;
+  section.classList.toggle('hidden', !hasCourses && !list.length);
+  strip.innerHTML = '';
+  if (!list.length) {
+    strip.append(
+      el('p', { class: 'empty-state' }, 'Group courses into an ordered learning path with combined progress.')
+    );
+    return;
+  }
+  for (const r of list) {
+    const { total, done, pct } = roadmapStats(r);
+    const courseCount = r.courseIds.filter((id) => courses[id]).length;
+    strip.append(
+      el(
+        'div',
+        { class: 'roadmap-card', onclick: () => (location.hash = '#roadmap=' + r.id) },
+        el('div', { class: 'roadmap-card-title' }, r.title),
+        el('div', { class: 'card-meta' }, `${courseCount} course${courseCount === 1 ? '' : 's'} · ${done} / ${total} videos`),
+        el(
+          'div',
+          { class: 'card-progress' },
+          el(
+            'div',
+            { class: 'progress-track' },
+            el('div', { class: 'progress-fill' + (pct === 100 ? ' full' : ''), style: `width:${pct}%` })
+          ),
+          el('span', { class: 'card-pct' }, pct + '%')
+        )
+      )
+    );
+  }
+}
+
+function renderRoadmapPage() {
+  const r = workspace.roadmaps[currentRoadmapId];
+  if (!r) {
+    location.hash = '';
+    return;
+  }
+  r.courseIds = r.courseIds.filter((id) => courses[id]); // drop stale references
+  document.title = `${r.title} — FocusTube`;
+  $('#roadmapTitle').textContent = r.title;
+  const { total, done, pct } = roadmapStats(r);
+  $('#roadmapMeta').textContent = `${r.courseIds.length} course${r.courseIds.length === 1 ? '' : 's'} · ${nVideos(total)}`;
+  $('#roadmapProgressFill').style.width = pct + '%';
+  $('#roadmapProgressFill').classList.toggle('full', pct === 100);
+  $('#roadmapProgressLabel').textContent = `${done} / ${total} videos · ${pct}%`;
+  const next = roadmapNextCourse(r);
+  $('#roadmapContinueBtn').disabled = !next;
+  $('#roadmapContinueBtn').textContent =
+    pct === 100 && total ? '🎉 All done' : next ? `▶ Continue: ${next.title.slice(0, 28)}${next.title.length > 28 ? '…' : ''}` : '▶ Continue';
+
+  const wrap = $('#roadmapCourses');
+  wrap.innerHTML = '';
+  if (!r.courseIds.length) {
+    wrap.append(el('p', { class: 'empty-state' }, 'No courses yet — add one below to start the path.'));
+  }
+  r.courseIds.forEach((courseId, index) => {
+    const c = courses[courseId];
+    const cDone = countDone(c);
+    const cPct = c.videos.length ? Math.round((cDone / c.videos.length) * 100) : 0;
+    const thumbId = c.videos[0]?.id;
+    const control = (dir, glyph, label) => {
+      const target = index + dir;
+      return el(
+        'button',
+        {
+          class: 'card-move',
+          type: 'button',
+          title: label,
+          disabled: target < 0 || target >= r.courseIds.length ? '' : null,
+          onclick: (e) => {
+            e.stopPropagation();
+            if (target < 0 || target >= r.courseIds.length) return;
+            [r.courseIds[index], r.courseIds[target]] = [r.courseIds[target], r.courseIds[index]];
+            scheduleRemoteSave();
+            renderRoadmapPage();
+          },
+        },
+        glyph
+      );
+    };
+    wrap.append(
+      el(
+        'div',
+        { class: 'roadmap-course' + (cPct === 100 ? ' done' : ''), onclick: () => (location.hash = '#c=' + c.id) },
+        el('span', { class: 'roadmap-step' }, cPct === 100 ? '✓' : String(index + 1)),
+        thumbId
+          ? el('img', {
+              class: 'roadmap-course-thumb',
+              src: `https://i.ytimg.com/vi/${thumbId}/mqdefault.jpg`,
+              alt: '',
+              loading: 'lazy',
+              onerror: (e) => (e.target.style.display = 'none'),
+            })
+          : null,
+        el(
+          'div',
+          { class: 'roadmap-course-main' },
+          el('div', { class: 'roadmap-course-title' }, c.title),
+          el('div', { class: 'card-meta' }, `${cDone} / ${c.videos.length} done`),
+          el(
+            'div',
+            { class: 'card-progress' },
+            el(
+              'div',
+              { class: 'progress-track' },
+              el('div', { class: 'progress-fill' + (cPct === 100 ? ' full' : ''), style: `width:${cPct}%` })
+            ),
+            el('span', { class: 'card-pct' }, cPct + '%')
+          )
+        ),
+        el(
+          'div',
+          { class: 'roadmap-course-controls' },
+          control(-1, '▲', 'Move earlier'),
+          control(1, '▼', 'Move later'),
+          el(
+            'button',
+            {
+              class: 'card-move',
+              type: 'button',
+              title: 'Remove from roadmap (keeps the course)',
+              onclick: (e) => {
+                e.stopPropagation();
+                r.courseIds.splice(index, 1);
+                scheduleRemoteSave();
+                renderRoadmapPage();
+              },
+            },
+            '✕'
+          )
+        )
+      )
+    );
+  });
+
+  const select = $('#roadmapAddSelect');
+  while (select.options.length > 1) select.remove(1);
+  for (const c of Object.values(courses).sort((a, b) => b.addedAt - a.addedAt)) {
+    if (!r.courseIds.includes(c.id)) select.append(el('option', { value: c.id }, c.title.slice(0, 80)));
+  }
+  select.value = '';
+  select.parentElement.classList.toggle('hidden', select.options.length === 1);
+}
+
+function openRoadmapModal() {
+  const pick = $('#roadmapCoursePick');
+  pick.innerHTML = '';
+  const all = Object.values(courses).sort((a, b) => b.addedAt - a.addedAt);
+  if (!all.length) {
+    pick.append(el('p', { class: 'empty-state' }, 'Add a course first — roadmaps are built from your courses.'));
+  }
+  for (const c of all) {
+    pick.append(
+      el(
+        'label',
+        { class: 'roadmap-pick-row' },
+        el('input', { type: 'checkbox', value: c.id }),
+        el('span', {}, c.title)
+      )
+    );
+  }
+  $('#roadmapName').value = '';
+  $('#roadmapModal').classList.remove('hidden');
+  $('#roadmapName').focus();
+}
+
+function inlineRenameRoadmap() {
+  const r = workspace.roadmaps[currentRoadmapId];
+  const heading = $('#roadmapTitle');
+  if (!r || heading.classList.contains('hidden')) return;
+  const input = el('input', {
+    class: 'col-name-input roadmap-name-input',
+    type: 'text',
+    maxlength: '80',
+    value: r.title,
+  });
+  heading.classList.add('hidden');
+  heading.before(input);
+  input.focus();
+  input.select();
+  let settled = false;
+  const finish = (save) => {
+    if (settled) return;
+    settled = true;
+    const name = input.value.trim();
+    input.remove();
+    heading.classList.remove('hidden');
+    if (save && name) {
+      r.title = name.slice(0, 80);
+      scheduleRemoteSave();
+    }
+    renderRoadmapPage();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === 'Escape') {
+      finish(false);
+    }
+  });
+  input.addEventListener('blur', () => finish(true));
 }
 
 /* ================= YouTube player ================= */
@@ -1045,6 +2452,10 @@ function markComplete(videoId, { celebrate = true } = {}) {
     c.completedAt = new Date().toISOString();
     saveCourses();
     bigCelebration();
+    const openLinked = Object.values(workspace.tasks).filter(
+      (t) => t.courseId === c.id && t.status !== 'done'
+    ).length;
+    if (openLinked) toast(`This course still has ${openLinked} open task${openLinked === 1 ? '' : 's'} — check ✓ Tasks.`);
     setTimeout(openCertModal, 900);
   }
 }
@@ -1363,12 +2774,46 @@ function showDashboard() {
   safe(() => player?.stopVideo());
   homeView.classList.add('hidden');
   courseView.classList.add('hidden');
+  tasksView.classList.add('hidden');
+  roadmapView.classList.add('hidden');
   dashboardView.classList.remove('hidden');
   backBtn.classList.remove('hidden');
   sideToggle.classList.add('hidden');
   resyncBtn.classList.add('hidden');
   document.title = 'Learning dashboard — FocusTube';
   loadDashboard();
+}
+
+function showTasks() {
+  current = null;
+  safe(() => player?.stopVideo());
+  hideOverlays();
+  homeView.classList.add('hidden');
+  courseView.classList.add('hidden');
+  dashboardView.classList.add('hidden');
+  roadmapView.classList.add('hidden');
+  tasksView.classList.remove('hidden');
+  backBtn.classList.remove('hidden');
+  sideToggle.classList.add('hidden');
+  resyncBtn.classList.add('hidden');
+  document.title = 'Tasks — FocusTube';
+  renderTasksPage();
+}
+
+function showRoadmap(id) {
+  current = null;
+  safe(() => player?.stopVideo());
+  hideOverlays();
+  homeView.classList.add('hidden');
+  courseView.classList.add('hidden');
+  dashboardView.classList.add('hidden');
+  tasksView.classList.add('hidden');
+  roadmapView.classList.remove('hidden');
+  backBtn.classList.remove('hidden');
+  sideToggle.classList.add('hidden');
+  resyncBtn.classList.add('hidden');
+  currentRoadmapId = id;
+  renderRoadmapPage();
 }
 
 /* ================= view switching ================= */
@@ -1378,6 +2823,8 @@ function showHome() {
   hideOverlays();
   courseView.classList.add('hidden');
   dashboardView.classList.add('hidden');
+  tasksView.classList.add('hidden');
+  roadmapView.classList.add('hidden');
   homeView.classList.remove('hidden');
   backBtn.classList.add('hidden');
   sideToggle.classList.add('hidden');
@@ -1393,12 +2840,15 @@ async function openCourse(id) {
   current = { course: c, index: 0 };
   homeView.classList.add('hidden');
   dashboardView.classList.add('hidden');
+  tasksView.classList.add('hidden');
+  roadmapView.classList.add('hidden');
   courseView.classList.remove('hidden');
   backBtn.classList.remove('hidden');
   sideToggle.classList.remove('hidden');
   resyncBtn.classList.remove('hidden');
   document.body.classList.toggle('side-collapsed', window.innerWidth < 900);
   renderSidebar(c);
+  renderCourseChecklist();
   let idx = c.videos.findIndex((v) => v.id === c.lastVideoId);
   if (idx === -1) idx = c.videos.findIndex((v) => !c.completed[v.id]);
   playVideo(Math.max(0, idx), { cue: true }); // UI renders immediately; player load is queued
@@ -1418,6 +2868,9 @@ async function openCourse(id) {
 function route() {
   if (!appBooted) return;
   if (location.hash === '#dashboard') return showDashboard();
+  if (location.hash === '#tasks') return showTasks();
+  const rm = location.hash.match(/^#roadmap=(.+)$/);
+  if (rm && workspace.roadmaps[rm[1]]) return showRoadmap(rm[1]);
   const m = location.hash.match(/^#c=(.+)$/);
   if (m && courses[m[1]]) openCourse(m[1]);
   else showHome();
@@ -1855,7 +3308,7 @@ function toggleFullscreen() {
   else shell.requestFullscreen?.();
 }
 
-/* ================= profile & downloads ================= */
+/* ================= profile ================= */
 function openProfile() {
   updateProfileUI();
   $('#profileModal').classList.remove('hidden');
@@ -1953,129 +3406,6 @@ async function importProfileData(file) {
   }
 }
 
-let activeDownloadId = null;
-let downloadEvents = null;
-let downloadTriggered = false;
-
-function resetDownloadUI() {
-  activeDownloadId = null;
-  downloadTriggered = false;
-  downloadEvents?.close();
-  downloadEvents = null;
-  $('#downloadError').classList.add('hidden');
-  $('#downloadProgress').classList.add('hidden');
-  $('#downloadFile').classList.add('hidden');
-  $('#downloadCancel').classList.remove('hidden');
-  $('#downloadProgressFill').style.width = '0%';
-  $('#downloadAuthorized').checked = false;
-  $('#downloadStart').disabled = true;
-}
-
-async function openDownload() {
-  const c = current?.course;
-  if (!c) return;
-  resetDownloadUI();
-  $('#downloadCourseName').textContent = `${c.title} · ${nVideos(c.videos.length)}`;
-  $('#downloadQuality').value = authUser?.downloadQuality || '720';
-  $('#downloadSetup').classList.add('hidden');
-  $('#downloadFormBlock').classList.remove('hidden');
-  $('#downloadModal').classList.remove('hidden');
-  try {
-    const status = await api('/api/downloads/status');
-    if (!status.ready) {
-      $('#downloadInstallCommand').textContent = status.installCommand;
-      $('#downloadSetup').classList.remove('hidden');
-      $('#downloadFormBlock').classList.add('hidden');
-      return;
-    }
-    const { job } = await api('/api/downloads/current');
-    if (job) {
-      activeDownloadId = job.id;
-      updateDownloadProgress(job);
-      if (!['ready', 'error', 'cancelled'].includes(job.status)) {
-        downloadEvents = new EventSource(`/api/downloads/${activeDownloadId}/events`);
-        downloadEvents.onmessage = (event) => updateDownloadProgress(JSON.parse(event.data));
-      }
-    }
-  } catch (err) {
-    $('#downloadError').textContent = err.message;
-    $('#downloadError').classList.remove('hidden');
-  }
-}
-
-function updateDownloadProgress(job) {
-  $('#downloadProgress').classList.remove('hidden');
-  $('#downloadFormBlock').classList.add('hidden');
-  $('#downloadPercent').textContent = `${Math.round(job.overallPercent || 0)}%`;
-  $('#downloadProgressFill').style.width = `${job.overallPercent || 0}%`;
-  $('#downloadStatus').textContent =
-    job.status === 'ready'
-      ? 'Course ready'
-      : job.status === 'error'
-        ? 'Download failed'
-        : `Video ${job.currentVideo || 0} of ${job.totalVideos}`;
-  $('#downloadNow').textContent = job.error || job.message || '';
-  if (job.status === 'ready') {
-    downloadEvents?.close();
-    $('#downloadCancel').classList.add('hidden');
-    const link = $('#downloadFile');
-    link.href = `/api/downloads/${job.id}/file`;
-    link.classList.remove('hidden');
-    if (!downloadTriggered) {
-      downloadTriggered = true;
-      link.click();
-    }
-  } else if (['error', 'cancelled'].includes(job.status)) {
-    downloadEvents?.close();
-    $('#downloadCancel').classList.add('hidden');
-    $('#downloadError').textContent = job.error || 'Download cancelled.';
-    $('#downloadError').classList.remove('hidden');
-  }
-}
-
-async function startDownload() {
-  const c = current?.course;
-  if (!c) return;
-  $('#downloadStart').disabled = true;
-  $('#downloadError').classList.add('hidden');
-  try {
-    await persistRemoteData();
-    const quality = $('#downloadQuality').value;
-    const result = await api('/api/downloads', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ courseId: c.id, quality, authorized: $('#downloadAuthorized').checked }),
-    });
-    authUser.downloadQuality = quality;
-    activeDownloadId = result.job.id;
-    updateDownloadProgress(result.job);
-    downloadEvents = new EventSource(`/api/downloads/${activeDownloadId}/events`);
-    downloadEvents.onmessage = (event) => updateDownloadProgress(JSON.parse(event.data));
-    downloadEvents.onerror = () => {
-      if (!downloadTriggered) {
-        $('#downloadError').textContent = 'Lost the progress connection. The server may still be downloading.';
-        $('#downloadError').classList.remove('hidden');
-      }
-    };
-  } catch (err) {
-    $('#downloadError').textContent = err.message;
-    $('#downloadError').classList.remove('hidden');
-    $('#downloadStart').disabled = false;
-  }
-}
-
-async function cancelDownload() {
-  if (!activeDownloadId) return;
-  try {
-    await api(`/api/downloads/${activeDownloadId}`, { method: 'DELETE' });
-  } catch (err) {
-    toast(err.message, { error: true });
-  }
-  downloadEvents?.close();
-  $('#downloadStatus').textContent = 'Cancelled';
-  $('#downloadCancel').classList.add('hidden');
-}
-
 /* ================= event wiring ================= */
 $('#loginTab').addEventListener('click', () => setAuthMode('login'));
 $('#registerTab').addEventListener('click', () => setAuthMode('register'));
@@ -2147,7 +3477,6 @@ $('#logoutBtn').addEventListener('click', async () => {
     toast('Could not sync everything yet. Check your connection before signing out.', { error: true });
     return;
   }
-  if (activeDownloadId) await api(`/api/downloads/${activeDownloadId}`, { method: 'DELETE' }).catch(() => {});
   await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
   $('#profileModal').classList.add('hidden');
   location.hash = '';
@@ -2156,8 +3485,29 @@ $('#logoutBtn').addEventListener('click', async () => {
 
 $('#addForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const url = urlInput.value.trim();
-  if (url) addCourse(url);
+  const value = urlInput.value.trim();
+  if (!value) return;
+  if (isCourseLink(value)) addCourse(value);
+  else searchYouTube(value);
+});
+urlInput.addEventListener('input', () => {
+  addError.classList.add('hidden');
+  if (!urlInput.value.trim() || isCourseLink(urlInput.value.trim())) clearCourseSearch();
+  updateDiscoveryControls();
+});
+searchFilters.addEventListener('change', event => {
+  searchType = event.target.value;
+  const query = urlInput.value.trim();
+  if (query && !isCourseLink(query)) searchYouTube(query);
+});
+$('#clearSearchBtn').innerHTML = I.back;
+$('#clearSearchBtn').addEventListener('click', () => {
+  clearCourseSearch({ clearInput: true });
+  urlInput.focus();
+});
+retrySearchBtn.addEventListener('click', () => {
+  const query = urlInput.value.trim();
+  if (query && !isCourseLink(query)) searchYouTube(query);
 });
 
 $('#brand').addEventListener('click', () => (location.hash = ''));
@@ -2165,6 +3515,148 @@ backBtn.addEventListener('click', () => (location.hash = ''));
 sideToggle.addEventListener('click', () => document.body.classList.toggle('side-collapsed'));
 $('#streakChip').addEventListener('click', () => (location.hash = '#dashboard'));
 dashboardBtn.addEventListener('click', () => (location.hash = '#dashboard'));
+
+/* board & tasks */
+function setHomeMode(mode) {
+  if (homeMode === mode) return;
+  homeMode = mode;
+  scheduleRemoteSave();
+  renderHome();
+}
+$('#gridModeBtn').addEventListener('click', () => setHomeMode('grid'));
+$('#boardModeBtn').addEventListener('click', () => setHomeMode('board'));
+$('#statusBoardBtn').addEventListener('click', () => {
+  if (workspace.board.mode === 'status') return;
+  workspace.board.mode = 'status';
+  scheduleRemoteSave();
+  renderBoard();
+});
+$('#sprintBoardBtn').addEventListener('click', () => {
+  if (workspace.board.mode === 'sprint') return;
+  workspace.board.mode = 'sprint';
+  scheduleRemoteSave();
+  renderBoard();
+});
+$('#addColumnBtn').addEventListener('click', addCustomColumn);
+$('#sprintSetupBtn').addEventListener('click', openSprintModal);
+$('#newTaskBtn').addEventListener('click', () => openTaskModal());
+$('#tasksPageNew').addEventListener('click', () => openTaskModal());
+$('#taskFilterCourse').addEventListener('change', renderTasksPage);
+$('#taskFilterPriority').addEventListener('change', renderTasksPage);
+$('#taskForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const title = $('#taskTitle').value.trim();
+  if (!title) return;
+  const t = editingTaskId ? workspace.tasks[editingTaskId] : createTask();
+  if (!t) return;
+  t.title = title.slice(0, 200);
+  t.notes = $('#taskNotes').value.trim().slice(0, 2000);
+  t.dueDate = $('#taskDue').value || null;
+  t.priority = $('#taskPriority').value;
+  t.courseId = $('#taskCourse').value || null;
+  setTaskStatus(t, $('#taskStatus').value);
+  editingTaskId = null;
+  $('#taskModal').classList.add('hidden');
+  scheduleRemoteSave();
+  refreshTaskUIs();
+});
+$('#taskDeleteBtn').addEventListener('click', () => {
+  const t = editingTaskId ? workspace.tasks[editingTaskId] : null;
+  if (!t || !confirm(`Delete "${t.title}"?`)) return;
+  deleteTask(t.id);
+  editingTaskId = null;
+  $('#taskModal').classList.add('hidden');
+  scheduleRemoteSave();
+  refreshTaskUIs();
+});
+$('#sprintForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const cadence = $('#sprintCadence').value;
+  const count = Math.max(1, Math.min(12, Number($('#sprintCount').value) || 4));
+  const start = /^\d{4}-\d{2}-\d{2}$/.test($('#sprintStart').value) ? $('#sprintStart').value : todayKey();
+  generateSprints(cadence, count, start);
+  $('#sprintModal').classList.add('hidden');
+  scheduleRemoteSave();
+  renderBoard();
+});
+$('#sprintClearBtn').addEventListener('click', () => {
+  if (!confirm('Remove all sprints? Card assignments to sprints will be cleared.')) return;
+  workspace.sprints.items = [];
+  workspace.sprints.assignments = {};
+  $('#sprintModal').classList.add('hidden');
+  scheduleRemoteSave();
+  renderBoard();
+});
+$('#tasksPanelBtn').addEventListener('click', () => {
+  if (taskPanel.classList.contains('open')) closeTaskPanel();
+  else openTaskPanel();
+});
+$('#taskPanelClose').addEventListener('click', closeTaskPanel);
+$('#taskPanelAllBtn').addEventListener('click', () => {
+  closeTaskPanel();
+  location.hash = '#tasks';
+});
+taskPanelBackdrop.addEventListener('click', closeTaskPanel);
+$('#quickTaskForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const title = $('#quickTaskInput').value.trim();
+  if (!title) return;
+  createTask({ title: title.slice(0, 200), courseId: current?.course?.id || null });
+  $('#quickTaskInput').value = '';
+  scheduleRemoteSave();
+  refreshTaskUIs();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && taskPanel.classList.contains('open')) closeTaskPanel();
+});
+$('#courseChecklistToggle').addEventListener('click', () => $('#courseChecklistBody').classList.toggle('hidden'));
+$('#courseChecklistForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const c = current?.course;
+  const text = $('#courseChecklistInput').value.trim();
+  if (!c || !text) return;
+  (workspace.checklists[c.id] ||= []).push({ id: 'cl_' + uid(), text: text.slice(0, 300), done: false });
+  $('#courseChecklistInput').value = '';
+  scheduleRemoteSave();
+  renderCourseChecklist();
+});
+
+/* roadmaps */
+$('#newRoadmapBtn').addEventListener('click', openRoadmapModal);
+$('#roadmapForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('#roadmapName').value.trim();
+  if (!name) return;
+  const courseIds = [...$('#roadmapCoursePick').querySelectorAll('input:checked')].map((n) => n.value);
+  const id = 'rm_' + uid();
+  workspace.roadmaps[id] = { id, title: name.slice(0, 80), courseIds, createdAt: Date.now() };
+  $('#roadmapModal').classList.add('hidden');
+  scheduleRemoteSave();
+  location.hash = '#roadmap=' + id;
+});
+$('#roadmapContinueBtn').addEventListener('click', () => {
+  const r = workspace.roadmaps[currentRoadmapId];
+  const next = r && roadmapNextCourse(r);
+  if (next) location.hash = '#c=' + next.id;
+});
+$('#roadmapRenameBtn').addEventListener('click', inlineRenameRoadmap);
+$('#roadmapDeleteBtn').addEventListener('click', () => {
+  const r = workspace.roadmaps[currentRoadmapId];
+  if (!r) return;
+  if (!confirm(`Delete roadmap "${r.title}"? Your courses and progress are kept.`)) return;
+  delete workspace.roadmaps[r.id];
+  scheduleRemoteSave();
+  location.hash = '';
+});
+$('#roadmapAddSelect').addEventListener('change', () => {
+  const r = workspace.roadmaps[currentRoadmapId];
+  const courseId = $('#roadmapAddSelect').value;
+  if (!r || !courseId || !courses[courseId] || r.courseIds.includes(courseId)) return;
+  r.courseIds.push(courseId);
+  scheduleRemoteSave();
+  renderRoadmapPage();
+});
+
 profileBtn.addEventListener('click', openProfile);
 $('#exportDataBtn').addEventListener('click', exportProfileData);
 $('#importDataBtn').addEventListener('click', () => {
@@ -2181,12 +3673,6 @@ $('#historyMore').addEventListener('click', async () => {
   historyPage++;
   await loadHistory();
 });
-courseDownloadBtn.addEventListener('click', openDownload);
-$('#downloadAuthorized').addEventListener('change', (e) => {
-  $('#downloadStart').disabled = !e.target.checked;
-});
-$('#downloadStart').addEventListener('click', startDownload);
-$('#downloadCancel').addEventListener('click', cancelDownload);
 
 resyncBtn.addEventListener('click', () => syncCourse());
 sideRefreshBtn.addEventListener('click', () => syncCourse());

@@ -17,9 +17,18 @@ No recommendation feed. No comments. No unrelated rabbit holes.
 
 ## Overview
 
-FocusTube is a local-first web application that converts a public YouTube playlist or a single YouTube video into a distraction-free learning workspace. It combines a custom player, course progress, profiles, streaks, analytics, certificates, data export, and optional permission-gated course downloads in one self-hosted application.
+FocusTube is a local-first web application that converts a public YouTube playlist or a single YouTube video into a distraction-free learning workspace. It combines a custom player, course progress, profiles, streaks, analytics, certificates, and data export in one self-hosted application.
 
-The application does not require a YouTube Data API key. Playlist and video metadata are read from public YouTube pages, while playback uses the YouTube IFrame API.
+Discover videos and playlists by keyword, or import a YouTube link directly. The application does not require a YouTube Data API key. Search results, playlist data, and video metadata are read from public YouTube pages, while playback uses the YouTube IFrame API.
+
+## Documentation
+
+- [timeline.html](timeline.html): newest-first feature history, commit links, changed files, branch stages, bugs, and pending work.
+- [docs/timeline.md](docs/timeline.md): timeline provenance and the `npm run timeline:update` refresh workflow.
+- [Quick start](#quick-start): local installation, Docker, and the first-run workflow.
+- [docs/youtube-search.md](docs/youtube-search.md): keyword search, filters, course creation, API examples, troubleshooting, and contributor verification.
+- [Configuration](#configuration): ports, host validation, and hosted deployments.
+- [API overview](#api-overview): metadata, authentication, search, profile, and download endpoints.
 
 ## Screenshots
 
@@ -50,7 +59,12 @@ The application does not require a YouTube Data API key. Playlist and video meta
 
 ### Course creation
 
-- Accepts public YouTube playlist URLs, watch URLs, `youtu.be` links, Shorts, live and embed URLs, playlist IDs, and raw 11-character video IDs.
+- Searches YouTube by keyword with **All**, **Videos**, **Playlists**, and **Courses** filters, without an API key.
+- Shows up to 24 results with thumbnails, creators, available descriptions or lesson previews, durations, and playlist counts.
+- Creates courses from search results without leaving the results. Saved items show **In library** and **Open course** instead of being added again.
+- **Courses** refines the query with `full course` unless it already contains `course`; it can return videos and playlists. A **Course** label on an individual result reflects YouTube's metadata, not an automatic quality or topic-match guarantee.
+- Accepts public YouTube playlist URLs, watch URLs, `youtu.be` links, Shorts, live and embed URLs, and playlist IDs for direct import.
+- Treats plain text, including raw video IDs, as a search so eleven-character keywords are not mistaken for links. Use a video URL for immediate import; the metadata API still accepts raw video IDs directly.
 - Supports both full playlists and single-video courses.
 - Handles long playlists through YouTube continuation tokens.
 - Skips private and deleted videos.
@@ -79,6 +93,15 @@ The application does not require a YouTube Data API key. Playlist and video meta
 - YouTube chapters and description timestamps as clickable seek targets.
 - Chapter markers on the seek bar and live current-chapter display.
 - Confetti rewards and a downloadable PDF completion certificate.
+
+### Learning workspace
+
+- Switch between the course grid and a status board with automatic Backlog, Learning, and Completed columns.
+- Add, rename, and remove custom columns; reorder cards by drag and drop or use move controls.
+- Create weekly, biweekly, or monthly sprints and assign courses or tasks to them.
+- Track tasks with notes, priority, due dates, status, and optional course association in the task page or quick panel.
+- Add per-course checklists and ordered roadmaps with combined progress and a continue-learning action.
+- Save boards, tasks, sprints, checklists, and roadmaps in the revisioned profile, with export/import support.
 
 ### Profiles and persistence
 
@@ -118,9 +141,11 @@ Password hashes, salts, session cookies, and session tokens are never included.
 
 The same menu can import a FocusTube schema-version-1 JSON export. Importing atomically replaces the current profile's courses, progress, settings, daily activity, and watch history while preserving its username, password, and sessions. A confirmation shows the number of courses and history records before anything changes.
 
-### Optional course downloads
+Workspace boards, tasks, checklists, sprints, and roadmaps are included in new exports and restored on import. Older exports without workspace data restore an empty workspace.
 
-When `yt-dlp` and `ffmpeg` are installed, users can download a course as a ZIP with a selectable quality:
+### Backend download API
+
+Course downloads are not exposed in the website. The existing authenticated API is retained for compatibility. When `yt-dlp` and `ffmpeg` are installed, API clients can download a course as a ZIP with a selectable quality:
 
 - `1080p`
 - `720p` (default)
@@ -128,7 +153,7 @@ When `yt-dlp` and `ffmpeg` are installed, users can download a course as a ZIP w
 - `360p`
 - Audio only (`M4A`)
 
-Downloads include permission confirmation, live Server-Sent Events progress, cancellation, recovery after reopening the dialog, and streamed ZIP output.
+The API supports permission confirmation, live Server-Sent Events progress, cancellation, recovery of active jobs, and streamed ZIP output.
 
 > [!IMPORTANT]
 > Download only videos you own or have permission to download. Users are responsible for complying with YouTube's Terms of Service and applicable copyright law.
@@ -167,7 +192,7 @@ flowchart LR
 
 1. A user signs in, registers, or starts a guest profile.
 2. The server creates an HttpOnly session and loads that user's revisioned profile snapshot.
-3. A playlist or video URL is resolved into a common course structure.
+3. The user searches YouTube by keyword and selects a result, or pastes a playlist or video URL. The selected URL is resolved into a common course structure.
 4. The frontend plays videos through the YouTube embed and batches progress/activity updates.
 5. The server stores course state, active time, watch time, and completion history in SQLite.
 6. Dashboard endpoints aggregate the logs without exposing other users' data.
@@ -188,7 +213,7 @@ On macOS with Homebrew:
 brew install yt-dlp ffmpeg
 ```
 
-The rest of FocusTube works without these tools. The download dialog detects missing prerequisites and displays the install command.
+These tools are optional and only needed by the backend download API; the website has no course-download option.
 
 ## Quick start
 
@@ -244,15 +269,16 @@ Compose stores SQLite data in the `focustube-data` volume. The fixed port mappin
 127.0.0.1:3002 -> container:3000
 ```
 
-The basic local image does not bundle the optional `yt-dlp` and `ffmpeg` tools, so course ZIP downloads are unavailable in this container. All other application features work normally. For downloads, run FocusTube natively after installing the tools listed under [Optional: course ZIP downloads](#optional-course-zip-downloads).
+The basic local image does not bundle the optional `yt-dlp` and `ffmpeg` tools, so the backend course-download API is unavailable in this container. All website features work normally. For API downloads, run FocusTube natively after installing the tools listed under [Optional: course ZIP downloads](#optional-course-zip-downloads).
 
 ### First-run workflow
 
 1. Choose **Create account**, **Sign in**, or **Continue as guest**.
-2. Paste a public YouTube playlist or video URL.
-3. Select a video from the course sidebar.
-4. Use the dashboard to inspect progress, streaks, watch time, and history.
-5. Upgrade a guest profile at any time without losing its data.
+2. Search for a topic, or paste a public YouTube playlist or video URL to import it directly.
+3. For a keyword search, choose a result type, review the creator and description, and select **Create course** on a matching result. **Open on YouTube** opens the original search, and result titles open their source video or playlist.
+4. Open a saved course and select a video from its sidebar.
+5. Use the dashboard to inspect progress, streaks, watch time, and history.
+6. Upgrade a guest profile at any time without losing its data.
 
 ## Configuration
 
@@ -327,7 +353,7 @@ Exports use the versioned schema:
 }
 ```
 
-The current release supports export but not JSON restore/import.
+Schema-version-1 exports can be restored from the profile menu. New exports include workspace data; older exports without it restore an empty workspace.
 
 ## Security model
 
@@ -380,6 +406,16 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 | `POST` | `/api/auth/upgrade` | Convert the current guest into a permanent account. |
 | `POST` | `/api/auth/logout` | Revoke the current session. |
 
+### Authenticated search
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/search?q=...&type=all` | Search public YouTube videos and playlists, including course-focused results. |
+
+Requires an account or guest session. `q` must contain 1-200 characters after trimming. Optional `type` is `all` (default), `video`, `playlist`, or `course`. The response contains `query`, `type`, `youtubeUrl`, and up to 24 `results`, each with its real import type and canonical YouTube URL. Searches use the first results page; **Open on YouTube** provides access to additional results.
+
+Invalid input returns `400`, missing authentication returns `401`, and upstream failures or timeouts return `502` or `504`. YouTube requests time out after 15 seconds. Search results are transient; only selected courses are saved to the current user's library through the existing revisioned profile flow.
+
 ### Authenticated profile and analytics
 
 | Method | Endpoint | Purpose |
@@ -387,6 +423,7 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 | `GET` | `/api/data` | Load the current revisioned profile snapshot. |
 | `PUT` | `/api/data` | Save courses, statistics, and settings with revision checking. |
 | `GET` | `/api/export` | Download the complete safe user-data JSON export. |
+| `POST` | `/api/import?revision=...` | Validate and restore a version-1 export, including workspace data, while preserving account identity. |
 | `POST` | `/api/track` | Store an idempotent active/watch-time batch. |
 | `GET` | `/api/stats/summary` | Return aggregate dashboard totals and streaks. |
 | `GET` | `/api/stats/daily` | Return day-level active and watch time. |
@@ -415,11 +452,22 @@ focus-tube/
 ├── db.js                   # SQLite schema, persistence, analytics, export queries
 ├── downloads.js            # yt-dlp/ffmpeg job manager and ZIP streaming
 ├── server.js               # Express app, security headers, metadata and API routes
+├── youtube-search.js       # Search request validation and YouTube result parsing
+├── timeline.html           # Standalone generated change timeline
+├── scripts/
+│   └── update-timeline.js  # Git history and branch-stage snapshot generator
+├── test/
+│   ├── timeline.test.js    # Timeline ordering, provenance, and rendering tests
+│   ├── workspace-persistence.test.js # Isolated workspace restore regression tests
+│   └── youtube-search.test.js # Deterministic search parsing and filter tests
 ├── public/
-│   ├── app.js              # Authenticated SPA, player, dashboard, sync, downloads
+│   ├── app.js              # Authenticated SPA, player, dashboard, sync, exports
 │   ├── index.html          # Application views and dialogs
 │   └── styles.css          # Responsive application styling
 ├── docs/
+│   ├── timeline.md          # Timeline maintenance and stage definitions
+│   ├── timeline-notes.json  # Feature rationale and dated observations
+│   ├── youtube-search.md    # Search usage, API contract, troubleshooting, and tests
 │   └── screenshots/        # README screenshots
 ├── data/                   # Runtime SQLite files; ignored by Git
 ├── package.json
@@ -451,6 +499,8 @@ node --check auth.js
 node --check db.js
 node --check downloads.js
 node --check public/app.js
+node --check youtube-search.js
+npm test
 npm audit --omit=dev
 ```
 
@@ -463,7 +513,7 @@ The latest validation reported:
 - Verified revision-conflict handling and idempotent activity tracking
 - Verified loopback-only default binding
 
-A dedicated automated test suite is not included yet.
+`npm test` runs deterministic search, workspace persistence, and timeline tests. Coverage includes YouTube renderer formats and filters, safe result URLs, workspace export/import round trips and revision conflicts, chronological ordering, branch-stage evidence, and safe snapshot embedding. The tests require no network access; database tests use isolated in-memory SQLite databases. Live YouTube search and browser workflows should also be checked when the upstream page format changes.
 
 ## Troubleshooting
 
@@ -492,9 +542,9 @@ xcode-select --install
 npm ci
 ```
 
-### Course download is unavailable
+### Download API tools are unavailable
 
-Install the optional system tools and reopen the download dialog:
+For direct use of the backend download API, install the optional system tools:
 
 ```bash
 brew install yt-dlp ffmpeg
@@ -508,6 +558,10 @@ Some creators disable playback outside YouTube. FocusTube displays an **Open on 
 
 FocusTube reads public YouTube page data rather than using an API key. YouTube can change this internal page structure. Check network access first; if the public page still works, the parser may need an update.
 
+### YouTube search is unavailable
+
+Use **Retry search** for a temporary failure, or **Open on YouTube** to view the same query and type filter directly. Consent pages, rate limits, network restrictions, and changes to YouTube's internal result format can prevent in-app search. Public playlist and video links can still be imported independently of the search parser.
+
 ### Requested speed or quality does not stick
 
 The YouTube IFrame API retains final control over playback levels. FocusTube reports an applied speed clamp and repopulates quality choices from the current video's supported levels.
@@ -517,13 +571,11 @@ The YouTube IFrame API retains final control over playback levels. FocusTube rep
 - Public YouTube page formats are not a stable API and may change.
 - Private, deleted, age-restricted, region-restricted, or embedding-disabled videos may be unavailable.
 - Quality selection and speeds above `2x` are best-effort constraints imposed by the YouTube embed.
-- JSON data can be exported but cannot yet be restored through the UI.
 - Password recovery, email verification, OAuth, and account deletion are not implemented.
 - The current server is designed for local-first use; internet deployment requires additional operational configuration.
 
 ## Roadmap
 
-- JSON import and profile restore
 - Password change, recovery, and account deletion
 - Automated API and browser test suites
 - Structured database backups
