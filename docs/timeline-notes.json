@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "repository": "https://github.com/chakshusalgotra/focus-tube",
+  "milestones": [
+    {
+      "id": "workspace-discovery",
+      "title": "Plan learning and discover YouTube courses",
+      "recordedDate": "2026-09-10",
+      "commits": ["166fd65", "f2647bd"],
+      "why": "Bring course discovery and day-to-day learning planning into the same library without losing saved progress.",
+      "changes": [
+        "Add status and sprint boards, tasks, course checklists, and ordered roadmaps.",
+        "Persist workspace state with revision-aware profile saves and include it in exports.",
+        "Search YouTube by keyword with All, Videos, Playlists, and course-focused filters.",
+        "Create courses from search results, preserve existing progress, and handle retries and stale searches.",
+        "Add search parser regression tests, Docker packaging, and a dedicated usage and API guide.",
+        "Preserve the existing browser download-UI removal while retaining authenticated backend download endpoints.",
+        "Integrate dev's existing JSON profile import and preserve workspace data on restore, with in-memory database regression tests."
+      ],
+      "files": ["db.js", "server.js", "youtube-search.js", "public/app.js", "public/index.html", "public/styles.css", "Dockerfile", "package.json", "test/youtube-search.test.js", "README.md", "docs/youtube-search.md"]
+    },
+    {
+      "id": "timeline",
+      "title": "Publish a traceable release timeline",
+      "recordedDate": "2026-09-10",
+      "commits": [],
+      "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
+      "changes": [
+        "Provide a standalone HTML timeline with search and stage filters.",
+        "Generate commit dates and branch containment from Git rather than treating a merge as proof of deployment.",
+        "Keep feature rationale and dated bug or pending-work observations alongside the generated history."
+      ],
+      "files": ["timeline.html", "scripts/update-timeline.js", "docs/timeline-notes.json", "test/timeline.test.js", "README.md", "package.json"]
+    },
+    {
+      "id": "bookmarks",
+      "title": "Bookmark courses and filter the library",
+      "commits": ["7a7cd0a"],
+      "why": "Keep priority courses easy to find and exclude local SSH material from source control and Docker context.",
+      "changes": ["Add course pinning and a bookmarked-only library filter.", "Ignore the local .ssh directory in Git and Docker builds."]
+    },
+    {
+      "id": "deployment-workflows",
+      "title": "Separate development and production deployments",
+      "commits": ["1be09d6", "268b539"],
+      "why": "Promote changes through dev before main while keeping deployment environments and their stored data separate.",
+      "changes": ["Add development and production Compose definitions and deployment workflows.", "Guard main-branch pull requests so only dev can promote changes.", "Update the Tailscale action and add a connectivity check."]
+    },
+    {
+      "id": "profile-import",
+      "title": "Restore a profile from a JSON export",
+      "commits": ["4d0940f"],
+      "why": "Make exported learning data restorable without replacing account identity or credentials.",
+      "changes": ["Add validated profile import with confirmation and revision conflict protection.", "Restore courses, progress, preferences, and activity history from a supported export."]
+    },
+    {
+      "id": "docker",
+      "title": "Package FocusTube for local Docker use",
+      "commits": ["c2144be", "1cdeb81"],
+      "why": "Provide a repeatable local runtime with persistent SQLite storage and loopback-only access.",
+      "changes": ["Introduce a Docker image and Compose setup, then simplify them for local use.", "Publish the app on localhost:3002 and persist data in a named volume."]
+    },
+    {
+      "id": "project-documentation",
+      "title": "Document setup, architecture, and operations",
+      "commits": ["cc1303b"],
+      "why": "Make the application installable and maintainable with documented workflows, requirements, and limitations.",
+      "changes": ["Add the project README with setup, API, security, and troubleshooting guidance.", "Add screenshots of the library, player, dashboard, and profile workflows."],
+      "image": "docs/screenshots/library.png"
+    },
+    {
+      "id": "foundation",
+      "title": "Build the FocusTube learning application",
+      "commits": ["7923f9b"],
+      "why": "Turn public YouTube playlists and videos into focused courses with durable, per-user learning progress.",
+      "changes": ["Introduce the Node/Express and SQLite application with an authenticated browser interface.", "Provide course import, focused playback, completion tracking, analytics, certificates, and optional downloads."]
+    }
+  ],
+  "observations": [
+    {
+      "id": "download-ui-review",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Review the existing download-UI removal",
+      "why": "The working tree already removed browser download controls when this PR was prepared; the original reason was not recorded in this session.",
+      "changes": ["Preserve the submitted UI removal rather than reverting user changes.", "Keep the authenticated backend download API and document the API-only state; confirm product intent during review."],
+      "files": ["public/app.js", "public/index.html", "public/styles.css", "README.md", "downloads.js"],
+      "relatedMilestones": ["workspace-discovery"]
+    },
+    {
+      "id": "docker-refresh",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Refresh the local Docker image",
+      "why": "Source edits are not mounted into the existing application container.",
+      "changes": ["Verified localhost:3002 serves an older image: youtube-search.js is absent, search filters are absent, and /api/search returns 404.", "Rebuild with the existing Compose configuration and verify the resulting image; no container was rebuilt during that check."],
+      "files": ["Dockerfile", "compose.yaml", "youtube-search.js"],
+      "relatedMilestones": ["workspace-discovery"]
+    },
+    {
+      "id": "release-verification",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Review and verify dev-to-prod promotion",
+      "why": "A commit on a branch is not evidence that a deployment completed or that a running environment has that revision.",
+      "changes": ["Review the new feature PR into dev, then use a separate dev-to-main PR for production promotion.", "Check deployment workflow results and the running application's revision before declaring either environment deployed."],
+      "files": [".github/workflows/merge-guard.yml", ".github/workflows/deploy-dev.yml", ".github/workflows/deploy-prod.yml"],
+      "relatedMilestones": ["workspace-discovery", "timeline"]
+    },
+    {
+      "id": "image-scan",
+      "date": "2026-09-08",
+      "stage": "bugs",
+      "title": "Review the existing Docker base-image findings",
+      "why": "The editor's image scan reported vulnerabilities in the unchanged alpine:3.24.1 base image.",
+      "changes": ["The observed report contained 2 critical and 7 high findings; this is a dated observation, not a fresh scan or a claim of application exploitability.", "Re-scan the current image, assess findings, and test a base-image update separately."],
+      "files": ["Dockerfile"],
+      "relatedMilestones": ["docker"]
+    }
+  ]
+}

@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>FocusTube | Change Timeline</title>
+  <style>
+    :root { --bg: #0b0d12; --surface: #14171e; --line: #2b303a; --text: #edf0f5; --muted: #a0a8b8; --accent: #a995ff; --prod: #59d99a; --dev: #62ced4; --branch: #e1b966; --bugs: #ff9999; --pending: #c1b4f0; }
+    * { box-sizing: border-box; letter-spacing: 0; }
+    body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 "Avenir Next", "Segoe UI", sans-serif; }
+    a { color: var(--dev); text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:hover { color: var(--text); }
+    button, input { font: inherit; }
+    button, a, summary, input { -webkit-tap-highlight-color: transparent; }
+    :focus-visible { outline: 2px solid var(--dev); outline-offset: 4px; }
+    .shell { max-width: 1180px; margin: auto; padding: 0 28px; }
+    .masthead { border-bottom: 1px solid var(--line); }
+    .masthead .shell { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-block: 14px; }
+    .brand { color: var(--text); font-size: 24px; font-weight: 800; text-decoration: none; }
+    .brand span { color: var(--accent); }
+    nav { display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; }
+    nav a { color: var(--muted); text-decoration: none; }
+    main { padding-top: 36px !important; padding-bottom: 64px !important; }
+    .page-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; }
+    .eyebrow { margin: 0 0 6px; color: var(--dev); font-size: 12px; font-weight: 650; text-transform: uppercase; }
+    h1 { margin: 0; font-size: 32px; line-height: 1.25; font-weight: 750; }
+    .snapshot { margin: 10px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+    .branch-name { max-width: 340px; text-align: right; color: var(--muted); font: 12px/1.7 "SFMono-Regular", Consolas, monospace; overflow-wrap: anywhere; }
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); margin: 28px 0 0; padding: 20px 0; border-block: 1px solid var(--line); }
+    .metric { padding: 0 20px; border-right: 1px solid var(--line); }
+    .metric:first-child { padding-left: 0; }
+    .metric:last-child { border: 0; }
+    .metric b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.3; }
+    .metric span { color: var(--muted); font-size: 12px; }
+    .provenance { display: flex; align-items: baseline; gap: 12px 20px; flex-wrap: wrap; padding: 14px 0; font-size: 12px; color: var(--muted); }
+    .provenance code { color: var(--text); }
+    .toolbar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; padding: 18px 0; border-bottom: 1px solid var(--line); }
+    .search-label { flex: 1 1 250px; }
+    input[type="search"] { width: 100%; min-width: 0; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: 13px; }
+    input[type="search"]::placeholder { color: var(--muted); }
+    fieldset { margin: 0; padding: 3px; display: flex; flex-wrap: wrap; gap: 3px; border: 1px solid var(--line); border-radius: 6px; }
+    .filter { position: relative; }
+    .filter input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+    .filter span { display: block; padding: 6px 10px; font-size: 12px; color: var(--muted); border-radius: 3px; }
+    .filter input:checked + span { background: #2b303c; color: var(--text); }
+    .filter input:focus-visible + span { outline: 2px solid var(--dev); outline-offset: 1px; }
+    .list-heading { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding: 16px 0; color: var(--muted); font-size: 12px; }
+    .expand-control { display: flex; gap: 7px; align-items: center; }
+    input[type="checkbox"] { accent-color: var(--dev); }
+    .timeline { padding: 0; margin: 0; list-style: none; }
+    .entry { --stage: var(--branch); display: grid; grid-template-columns: 155px minmax(0, 1fr); gap: 25px; position: relative; }
+    .entry[data-stage="prod"] { --stage: var(--prod); }
+    .entry[data-stage="dev"] { --stage: var(--dev); }
+    .entry[data-stage="bugs"] { --stage: var(--bugs); }
+    .entry[data-stage="pending"] { --stage: var(--pending); }
+    .stamp { padding: 25px 0; font-size: 12px; color: var(--muted); }
+    .stamp time { display: block; color: var(--text); font-weight: 650; }
+    .stamp span { display: block; margin-top: 3px; font-size: 11px; }
+    .entry article { position: relative; padding: 24px 0 28px 27px; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+    .entry article::before { content: ''; position: absolute; top: 31px; left: -5px; width: 9px; height: 9px; border-radius: 50%; background: var(--stage); }
+    .entry-topline { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .stage { color: var(--stage); background: color-mix(in srgb, var(--stage) 9%, transparent); border: 1px solid color-mix(in srgb, var(--stage) 25%, transparent); border-radius: 4px; padding: 2px 7px; font-size: 11px; font-weight: 650; }
+    .permalink { color: var(--muted); font: 11px "SFMono-Regular", Consolas, monospace; text-decoration: none; }
+    h2 { margin: 11px 0 8px; font-size: 20px; line-height: 1.4; font-weight: 650; overflow-wrap: anywhere; }
+    .reason { color: var(--muted); font-size: 13px; margin: 0 0 12px; overflow-wrap: anywhere; }
+    .reason strong { color: var(--text); font-weight: 600; margin-right: 8px; }
+    .changes { margin: 0; padding-left: 18px; font-size: 13px; }
+    .changes li { padding: 2px 0; overflow-wrap: anywhere; }
+    .commits { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+    .commits a { font-family: "SFMono-Regular", Consolas, monospace; text-decoration: none; }
+    details { margin-top: 14px; font-size: 12px; }
+    summary { cursor: pointer; width: fit-content; color: var(--muted); }
+    .files { list-style: none; margin: 10px 0 0; padding: 0; columns: 2; column-gap: 24px; }
+    .files li { break-inside: avoid; margin: 4px 0; overflow-wrap: anywhere; }
+    .files a { color: var(--muted); font: 11px "SFMono-Regular", Consolas, monospace; }
+    .files a:hover { color: var(--dev); }
+    .history-image { display: block; width: min(100%, 560px); height: auto; margin-top: 16px; border: 1px solid var(--line); border-radius: 6px; }
+    .empty { padding: 50px 0; color: var(--muted); }
+    .hidden { display: none !important; }
+    footer { border-top: 1px solid var(--line); padding: 22px 0; color: var(--muted); font-size: 12px; }
+    footer .shell { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+    @media (max-width: 700px) {
+      .shell { padding-inline: 18px; }
+      main { padding-top: 26px !important; }
+      h1 { font-size: 28px; }
+      .branch-name { text-align: left; max-width: 100%; }
+      .metrics { grid-template-columns: repeat(2, 1fr); gap: 18px 0; }
+      .metric:nth-child(3) { padding-left: 0; }
+      .metric:nth-child(2) { border: 0; }
+      .entry { grid-template-columns: 1fr; gap: 0; }
+      .stamp { padding: 20px 0 5px 20px; border-left: 1px solid var(--line); }
+      .stamp time, .stamp span { display: inline; margin-right: 8px; }
+      .entry article { padding: 10px 0 24px 20px; }
+      .entry article::before { top: 17px; }
+      h2 { font-size: 18px; }
+      .files { columns: 1; }
+      .toolbar fieldset { width: 100%; justify-content: space-between; }
+      .filter span { padding-inline: 8px; }
+    }
+    @media (prefers-reduced-motion: no-preference) { .entry { animation: arrive 180ms ease-out both; } @keyframes arrive { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } } }
+    @media print { body { background: #fff; color: #111; } .toolbar, .list-heading, nav { display: none; } .entry { break-inside: avoid; } :root { --text: #111; --muted: #444; --line: #ccc; } }
+  </style>
+</head>
+<body>
+  <header class="masthead"><div class="shell">
+    <a class="brand" href="https://github.com/chakshusalgotra/focus-tube">Focus<span>Tube</span></a>
+    <nav aria-label="Project links"><a href="README.md">Project docs</a><a href="https://github.com/chakshusalgotra/focus-tube/pulls">Pull requests</a></nav>
+  </div></header>
+  <main class="shell">
+    <div class="page-heading">
+      <div><p class="eyebrow">Engineering record</p><h1>Change timeline</h1><p id="snapshot" class="snapshot"></p></div>
+      <div id="branchName" class="branch-name"></div>
+    </div>
+    <section class="metrics" aria-label="Timeline totals">
+      <div class="metric"><b id="entryCount">0</b><span>Change records</span></div>
+      <div class="metric"><b id="commitCount">0</b><span>Referenced commits</span></div>
+      <div class="metric"><b id="pendingCount">0</b><span>Pending records</span></div>
+      <div class="metric"><b id="bugCount">0</b><span>Open bug records</span></div>
+    </section>
+    <div class="provenance"><span id="prodRef"></span><span id="devRef"></span><span>Live deployments: unverified</span></div>
+    <div class="toolbar">
+      <label class="search-label"><span class="sr-only">Search changes, files, and commits</span><input id="search" type="search" placeholder="Search changes, files, commits..." autocomplete="off" /></label>
+      <fieldset><legend class="sr-only">Stage filter</legend>
+        <label class="filter"><input type="radio" name="stage" value="all" checked /><span>All</span></label>
+        <label class="filter"><input type="radio" name="stage" value="prod" /><span>Prod</span></label>
+        <label class="filter"><input type="radio" name="stage" value="dev" /><span>Dev</span></label>
+        <label class="filter"><input type="radio" name="stage" value="branch" /><span>Branch</span></label>
+        <label class="filter"><input type="radio" name="stage" value="bugs" /><span>Bugs</span></label>
+        <label class="filter"><input type="radio" name="stage" value="pending" /><span>Pending</span></label>
+      </fieldset>
+    </div>
+    <div class="list-heading"><span id="resultCount" role="status" aria-live="polite"></span><label class="expand-control"><input id="expandFiles" type="checkbox" />File details</label></div>
+    <ol id="timeline" class="timeline" aria-label="Changes, newest first"></ol>
+    <p id="empty" class="empty hidden">No matching changes.</p>
+    <noscript><p>This timeline requires JavaScript. The source notes and commit history are available in the repository.</p></noscript>
+  </main>
+  <footer><div class="shell"><span>Prod and Dev indicate branch membership, not deployment success.</span><a href="docs/timeline.md">Timeline provenance</a></div></footer>
+  <script id="timeline-data" type="application/json">
+{
+  "version": 1,
+  "repository": "https://github.com/chakshusalgotra/focus-tube",
+  "generatedAt": "2026-09-10T11:56:18.971Z",
+  "head": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+  "branch": "feature/workspace-discovery-timeline",
+  "refs": {
+    "prod": {
+      "name": "origin/main",
+      "hash": "337eb4379aad37abcf61c3554fe3229e1940dd98"
+    },
+    "dev": {
+      "name": "origin/dev",
+      "hash": "8caa854d543e610e2a46d4454d1115a8b3db194d"
+    }
+  },
+  "commitCount": 16,
+  "entries": [
+    {
+      "id": "workspace-discovery",
+      "title": "Plan learning and discover YouTube courses",
+      "recordedDate": "2026-09-10",
+      "commits": [
+        {
+          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+          "date": "2026-09-10T17:19:55+05:30",
+          "authoredAt": "2026-09-10T17:19:55+05:30",
+          "subject": "Add workspace planning and YouTube course discovery",
+          "parents": [
+            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
+          ],
+          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
+          "stage": "branch",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "db.js",
+            "docs/youtube-search.md",
+            "package.json",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/youtube-search.test.js",
+            "youtube-search.js"
+          ]
+        },
+        {
+          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+          "date": "2026-09-10T17:22:07+05:30",
+          "authoredAt": "2026-09-10T17:22:07+05:30",
+          "subject": "Merge dev and preserve workspace data during profile restore",
+          "parents": [
+            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+            "8caa854d543e610e2a46d4454d1115a8b3db194d"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/workspace-persistence.test.js"
+          ]
+        }
+      ],
+      "why": "Bring course discovery and day-to-day learning planning into the same library without losing saved progress.",
+      "changes": [
+        "Add status and sprint boards, tasks, course checklists, and ordered roadmaps.",
+        "Persist workspace state with revision-aware profile saves and include it in exports.",
+        "Search YouTube by keyword with All, Videos, Playlists, and course-focused filters.",
+        "Create courses from search results, preserve existing progress, and handle retries and stale searches.",
+        "Add search parser regression tests, Docker packaging, and a dedicated usage and API guide.",
+        "Preserve the existing browser download-UI removal while retaining authenticated backend download endpoints.",
+        "Integrate dev's existing JSON profile import and preserve workspace data on restore, with in-memory database regression tests."
+      ],
+      "files": [
+        "Dockerfile",
+        "README.md",
+        "db.js",
+        "docs/youtube-search.md",
+        "package.json",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css",
+        "server.js",
+        "test/workspace-persistence.test.js",
+        "test/youtube-search.test.js",
+        "youtube-search.js"
+      ],
+      "date": "2026-09-10T17:22:07+05:30",
+      "dateKind": "commit",
+      "stage": "branch"
+    },
+    {
+      "id": "docker-refresh",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Refresh the local Docker image",
+      "why": "Source edits are not mounted into the existing application container.",
+      "changes": [
+        "Verified localhost:3002 serves an older image: youtube-search.js is absent, search filters are absent, and /api/search returns 404.",
+        "Rebuild with the existing Compose configuration and verify the resulting image; no container was rebuilt during that check."
+      ],
+      "files": [
+        "Dockerfile",
+        "compose.yaml",
+        "youtube-search.js"
+      ],
+      "relatedMilestones": [
+        "workspace-discovery"
+      ],
+      "dateKind": "observed",
+      "commits": [
+        {
+          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+          "date": "2026-09-10T17:19:55+05:30",
+          "authoredAt": "2026-09-10T17:19:55+05:30",
+          "subject": "Add workspace planning and YouTube course discovery",
+          "parents": [
+            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
+          ],
+          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
+          "stage": "branch",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "db.js",
+            "docs/youtube-search.md",
+            "package.json",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/youtube-search.test.js",
+            "youtube-search.js"
+          ]
+        },
+        {
+          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+          "date": "2026-09-10T17:22:07+05:30",
+          "authoredAt": "2026-09-10T17:22:07+05:30",
+          "subject": "Merge dev and preserve workspace data during profile restore",
+          "parents": [
+            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+            "8caa854d543e610e2a46d4454d1115a8b3db194d"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/workspace-persistence.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "download-ui-review",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Review the existing download-UI removal",
+      "why": "The working tree already removed browser download controls when this PR was prepared; the original reason was not recorded in this session.",
+      "changes": [
+        "Preserve the submitted UI removal rather than reverting user changes.",
+        "Keep the authenticated backend download API and document the API-only state; confirm product intent during review."
+      ],
+      "files": [
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css",
+        "README.md",
+        "downloads.js"
+      ],
+      "relatedMilestones": [
+        "workspace-discovery"
+      ],
+      "dateKind": "observed",
+      "commits": [
+        {
+          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+          "date": "2026-09-10T17:19:55+05:30",
+          "authoredAt": "2026-09-10T17:19:55+05:30",
+          "subject": "Add workspace planning and YouTube course discovery",
+          "parents": [
+            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
+          ],
+          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
+          "stage": "branch",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "db.js",
+            "docs/youtube-search.md",
+            "package.json",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/youtube-search.test.js",
+            "youtube-search.js"
+          ]
+        },
+        {
+          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+          "date": "2026-09-10T17:22:07+05:30",
+          "authoredAt": "2026-09-10T17:22:07+05:30",
+          "subject": "Merge dev and preserve workspace data during profile restore",
+          "parents": [
+            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+            "8caa854d543e610e2a46d4454d1115a8b3db194d"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/workspace-persistence.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "release-verification",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Review and verify dev-to-prod promotion",
+      "why": "A commit on a branch is not evidence that a deployment completed or that a running environment has that revision.",
+      "changes": [
+        "Review the new feature PR into dev, then use a separate dev-to-main PR for production promotion.",
+        "Check deployment workflow results and the running application's revision before declaring either environment deployed."
+      ],
+      "files": [
+        ".github/workflows/merge-guard.yml",
+        ".github/workflows/deploy-dev.yml",
+        ".github/workflows/deploy-prod.yml"
+      ],
+      "relatedMilestones": [
+        "workspace-discovery",
+        "timeline"
+      ],
+      "dateKind": "observed",
+      "commits": [
+        {
+          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+          "date": "2026-09-10T17:19:55+05:30",
+          "authoredAt": "2026-09-10T17:19:55+05:30",
+          "subject": "Add workspace planning and YouTube course discovery",
+          "parents": [
+            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
+          ],
+          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
+          "stage": "branch",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "db.js",
+            "docs/youtube-search.md",
+            "package.json",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/youtube-search.test.js",
+            "youtube-search.js"
+          ]
+        },
+        {
+          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
+          "date": "2026-09-10T17:22:07+05:30",
+          "authoredAt": "2026-09-10T17:22:07+05:30",
+          "subject": "Merge dev and preserve workspace data during profile restore",
+          "parents": [
+            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
+            "8caa854d543e610e2a46d4454d1115a8b3db194d"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js",
+            "test/workspace-persistence.test.js"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "timeline",
+      "title": "Publish a traceable release timeline",
+      "recordedDate": "2026-09-10",
+      "commits": [],
+      "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
+      "changes": [
+        "Provide a standalone HTML timeline with search and stage filters.",
+        "Generate commit dates and branch containment from Git rather than treating a merge as proof of deployment.",
+        "Keep feature rationale and dated bug or pending-work observations alongside the generated history."
+      ],
+      "files": [
+        "README.md",
+        "docs/timeline-notes.json",
+        "package.json",
+        "scripts/update-timeline.js",
+        "test/timeline.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-10",
+      "dateKind": "recorded",
+      "stage": "pending"
+    },
+    {
+      "id": "image-scan",
+      "date": "2026-09-08",
+      "stage": "bugs",
+      "title": "Review the existing Docker base-image findings",
+      "why": "The editor's image scan reported vulnerabilities in the unchanged alpine:3.24.1 base image.",
+      "changes": [
+        "The observed report contained 2 critical and 7 high findings; this is a dated observation, not a fresh scan or a claim of application exploitability.",
+        "Re-scan the current image, assess findings, and test a base-image update separately."
+      ],
+      "files": [
+        "Dockerfile"
+      ],
+      "relatedMilestones": [
+        "docker"
+      ],
+      "dateKind": "observed",
+      "commits": [
+        {
+          "hash": "c2144be7f39968d5fab7556be747fb32765815d4",
+          "date": "2026-08-04T12:15:35+05:30",
+          "authoredAt": "2026-08-04T12:15:35+05:30",
+          "subject": "Add production Docker setup",
+          "parents": [
+            "cc1303b68247fa0668d327342686db6ccd659a81"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".env.example",
+            ".gitignore",
+            "Dockerfile",
+            "README.md",
+            "compose.yaml",
+            "downloads.js",
+            "server.js"
+          ]
+        },
+        {
+          "hash": "1cdeb81f556032d3c992c7e9d0d3a2caee90ee31",
+          "date": "2026-08-04T12:47:55+05:30",
+          "authoredAt": "2026-08-04T12:47:55+05:30",
+          "subject": "Simplify Docker setup for local use",
+          "parents": [
+            "c2144be7f39968d5fab7556be747fb32765815d4"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".env.example",
+            ".gitignore",
+            "Dockerfile",
+            "README.md",
+            "compose.yaml"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "commit-337eb4379aad37abcf61c3554fe3229e1940dd98",
+      "title": "Merge pull request #5 from chakshusalgotra/dev",
+      "date": "2026-09-01T22:15:16+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Dev"
+      ],
+      "commits": [
+        {
+          "hash": "337eb4379aad37abcf61c3554fe3229e1940dd98",
+          "date": "2026-09-01T22:15:16+05:30",
+          "authoredAt": "2026-09-01T22:15:16+05:30",
+          "subject": "Merge pull request #5 from chakshusalgotra/dev",
+          "parents": [
+            "e92a8090a9c09e9a5fa97dc9d8bb6acbb462a11e",
+            "8caa854d543e610e2a46d4454d1115a8b3db194d"
+          ],
+          "body": "Dev",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".gitignore",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css"
+          ]
+        }
+      ],
+      "files": [
+        ".dockerignore",
+        ".gitignore",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css"
+      ]
+    },
+    {
+      "id": "commit-8caa854d543e610e2a46d4454d1115a8b3db194d",
+      "title": "Merge pull request #4 from chakshusalgotra/feature/docker-setup",
+      "date": "2026-09-01T00:22:16+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add course pinning with pinned-only filter; ignore .ssh in git/docker"
+      ],
+      "commits": [
+        {
+          "hash": "8caa854d543e610e2a46d4454d1115a8b3db194d",
+          "date": "2026-09-01T00:22:16+05:30",
+          "authoredAt": "2026-09-01T00:22:16+05:30",
+          "subject": "Merge pull request #4 from chakshusalgotra/feature/docker-setup",
+          "parents": [
+            "162da04e78fdc74161675accbcb80229dea745df",
+            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
+          ],
+          "body": "Add course pinning with pinned-only filter; ignore .ssh in git/docker",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".gitignore",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css"
+          ]
+        }
+      ],
+      "files": [
+        ".dockerignore",
+        ".gitignore",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css"
+      ]
+    },
+    {
+      "id": "commit-e92a8090a9c09e9a5fa97dc9d8bb6acbb462a11e",
+      "title": "Merge pull request #3 from chakshusalgotra/dev",
+      "date": "2026-09-01T00:19:40+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Dev"
+      ],
+      "commits": [
+        {
+          "hash": "e92a8090a9c09e9a5fa97dc9d8bb6acbb462a11e",
+          "date": "2026-09-01T00:19:40+05:30",
+          "authoredAt": "2026-09-01T00:19:40+05:30",
+          "subject": "Merge pull request #3 from chakshusalgotra/dev",
+          "parents": [
+            "3c330badcec99038cc12a73ae75fa9edaa9f61d2",
+            "162da04e78fdc74161675accbcb80229dea745df"
+          ],
+          "body": "Dev",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            ".github/workflows/deploy-prod.yml"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml",
+        ".github/workflows/deploy-prod.yml"
+      ]
+    },
+    {
+      "id": "bookmarks",
+      "title": "Bookmark courses and filter the library",
+      "commits": [
+        {
+          "hash": "7a7cd0a792a732d20cd8cba008bed90648ae0db4",
+          "date": "2026-09-01T00:19:06+05:30",
+          "authoredAt": "2026-09-01T00:19:06+05:30",
+          "subject": "Add course pinning with pinned-only filter; ignore .ssh in git/docker",
+          "parents": [
+            "268b5394ea6bba731f4cbff78b994792ed4c6918"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".gitignore",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css"
+          ]
+        }
+      ],
+      "why": "Keep priority courses easy to find and exclude local SSH material from source control and Docker context.",
+      "changes": [
+        "Add course pinning and a bookmarked-only library filter.",
+        "Ignore the local .ssh directory in Git and Docker builds."
+      ],
+      "date": "2026-09-01T00:19:06+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        ".dockerignore",
+        ".gitignore",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css"
+      ]
+    },
+    {
+      "id": "commit-162da04e78fdc74161675accbcb80229dea745df",
+      "title": "Merge feature/docker-setup into dev",
+      "date": "2026-08-31T22:22:03+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Merge feature/docker-setup into dev"
+      ],
+      "commits": [
+        {
+          "hash": "162da04e78fdc74161675accbcb80229dea745df",
+          "date": "2026-08-31T22:22:03+05:30",
+          "authoredAt": "2026-08-31T22:22:03+05:30",
+          "subject": "Merge feature/docker-setup into dev",
+          "parents": [
+            "3c330badcec99038cc12a73ae75fa9edaa9f61d2",
+            "268b5394ea6bba731f4cbff78b994792ed4c6918"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            ".github/workflows/deploy-prod.yml"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml",
+        ".github/workflows/deploy-prod.yml"
+      ]
+    },
+    {
+      "id": "deployment-workflows",
+      "title": "Separate development and production deployments",
+      "commits": [
+        {
+          "hash": "1be09d6df837dc2667054acfc0f9487b7caed741",
+          "date": "2026-08-27T13:28:54+05:30",
+          "authoredAt": "2026-08-27T13:28:54+05:30",
+          "subject": "Add dev/prod compose files and deploy pipelines",
+          "parents": [
+            "1cdeb81f556032d3c992c7e9d0d3a2caee90ee31"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            ".github/workflows/deploy-prod.yml",
+            ".github/workflows/merge-guard.yml",
+            "compose.dev.yaml",
+            "compose.prod.yaml"
+          ]
+        },
+        {
+          "hash": "268b5394ea6bba731f4cbff78b994792ed4c6918",
+          "date": "2026-08-31T22:21:23+05:30",
+          "authoredAt": "2026-08-31T22:21:23+05:30",
+          "subject": "Bump tailscale action to v4 with connectivity ping",
+          "parents": [
+            "1be09d6df837dc2667054acfc0f9487b7caed741"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            ".github/workflows/deploy-prod.yml"
+          ]
+        }
+      ],
+      "why": "Promote changes through dev before main while keeping deployment environments and their stored data separate.",
+      "changes": [
+        "Add development and production Compose definitions and deployment workflows.",
+        "Guard main-branch pull requests so only dev can promote changes.",
+        "Update the Tailscale action and add a connectivity check."
+      ],
+      "date": "2026-08-31T22:21:23+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        ".github/workflows/deploy-dev.yml",
+        ".github/workflows/deploy-prod.yml",
+        ".github/workflows/merge-guard.yml",
+        "compose.dev.yaml",
+        "compose.prod.yaml"
+      ]
+    },
+    {
+      "id": "commit-3c330badcec99038cc12a73ae75fa9edaa9f61d2",
+      "title": "Merge pull request #2 from chakshusalgotra/feature/docker-setup",
+      "date": "2026-08-27T13:29:50+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Feature/docker setup"
+      ],
+      "commits": [
+        {
+          "hash": "3c330badcec99038cc12a73ae75fa9edaa9f61d2",
+          "date": "2026-08-27T13:29:50+05:30",
+          "authoredAt": "2026-08-27T13:29:50+05:30",
+          "subject": "Merge pull request #2 from chakshusalgotra/feature/docker-setup",
+          "parents": [
+            "3e61f4290c659112523dec11f2b9495aa52d380e",
+            "1be09d6df837dc2667054acfc0f9487b7caed741"
+          ],
+          "body": "Feature/docker setup",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".github/workflows/deploy-dev.yml",
+            ".github/workflows/deploy-prod.yml",
+            ".github/workflows/merge-guard.yml",
+            ".gitignore",
+            "Dockerfile",
+            "README.md",
+            "compose.dev.yaml",
+            "compose.prod.yaml",
+            "compose.yaml",
+            "downloads.js",
+            "server.js"
+          ]
+        }
+      ],
+      "files": [
+        ".dockerignore",
+        ".github/workflows/deploy-dev.yml",
+        ".github/workflows/deploy-prod.yml",
+        ".github/workflows/merge-guard.yml",
+        ".gitignore",
+        "Dockerfile",
+        "README.md",
+        "compose.dev.yaml",
+        "compose.prod.yaml",
+        "compose.yaml",
+        "downloads.js",
+        "server.js"
+      ]
+    },
+    {
+      "id": "commit-3e61f4290c659112523dec11f2b9495aa52d380e",
+      "title": "Merge pull request #1 from chakshusalgotra/feature/json-import",
+      "date": "2026-08-27T03:08:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add JSON profile import"
+      ],
+      "commits": [
+        {
+          "hash": "3e61f4290c659112523dec11f2b9495aa52d380e",
+          "date": "2026-08-27T03:08:58+05:30",
+          "authoredAt": "2026-08-27T03:08:58+05:30",
+          "subject": "Merge pull request #1 from chakshusalgotra/feature/json-import",
+          "parents": [
+            "cc1303b68247fa0668d327342686db6ccd659a81",
+            "4d0940f4fca595c3920133a67e31b4a039fa556b"
+          ],
+          "body": "Add JSON profile import",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "db.js",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css",
+        "server.js"
+      ]
+    },
+    {
+      "id": "profile-import",
+      "title": "Restore a profile from a JSON export",
+      "commits": [
+        {
+          "hash": "4d0940f4fca595c3920133a67e31b4a039fa556b",
+          "date": "2026-08-11T23:18:16+05:30",
+          "authoredAt": "2026-08-11T23:18:16+05:30",
+          "subject": "Add JSON profile import",
+          "parents": [
+            "cc1303b68247fa0668d327342686db6ccd659a81"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "db.js",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js"
+          ]
+        }
+      ],
+      "why": "Make exported learning data restorable without replacing account identity or credentials.",
+      "changes": [
+        "Add validated profile import with confirmation and revision conflict protection.",
+        "Restore courses, progress, preferences, and activity history from a supported export."
+      ],
+      "date": "2026-08-11T23:18:16+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        "README.md",
+        "db.js",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css",
+        "server.js"
+      ]
+    },
+    {
+      "id": "docker",
+      "title": "Package FocusTube for local Docker use",
+      "commits": [
+        {
+          "hash": "c2144be7f39968d5fab7556be747fb32765815d4",
+          "date": "2026-08-04T12:15:35+05:30",
+          "authoredAt": "2026-08-04T12:15:35+05:30",
+          "subject": "Add production Docker setup",
+          "parents": [
+            "cc1303b68247fa0668d327342686db6ccd659a81"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".env.example",
+            ".gitignore",
+            "Dockerfile",
+            "README.md",
+            "compose.yaml",
+            "downloads.js",
+            "server.js"
+          ]
+        },
+        {
+          "hash": "1cdeb81f556032d3c992c7e9d0d3a2caee90ee31",
+          "date": "2026-08-04T12:47:55+05:30",
+          "authoredAt": "2026-08-04T12:47:55+05:30",
+          "subject": "Simplify Docker setup for local use",
+          "parents": [
+            "c2144be7f39968d5fab7556be747fb32765815d4"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".dockerignore",
+            ".env.example",
+            ".gitignore",
+            "Dockerfile",
+            "README.md",
+            "compose.yaml"
+          ]
+        }
+      ],
+      "why": "Provide a repeatable local runtime with persistent SQLite storage and loopback-only access.",
+      "changes": [
+        "Introduce a Docker image and Compose setup, then simplify them for local use.",
+        "Publish the app on localhost:3002 and persist data in a named volume."
+      ],
+      "date": "2026-08-04T12:47:55+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        ".dockerignore",
+        ".env.example",
+        ".gitignore",
+        "Dockerfile",
+        "README.md",
+        "compose.yaml",
+        "downloads.js",
+        "server.js"
+      ]
+    },
+    {
+      "id": "project-documentation",
+      "title": "Document setup, architecture, and operations",
+      "commits": [
+        {
+          "hash": "cc1303b68247fa0668d327342686db6ccd659a81",
+          "date": "2026-08-04T11:34:08+05:30",
+          "authoredAt": "2026-08-04T11:34:08+05:30",
+          "subject": "readme added",
+          "parents": [
+            "7923f9bb1de71a83fde65c03ed6c0aedede511aa"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "package-lock.json",
+            "package.json"
+          ]
+        }
+      ],
+      "why": "Make the application installable and maintainable with documented workflows, requirements, and limitations.",
+      "changes": [
+        "Add the project README with setup, API, security, and troubleshooting guidance.",
+        "Add screenshots of the library, player, dashboard, and profile workflows."
+      ],
+      "image": "docs/screenshots/library.png",
+      "date": "2026-08-04T11:34:08+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        "README.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "package-lock.json",
+        "package.json"
+      ]
+    },
+    {
+      "id": "foundation",
+      "title": "Build the FocusTube learning application",
+      "commits": [
+        {
+          "hash": "7923f9bb1de71a83fde65c03ed6c0aedede511aa",
+          "date": "2026-08-03T22:46:16+05:30",
+          "authoredAt": "2026-08-03T22:46:16+05:30",
+          "subject": "Initial FocusTube implementation",
+          "parents": [],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            ".gitignore",
+            "auth.js",
+            "db.js",
+            "downloads.js",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/index.html",
+            "public/styles.css",
+            "server.js"
+          ]
+        }
+      ],
+      "why": "Turn public YouTube playlists and videos into focused courses with durable, per-user learning progress.",
+      "changes": [
+        "Introduce the Node/Express and SQLite application with an authenticated browser interface.",
+        "Provide course import, focused playback, completion tracking, analytics, certificates, and optional downloads."
+      ],
+      "date": "2026-08-03T22:46:16+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "files": [
+        ".gitignore",
+        "auth.js",
+        "db.js",
+        "downloads.js",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/index.html",
+        "public/styles.css",
+        "server.js"
+      ]
+    }
+  ]
+}
+</script>
+  <script>
+    'use strict';
+    const data = JSON.parse(document.getElementById('timeline-data').textContent);
+    const labels = { prod: 'Prod branch', dev: 'Dev branch', branch: 'Feature branch', bugs: 'Bug / open', pending: 'Pending' };
+    const dateFormat = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' });
+    const timeFormat = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC' });
+    const list = document.getElementById('timeline');
+    function element(tag, className, text) {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text !== undefined) node.textContent = text;
+      return node;
+    }
+    function link(text, href, className) {
+      const node = element('a', className, text);
+      node.href = href;
+      if (href.startsWith('https:')) { node.target = '_blank'; node.rel = 'noopener noreferrer'; }
+      return node;
+    }
+    function renderEntry(entry) {
+      const item = element('li', 'entry');
+      item.id = entry.id;
+      item.dataset.stage = entry.stage;
+      item.dataset.date = entry.date;
+      const stamp = element('div', 'stamp');
+      const time = element('time', '', dateFormat.format(new Date(entry.date)));
+      time.dateTime = entry.date;
+      stamp.append(time, element('span', '', entry.dateKind === 'commit' ? `${timeFormat.format(new Date(entry.date))} UTC / commit` : entry.dateKind === 'observed' ? 'Dated observation' : 'Recorded / uncommitted'));
+      const article = element('article');
+      const topline = element('div', 'entry-topline');
+      topline.append(element('span', 'stage', labels[entry.stage]), link(`#${entry.id}`, `#${entry.id}`, 'permalink'));
+      const heading = element('h2', '', entry.title);
+      heading.id = `${entry.id}-title`;
+      article.setAttribute('aria-labelledby', heading.id);
+      const reason = element('p', 'reason');
+      reason.append(element('strong', '', 'Why'), document.createTextNode(entry.why));
+      const changes = element('ul', 'changes');
+      entry.changes.forEach(change => changes.append(element('li', '', change)));
+      const commits = element('div', 'commits');
+      commits.append(element('span', '', entry.dateKind === 'observed' ? 'Related commits' : 'Commits'));
+      if (!entry.commits.length) commits.append(element('span', '', 'Not yet committed'));
+      for (const commit of entry.commits) {
+        const anchor = link(commit.hash.slice(0, 7), `${data.repository}/commit/${commit.hash}`);
+        anchor.title = `${commit.subject} | ${commit.date}`;
+        commits.append(anchor);
+      }
+      const details = element('details');
+      details.open = document.getElementById('expandFiles').checked;
+      details.append(element('summary', '', `${entry.files.length} changed or affected file${entry.files.length === 1 ? '' : 's'}`));
+      const files = element('ul', 'files');
+      for (const file of entry.files) {
+        const commit = entry.commits.find(candidate => candidate.files.includes(file));
+        const fileItem = element('li');
+        fileItem.append(link(file, `${data.repository}/blob/${commit?.hash || data.head}/${file.split('/').map(encodeURIComponent).join('/')}`));
+        files.append(fileItem);
+      }
+      details.append(files);
+      article.append(topline, heading, reason, changes, commits, details);
+      if (entry.image) {
+        const image = element('img', 'history-image');
+        image.src = entry.image;
+        image.alt = 'FocusTube library screenshot from the project documentation';
+        image.loading = 'lazy';
+        image.width = 1440;
+        image.height = 900;
+        article.append(image);
+      }
+      item.append(stamp, article);
+      return item;
+    }
+    function render() {
+      const query = document.getElementById('search').value.trim().toLocaleLowerCase();
+      const stage = document.querySelector('input[name="stage"]:checked').value;
+      const entries = data.entries.filter(entry => (stage === 'all' || entry.stage === stage) && [entry.title, entry.why, ...entry.changes, ...entry.files, ...entry.commits.map(commit => `${commit.hash} ${commit.subject}`)].join(' ').toLocaleLowerCase().includes(query));
+      list.replaceChildren(...entries.map(renderEntry));
+      document.getElementById('empty').classList.toggle('hidden', entries.length > 0);
+      document.getElementById('resultCount').textContent = `${entries.length} of ${data.entries.length} records / newest first`;
+    }
+    document.getElementById('entryCount').textContent = data.entries.length;
+    document.getElementById('commitCount').textContent = data.commitCount;
+    document.getElementById('pendingCount').textContent = data.entries.filter(entry => entry.stage === 'pending').length;
+    document.getElementById('bugCount').textContent = data.entries.filter(entry => entry.stage === 'bugs').length;
+    document.getElementById('snapshot').textContent = `Snapshot ${dateFormat.format(new Date(data.generatedAt))} ${timeFormat.format(new Date(data.generatedAt))} UTC / through ${data.head.slice(0, 7)}`;
+    document.getElementById('branchName').textContent = data.branch;
+    for (const [stage, label] of [['prod', 'Prod / main'], ['dev', 'Dev']]) {
+      const ref = data.refs[stage];
+      const target = document.getElementById(`${stage}Ref`);
+      target.append(document.createTextNode(`${label}: `), ref.hash ? link(ref.hash.slice(0, 7), `${data.repository}/commit/${ref.hash}`) : document.createTextNode('not available'));
+    }
+    document.getElementById('search').addEventListener('input', render);
+    document.querySelector('fieldset').addEventListener('change', render);
+    document.getElementById('expandFiles').addEventListener('change', event => {
+      for (const details of list.querySelectorAll('details')) details.open = event.target.checked;
+    });
+    render();
+    if (location.hash) document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView();
+  </script>
+</body>
+</html>

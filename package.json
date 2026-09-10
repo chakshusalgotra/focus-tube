@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "timeline:update": "node scripts/update-timeline.js"
   },
   "engines": {
     "node": ">=22"

@@ -23,6 +23,8 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 
 ## Documentation
 
+- [timeline.html](timeline.html): newest-first feature history, commit links, changed files, branch stages, bugs, and pending work.
+- [docs/timeline.md](docs/timeline.md): timeline provenance and the `npm run timeline:update` refresh workflow.
 - [Quick start](#quick-start): local installation, Docker, and the first-run workflow.
 - [docs/youtube-search.md](docs/youtube-search.md): keyword search, filters, course creation, API examples, troubleshooting, and contributor verification.
 - [Configuration](#configuration): ports, host validation, and hosted deployments.
@@ -91,6 +93,15 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 - YouTube chapters and description timestamps as clickable seek targets.
 - Chapter markers on the seek bar and live current-chapter display.
 - Confetti rewards and a downloadable PDF completion certificate.
+
+### Learning workspace
+
+- Switch between the course grid and a status board with automatic Backlog, Learning, and Completed columns.
+- Add, rename, and remove custom columns; reorder cards by drag and drop or use move controls.
+- Create weekly, biweekly, or monthly sprints and assign courses or tasks to them.
+- Track tasks with notes, priority, due dates, status, and optional course association in the task page or quick panel.
+- Add per-course checklists and ordered roadmaps with combined progress and a continue-learning action.
+- Save boards, tasks, sprints, checklists, and roadmaps in the revisioned profile, with export/import support.
 
 ### Profiles and persistence
 
@@ -342,7 +353,7 @@ Exports use the versioned schema:
 }
 ```
 
-The current release supports export but not JSON restore/import.
+Schema-version-1 exports can be restored from the profile menu. New exports include workspace data; older exports without it restore an empty workspace.
 
 ## Security model
 
@@ -412,6 +423,7 @@ Invalid input returns `400`, missing authentication returns `401`, and upstream 
 | `GET` | `/api/data` | Load the current revisioned profile snapshot. |
 | `PUT` | `/api/data` | Save courses, statistics, and settings with revision checking. |
 | `GET` | `/api/export` | Download the complete safe user-data JSON export. |
+| `POST` | `/api/import?revision=...` | Validate and restore a version-1 export, including workspace data, while preserving account identity. |
 | `POST` | `/api/track` | Store an idempotent active/watch-time batch. |
 | `GET` | `/api/stats/summary` | Return aggregate dashboard totals and streaks. |
 | `GET` | `/api/stats/daily` | Return day-level active and watch time. |
@@ -441,13 +453,20 @@ focus-tube/
 ├── downloads.js            # yt-dlp/ffmpeg job manager and ZIP streaming
 ├── server.js               # Express app, security headers, metadata and API routes
 ├── youtube-search.js       # Search request validation and YouTube result parsing
+├── timeline.html           # Standalone generated change timeline
+├── scripts/
+│   └── update-timeline.js  # Git history and branch-stage snapshot generator
 ├── test/
+│   ├── timeline.test.js    # Timeline ordering, provenance, and rendering tests
+│   ├── workspace-persistence.test.js # Isolated workspace restore regression tests
 │   └── youtube-search.test.js # Deterministic search parsing and filter tests
 ├── public/
 │   ├── app.js              # Authenticated SPA, player, dashboard, sync, exports
 │   ├── index.html          # Application views and dialogs
 │   └── styles.css          # Responsive application styling
 ├── docs/
+│   ├── timeline.md          # Timeline maintenance and stage definitions
+│   ├── timeline-notes.json  # Feature rationale and dated observations
 │   ├── youtube-search.md    # Search usage, API contract, troubleshooting, and tests
 │   └── screenshots/        # README screenshots
 ├── data/                   # Runtime SQLite files; ignored by Git
@@ -494,7 +513,7 @@ The latest validation reported:
 - Verified revision-conflict handling and idempotent activity tracking
 - Verified loopback-only default binding
 
-`npm test` runs deterministic search tests for classic and modern YouTube renderers, type filters, course labels, deduplication, input limits, empty or blocked pages, and safe result URLs. These fixtures do not require network access. Live YouTube search and browser workflows should also be checked when the upstream page format changes.
+`npm test` runs deterministic search, workspace persistence, and timeline tests. Coverage includes YouTube renderer formats and filters, safe result URLs, workspace export/import round trips and revision conflicts, chronological ordering, branch-stage evidence, and safe snapshot embedding. The tests require no network access; database tests use isolated in-memory SQLite databases. Live YouTube search and browser workflows should also be checked when the upstream page format changes.
 
 ## Troubleshooting
 
@@ -552,13 +571,11 @@ The YouTube IFrame API retains final control over playback levels. FocusTube rep
 - Public YouTube page formats are not a stable API and may change.
 - Private, deleted, age-restricted, region-restricted, or embedding-disabled videos may be unavailable.
 - Quality selection and speeds above `2x` are best-effort constraints imposed by the YouTube embed.
-- JSON data can be exported but cannot yet be restored through the UI.
 - Password recovery, email verification, OAuth, and account deletion are not implemented.
 - The current server is designed for local-first use; internet deployment requires additional operational configuration.
 
 ## Roadmap
 
-- JSON import and profile restore
 - Password change, recovery, and account deletion
 - Automated API and browser test suites
 - Structured database backups
