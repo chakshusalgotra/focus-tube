@@ -5,7 +5,8 @@
   "description": "Turn any YouTube playlist into a distraction-free course with progress tracking, streaks and a completion certificate.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=22"

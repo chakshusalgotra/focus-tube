@@ -6,6 +6,7 @@ const path = require('path');
 const store = require('./db');
 const { createAuth } = require('./auth');
 const { createDownloads } = require('./downloads');
+const { createSearchRequest, parseSearchResults } = require('./youtube-search');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -517,11 +518,23 @@ app.put('/api/data', auth.requireAuth, (req, res) => {
       if (course.videos.length > 5000) throw new HttpError(413, 'A course can contain up to 5,000 videos.');
     }
     if (videoCount > 20_000) throw new HttpError(413, 'A profile can store up to 20,000 videos.');
+    const workspace = req.body?.workspace;
+    if (workspace !== undefined) {
+      if (!workspace || typeof workspace !== 'object' || Array.isArray(workspace)) {
+        throw new HttpError(400, 'Workspace must be an object.');
+      }
+      if (workspace.tasks && Object.keys(workspace.tasks).length > 5000) {
+        throw new HttpError(413, 'A profile can store up to 5,000 tasks.');
+      }
+      if (JSON.stringify(workspace).length > 1_000_000) {
+        throw new HttpError(413, 'Board and task data is too large.');
+      }
+    }
     const revision = Number(req.body?.revision);
     if (!Number.isInteger(revision) || revision < 0) throw new HttpError(400, 'A profile revision is required.');
     const nextRevision = store.saveUserData(
       req.user.id,
-      { courses, stats, settings: settings || {} },
+      { courses, stats, settings: settings || {}, workspace: workspace || {} },
       revision,
       req.body?.importLegacy === true
     );
@@ -584,6 +597,36 @@ app.put('/api/profile/download-quality', auth.requireAuth, (req, res) => {
   }
   const user = store.setDownloadQuality(req.user.id, quality);
   res.json({ user: store.publicUser(user) });
+});
+
+app.get('/api/search', auth.requireAuth, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const request = createSearchRequest(req.query.q, req.query.type);
+    const response = await fetch(request.youtubeUrl, {
+      headers: {
+        'user-agent': UA,
+        'accept-language': 'en-US,en;q=0.9',
+        cookie: 'CONSENT=YES+cb; SOCS=CAI',
+      },
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+      throw new HttpError(502, 'YouTube could not complete this search. Try again or open it on YouTube.');
+    }
+    const html = await response.text();
+    const data = extractJson(html, 'var ytInitialData = ') || extractJson(html, 'window["ytInitialData"] = ');
+    res.json({ ...request, results: parseSearchResults(data, request.type) });
+  } catch (err) {
+    const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+    const status = err.status || (timedOut ? 504 : 502);
+    res.status(status).json({
+      error: err.status ? err.message : timedOut
+        ? 'YouTube search took too long. Try again or open it on YouTube.'
+        : 'Could not reach YouTube. Try again or open the search on YouTube.',
+    });
+  }
 });
 
 app.get('/api/playlist', async (req, res) => {
