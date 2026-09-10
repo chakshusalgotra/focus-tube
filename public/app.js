@@ -103,6 +103,7 @@ let importingLink = false;
 const pendingCourseImports = new Set();
 let workspace = defaultWorkspace(); // board columns, tasks, checklists, sprints
 let homeMode = 'grid'; // 'grid' | 'board' — persisted in profile settings
+let notebooks = null;
 
 const saveCourses = () => scheduleRemoteSave();
 const saveStats = () => scheduleRemoteSave();
@@ -471,6 +472,8 @@ function setAuthMode(mode) {
 
 function resetSessionState() {
   sessionGeneration++;
+  notebooks?.reset();
+  pendingLoad = null;
   resetDiscovery();
   clearTimeout(remoteSaveTimer);
   remoteSaveTimer = null;
@@ -534,6 +537,7 @@ async function loadProfileData(transition, userId) {
   const remote = await api('/api/data');
   if (transition !== authTransition || authUser?.id !== userId) return false;
   profileRevision = Number(remote.revision || 0);
+  if (notebooks) notebooks.notesRevision = Number(remote.notesRevision || 0);
   const hasRemoteCourses = Object.keys(remote.courses || {}).length > 0;
   const hasLegacyCourses = Object.keys(legacyCourses || {}).length > 0;
   const legacyHandledKey = `ft_legacy_handled_v2_${userId}`;
@@ -780,7 +784,7 @@ function renderHome() {
               html: I.trash,
               onclick: (e) => {
                 e.stopPropagation();
-                if (confirm(`Remove "${c.title}"?\nYour progress for it will be deleted.`)) {
+                if (confirm(`Remove "${c.title}"?\nYour progress for it will be deleted. Your notebook will be kept.`)) {
                   delete courses[c.id];
                   cleanupCourseWorkspace(c.id);
                   saveCourses();
@@ -2353,9 +2357,9 @@ function onPlayerError() {
   errorOverlay.classList.remove('hidden');
 }
 
-let pendingLoad = null; // queued {index, cue} while the player is still booting
+let pendingLoad = null;
 
-function playVideo(i, { cue = false } = {}) {
+function playVideo(i, { cue = false, startSeconds } = {}) {
   const c = current?.course;
   if (!c || i < 0 || i >= c.videos.length) return;
   const v = c.videos[i];
@@ -2369,12 +2373,18 @@ function playVideo(i, { cue = false } = {}) {
 
   if (playerReady) {
     const saved = Math.floor(c.positions[v.id] || 0);
-    const startAt = saved > 8 && saved < (v.durationSeconds || Infinity) - 20 ? saved - 3 : 0;
-    if (cue) safe(() => player.cueVideoById({ videoId: v.id, startSeconds: startAt }));
+    const explicit = NotebookModel.hasTime(startSeconds);
+    const startAt = explicit ? Math.min(startSeconds, v.durationSeconds > 0 ? Math.max(0, v.durationSeconds - 0.1) : startSeconds)
+      : saved > 8 && saved < (v.durationSeconds || Infinity) - 20 ? saved - 3 : 0;
+    if (explicit && !cue && safe(() => player.getVideoData()?.video_id) === v.id) {
+      safe(() => player.seekTo(startAt, true));
+      safe(() => player.playVideo());
+    } else if (cue) safe(() => player.cueVideoById({ videoId: v.id, startSeconds: startAt }));
     else safe(() => player.loadVideoById({ videoId: v.id, startSeconds: startAt }));
     safe(() => player.setPlaybackRate(c.speed || 1));
+    pendingLoad = null;
   } else {
-    pendingLoad = { index: i, cue };
+    pendingLoad = { courseId: c.id, videoId: v.id, cue, startSeconds, generation: sessionGeneration };
   }
   if (cue || !playerReady) {
     posterTitle.textContent = v.title;
@@ -2383,6 +2393,7 @@ function playVideo(i, { cue = false } = {}) {
   speedSel.value = String(c.speed || 1);
 
   updateNowPlaying();
+  notebooks?.showVideo(c.id, v.id);
   loadVideoExtras(v.id);
   syncCourseUI();
   rowEls[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -2770,6 +2781,7 @@ async function loadDashboard() {
 }
 
 function showDashboard() {
+  notebooks?.leave();
   current = null;
   safe(() => player?.stopVideo());
   homeView.classList.add('hidden');
@@ -2785,6 +2797,7 @@ function showDashboard() {
 }
 
 function showTasks() {
+  notebooks?.leave();
   current = null;
   safe(() => player?.stopVideo());
   hideOverlays();
@@ -2801,6 +2814,7 @@ function showTasks() {
 }
 
 function showRoadmap(id) {
+  notebooks?.leave();
   current = null;
   safe(() => player?.stopVideo());
   hideOverlays();
@@ -2818,6 +2832,7 @@ function showRoadmap(id) {
 
 /* ================= view switching ================= */
 function showHome() {
+  notebooks?.leave();
   current = null;
   safe(() => player?.stopVideo());
   hideOverlays();
@@ -2834,7 +2849,8 @@ function showHome() {
   renderStreakChip();
 }
 
-async function openCourse(id) {
+async function openCourse(id, { videoId, startSeconds } = {}) {
+  notebooks?.leave();
   const c = courses[id];
   if (!c) return showHome();
   current = { course: c, index: 0 };
@@ -2849,30 +2865,72 @@ async function openCourse(id) {
   document.body.classList.toggle('side-collapsed', window.innerWidth < 900);
   renderSidebar(c);
   renderCourseChecklist();
-  let idx = c.videos.findIndex((v) => v.id === c.lastVideoId);
+  let idx = c.videos.findIndex((v) => v.id === (videoId || c.lastVideoId));
   if (idx === -1) idx = c.videos.findIndex((v) => !c.completed[v.id]);
-  playVideo(Math.max(0, idx), { cue: true }); // UI renders immediately; player load is queued
+  playVideo(Math.max(0, idx), { cue: !NotebookModel.hasTime(startSeconds), startSeconds });
   // Auto-refresh: quietly pull newly added playlist videos (at most once a minute).
   if (!c.lastSyncedAt || Date.now() - c.lastSyncedAt > 60_000) syncCourse({ silent: true });
   ensurePlayer()
     .then(() => {
-      if (pendingLoad && current?.course === c) {
-        const p = pendingLoad;
+      if (pendingLoad && current?.course === c && pendingLoad.courseId === c.id && pendingLoad.generation === sessionGeneration) {
+        const intent = pendingLoad;
         pendingLoad = null;
-        playVideo(p.index, { cue: p.cue });
+        playVideo(c.videos.findIndex(video => video.id === intent.videoId), { cue: intent.cue, startSeconds: intent.startSeconds });
       }
     })
     .catch(() => toast('Video player failed to load — check your connection and reload.', { error: true }));
 }
 
+function jumpToNote(courseId, videoId, seconds) {
+  const course = courses[courseId];
+  if (!course?.videos.some(video => video.id === videoId)) {
+    const url = NotebookModel.sourceUrl(videoId, seconds);
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+    return;
+  }
+  const params = new URLSearchParams({ c: courseId, v: videoId, t: String(seconds) });
+  const hash = '#' + params.toString();
+  if (location.hash === hash) route();
+  else location.hash = hash;
+}
+
+function showNotebooks(courseId, videoId) {
+  notebooks.leave();
+  current = null;
+  pendingLoad = null;
+  safe(() => player?.stopVideo());
+  hideOverlays();
+  for (const view of [homeView, courseView, dashboardView, tasksView, roadmapView]) view.classList.add('hidden');
+  backBtn.classList.remove('hidden');
+  sideToggle.classList.add('hidden');
+  resyncBtn.classList.add('hidden');
+  document.title = 'Notebooks - FocusTube';
+  notebooks.show(courseId, videoId);
+}
+
 function route() {
   if (!appBooted) return;
+  if (notebooks?.editor.composing) {
+    notebooks.pendingBinding = () => route();
+    return;
+  }
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (location.hash === '#notebooks') return showNotebooks(null);
+  if (NotebookModel.validId(params.get('notebook'))) return showNotebooks(params.get('notebook'), params.get('v') || '');
   if (location.hash === '#dashboard') return showDashboard();
   if (location.hash === '#tasks') return showTasks();
   const rm = location.hash.match(/^#roadmap=(.+)$/);
   if (rm && workspace.roadmaps[rm[1]]) return showRoadmap(rm[1]);
-  const m = location.hash.match(/^#c=(.+)$/);
-  if (m && courses[m[1]]) openCourse(m[1]);
+  const courseId = params.get('c');
+  if (courseId && Object.hasOwn(courses, courseId)) {
+    const videoId = params.get('v');
+    if (videoId && !courses[courseId].videos.some(video => video.id === videoId)) {
+      jumpToNote(courseId, videoId, Number(params.get('t')));
+      return showNotebooks(courseId);
+    }
+    const startSeconds = params.has('t') && /^\d+$/.test(params.get('t')) ? Number(params.get('t')) : undefined;
+    openCourse(courseId, { videoId, startSeconds });
+  }
   else showHome();
 }
 
@@ -3320,6 +3378,7 @@ async function exportProfileData() {
   button.disabled = true;
   button.textContent = 'Preparing export…';
   try {
+    if (!(await notebooks.flush())) throw new Error('Resolve unsaved notes before exporting your profile.');
     const activitySaved = await flushActivity();
     const profileSaved = await persistRemoteData();
     if (!activitySaved || !profileSaved) {
@@ -3361,8 +3420,8 @@ async function importProfileData(file) {
     } catch {
       throw new Error('That file is not valid JSON.');
     }
-    if (imported?.schema !== 'focustube-user-export' || imported?.schemaVersion !== 1) {
-      throw new Error('Choose a FocusTube user export (schema version 1).');
+    if (imported?.schema !== 'focustube-user-export' || ![1, 2].includes(imported?.schemaVersion)) {
+      throw new Error('Choose a FocusTube user export (schema version 1 or 2).');
     }
     const courseCount =
       imported.courses && typeof imported.courses === 'object' && !Array.isArray(imported.courses)
@@ -3373,8 +3432,9 @@ async function importProfileData(file) {
       : 0;
     if (
       !confirm(
-        `Import ${courseCount} course(s) and ${historyCount} watch-history record(s) from "${file.name}"?\n\n` +
-          'This replaces the data in your current profile. Your username and password will not change.'
+        `Import ${courseCount} course(s), ${historyCount} watch-history record(s), and ${imported.notebooks?.length || 0} video note(s) from "${file.name}"?\n\n` +
+          'This replaces all progress and notebooks in your current profile. Your username and password will not change.' +
+          (imported.schemaVersion === 1 ? '\nThis older export has no notebooks; your current notes will be cleared.' : '')
       )
     ) {
       return;
@@ -3383,12 +3443,14 @@ async function importProfileData(file) {
     button.disabled = true;
     exportButton.disabled = true;
     button.textContent = 'Importing…';
+    if (!(await notebooks.flush())) throw new Error('Resolve unsaved notes before importing a profile.');
     const activitySaved = await flushActivity();
     const profileSaved = await persistRemoteData();
     if (!activitySaved || !profileSaved) {
       throw new Error('Could not sync the latest progress. Check your connection and try again.');
     }
-    const result = await api(`/api/import?revision=${profileRevision}`, {
+    await notebooks.request('/api/notebooks');
+    const result = await api(`/api/import?revision=${profileRevision}&notesRevision=${notebooks.notesRevision}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(imported),
@@ -3471,6 +3533,10 @@ $('#upgradeForm').addEventListener('submit', async (e) => {
   }
 });
 $('#logoutBtn').addEventListener('click', async () => {
+  if (!(await notebooks.flush())) {
+    toast('Your notes are not saved yet. Resolve the save error before signing out.', { error: true });
+    return;
+  }
   const activitySaved = await flushActivity();
   const profileSaved = await persistRemoteData();
   if (!activitySaved || !profileSaved) {
@@ -3511,7 +3577,7 @@ retrySearchBtn.addEventListener('click', () => {
 });
 
 $('#brand').addEventListener('click', () => (location.hash = ''));
-backBtn.addEventListener('click', () => (location.hash = ''));
+backBtn.addEventListener('click', () => (location.hash = !$('#notebooksView').classList.contains('hidden') && notebooks.reviewCourse ? '#notebooks' : ''));
 sideToggle.addEventListener('click', () => document.body.classList.toggle('side-collapsed'));
 $('#streakChip').addEventListener('click', () => (location.hash = '#dashboard'));
 dashboardBtn.addEventListener('click', () => (location.hash = '#dashboard'));
@@ -3774,7 +3840,7 @@ document.querySelectorAll('.modal-backdrop').forEach((m) =>
 
 /* keyboard shortcuts */
 document.addEventListener('keydown', (e) => {
-  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable || e.target.closest('.note-toolbar, .ql-toolbar, .ql-tooltip, .course-notes-toggle')) return;
   if (!current) return;
   const k = e.key;
   if (k === ' ' || k.toLowerCase() === 'k') {
@@ -3810,6 +3876,18 @@ window.addEventListener('pagehide', () => {
 });
 
 /* ================= boot ================= */
+notebooks = new Notebooks({
+  getUser: () => authUser,
+  getCourses: () => courses,
+  getTime(courseId, videoId) {
+    if (!playerReady || current?.course.id !== courseId || curVideo()?.id !== videoId || safe(() => player.getVideoData()?.video_id) !== videoId) return null;
+    const seconds = safe(() => player.getCurrentTime());
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : null;
+  },
+  onJump: jumpToNote,
+  ensureCourseSaved: () => persistRemoteData(),
+  showError: message => toast(message, { error: true, ms: 5000 }),
+});
 for (const event of ['pointerdown', 'keydown', 'scroll']) {
   window.addEventListener(event, () => (lastInteractionAt = Date.now()), { passive: true });
 }

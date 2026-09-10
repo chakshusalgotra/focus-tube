@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="dark" />
   <title>FocusTube — distraction-free courses</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%237c5cff'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/vendor/quill.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -84,6 +85,7 @@
       <div class="courses-toolbar">
         <h2 id="coursesHeading" class="hidden">Your courses</h2>
         <div class="toolbar-actions">
+          <a href="#notebooks" class="btn ghost slim">Notebooks</a>
           <button id="pinnedFilterBtn" class="pinned-filter-btn hidden" type="button" title="Show only bookmarked courses">
             <span id="pinnedFilterIcon" class="pin-ic"></span>Bookmarked
           </button>
@@ -137,6 +139,8 @@
     </aside>
 
     <section class="stage">
+      <div class="study-layout">
+      <div class="lesson-content">
       <div id="playerShell">
         <div id="ytWrap">
           <div id="ytFrame"></div>
@@ -216,6 +220,53 @@
           <button id="descToggle" class="extras-toggle">Description<span class="chev">▾</span></button>
           <div id="descBody" class="section-body desc-body"></div>
         </div>
+      </div>
+      </div>
+      <details id="courseNotesHost" class="course-notes" aria-label="Current video notes" open>
+        <summary id="courseNotesToggle" class="course-notes-toggle" title="Show or hide notes"><span>Notes</span><span class="chev" aria-hidden="true">▾</span></summary>
+        <a id="courseNotebookLink" class="notebook-open-link" href="#notebooks">Course notebook</a>
+        <section id="notesWidget" class="notes-widget">
+          <div class="note-heading"><h3 id="noteVideoTitle">Video notes</h3></div>
+          <div class="note-controls">
+            <div class="seg-toggle" aria-label="Note mode">
+              <button id="noteReadMode" class="active" type="button" aria-pressed="true">Read</button>
+              <button id="noteEditMode" type="button" aria-pressed="false">Edit</button>
+            </div>
+            <span id="noteStatus" class="note-status" role="status">No notes yet</span>
+            <button id="noteRetry" class="btn ghost slim hidden" type="button">Retry save</button>
+          </div>
+          <div id="noteConflict" class="note-conflict hidden" role="alert">
+            <p>This note changed in another tab.</p>
+            <button id="noteKeepDraft" class="btn slim" type="button">Keep my draft</button>
+            <button id="noteUseSaved" class="btn ghost slim" type="button">Use saved version</button>
+          </div>
+          <div id="noteEditor" class="note-editor hidden"></div>
+          <div id="noteRead" class="note-content note-reader hidden"></div>
+          <p id="noteEmpty" class="empty-state hidden">No written notes yet.</p>
+        </section>
+      </details>
+      </div>
+    </section>
+  </main>
+
+  <main id="notebooksView" class="view hidden">
+    <section class="notebook-shell">
+      <a class="notebook-open-link" href="#notebooks">All notebooks</a>
+      <header class="notebook-heading">
+        <div><h1 id="notebookTitle">Notebooks</h1><p id="notebookMeta" class="muted"></p></div>
+        <div id="notebookActions" class="notebook-actions hidden">
+          <button id="notebookMarkdown" class="btn ghost slim" type="button">Export Markdown</button>
+          <button id="notebookPrintBtn" class="btn ghost slim" type="button">Print / Save PDF</button>
+          <button id="notebookDelete" class="btn danger slim" type="button">Delete notebook</button>
+        </div>
+      </header>
+      <p id="notebookNotice" class="add-error hidden" role="alert"></p>
+      <button id="notebookReload" class="btn ghost slim hidden" type="button">Reload notebook</button>
+      <div id="notebookIndex"></div>
+      <div id="notebookDetail" class="hidden">
+        <label class="notebook-filter">Video<select id="notebookVideoSelect"><option value="">All written notes</option></select></label>
+        <div id="notebookEditorHost" class="hidden"></div>
+        <div id="notebookDocuments"></div>
       </div>
     </section>
   </main>
@@ -441,9 +492,14 @@
   </aside>
 
   <div id="toasts"></div>
+  <div id="notebookPrint"></div>
   <script src="/vendor/confetti.js" defer></script>
   <script src="/vendor/jspdf.js" defer></script>
   <script src="/vendor/chart.js" defer></script>
+  <script src="/vendor/quill.js" defer></script>
+  <script src="notebook-model.js" defer></script>
+  <script src="notebook-editor.js" defer></script>
+  <script src="notebooks.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

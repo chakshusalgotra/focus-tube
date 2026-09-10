@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
+const noteModel = require(path.join(__dirname, 'public/notebook-model'));
 
 const dataDir = path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
@@ -64,6 +65,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS watch_log_user_date_idx ON watch_log(user_id, date DESC);
   CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
 
+  CREATE TABLE IF NOT EXISTS video_notes (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id TEXT NOT NULL,
+    video_id TEXT NOT NULL,
+    course_title TEXT NOT NULL,
+    video_title TEXT NOT NULL,
+    document_json TEXT,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, course_id, video_id)
+  );
+
   CREATE TABLE IF NOT EXISTS activity_batches (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     batch_id TEXT NOT NULL,
@@ -80,6 +94,12 @@ try {
 
 try {
   db.exec("ALTER TABLE user_data ADD COLUMN workspace_json TEXT NOT NULL DEFAULT '{}'");
+} catch (err) {
+  if (!String(err.message).includes('duplicate column')) throw err;
+}
+
+try {
+  db.exec('ALTER TABLE user_data ADD COLUMN notes_revision INTEGER NOT NULL DEFAULT 0');
 } catch (err) {
   if (!String(err.message).includes('duplicate column')) throw err;
 }
@@ -121,6 +141,20 @@ const stmts = {
   deleteSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
   deleteUserSessions: db.prepare('DELETE FROM sessions WHERE user_id = ?'),
   dataByUser: db.prepare('SELECT * FROM user_data WHERE user_id = ?'),
+  noteByKey: db.prepare('SELECT * FROM video_notes WHERE user_id = ? AND course_id = ? AND video_id = ?'),
+  notesByUser: db.prepare('SELECT * FROM video_notes WHERE user_id = ? ORDER BY course_id, created_at, video_id'),
+  notesByCourse: db.prepare('SELECT * FROM video_notes WHERE user_id = ? AND course_id = ? ORDER BY created_at, video_id'),
+  noteUsage: db.prepare('SELECT COUNT(*) AS count, COALESCE(SUM(length(CAST(document_json AS BLOB))), 0) AS bytes FROM video_notes WHERE user_id = ?'),
+  bumpNotes: db.prepare('UPDATE user_data SET notes_revision = notes_revision + 1 WHERE user_id = ?'),
+  clearNotes: db.prepare('UPDATE video_notes SET document_json = NULL, revision = revision + 1, updated_at = ? WHERE user_id = ?'),
+  clearNotebook: db.prepare('UPDATE video_notes SET document_json = NULL, revision = revision + 1, updated_at = ? WHERE user_id = ? AND course_id = ?'),
+  writeNote: db.prepare(`
+    INSERT INTO video_notes (user_id, course_id, video_id, course_title, video_title, document_json, revision, created_at, updated_at)
+    VALUES (@userId, @courseId, @videoId, @courseTitle, @videoTitle, @document, 1, @updatedAt, @updatedAt)
+    ON CONFLICT(user_id, course_id, video_id) DO UPDATE SET
+      course_title = excluded.course_title, video_title = excluded.video_title,
+      document_json = excluded.document_json, revision = video_notes.revision + 1, updated_at = excluded.updated_at
+  `),
   saveData: db.prepare(`
     UPDATE user_data SET
       courses_json = @courses,
@@ -296,9 +330,75 @@ function getUserData(userId) {
     settings: parseJson(row.settings_json, {}),
     workspace: parseJson(row.workspace_json, {}),
     revision: Number(row.revision || 0),
+    notesRevision: Number(row.notes_revision || 0),
     updatedAt: row.updated_at,
   };
 }
+
+function noteRecord(row) {
+  return {
+    courseId: row.course_id, videoId: row.video_id,
+    courseTitle: row.course_title, videoTitle: row.video_title,
+    document: parseJson(row.document_json, null), revision: row.revision,
+    createdAt: row.created_at, updatedAt: row.updated_at,
+  };
+}
+
+function getNotebook(userId, courseId) {
+  return { records: stmts.notesByCourse.all(userId, courseId).map(noteRecord), notesRevision: getUserData(userId).notesRevision };
+}
+
+function getNotebooks(userId) {
+  const data = getUserData(userId);
+  const notebooks = new Map();
+  for (const row of stmts.notesByUser.all(userId)) {
+    if (!row.document_json) continue;
+    const notebook = notebooks.get(row.course_id) || {
+      courseId: row.course_id, title: data.courses[row.course_id]?.title || row.course_title,
+      archived: !Object.hasOwn(data.courses, row.course_id), count: 0, updatedAt: row.updated_at,
+    };
+    notebook.count++;
+    if (row.updated_at > notebook.updatedAt) notebook.updatedAt = row.updated_at;
+    notebooks.set(row.course_id, notebook);
+  }
+  return { notebooks: [...notebooks.values()], notesRevision: data.notesRevision };
+}
+
+const saveNote = db.transaction((userId, courseId, videoId, document, expectedRevision) => {
+  if (!noteModel.validId(courseId) || !/^[A-Za-z0-9_-]{11}$/.test(videoId)) throw Object.assign(new Error('Invalid notebook video.'), { status: 400 });
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw Object.assign(new Error('A note revision is required.'), { status: 400 });
+  let checked;
+  try { checked = noteModel.validate(document); } catch (err) { throw Object.assign(err, { status: 400 }); }
+  const data = getUserData(userId);
+  const row = stmts.noteByKey.get(userId, courseId, videoId);
+  if ((row?.revision || 0) !== expectedRevision) {
+    return { conflict: true, record: row ? noteRecord(row) : null, notesRevision: data.notesRevision };
+  }
+  const course = Object.hasOwn(data.courses, courseId) ? data.courses[courseId] : null;
+  const video = course?.videos?.find(item => item.id === videoId);
+  if (!row && !video) throw Object.assign(new Error('Save this course before adding notes.'), { status: 404 });
+  if (!row && !checked) return { record: null, notesRevision: data.notesRevision };
+  const serialized = checked ? JSON.stringify(checked) : null;
+  const usage = stmts.noteUsage.get(userId);
+  if ((!row && usage.count >= noteModel.MAX_DOCUMENTS) || usage.bytes - Buffer.byteLength(row?.document_json || '') + Buffer.byteLength(serialized || '') > noteModel.MAX_PROFILE_BYTES) {
+    throw Object.assign(new Error('Notebook storage limit reached (5 MiB per profile). Export or remove notes before saving more.'), { status: 413 });
+  }
+  stmts.writeNote.run({
+    userId, courseId, videoId,
+    courseTitle: String(course?.title || row?.course_title || 'Untitled course').slice(0, 500),
+    videoTitle: String(video?.title || row?.video_title || 'Untitled video').slice(0, 500),
+    document: serialized, updatedAt: now(),
+  });
+  stmts.bumpNotes.run(userId);
+  return { record: noteRecord(stmts.noteByKey.get(userId, courseId, videoId)), notesRevision: data.notesRevision + 1 };
+});
+
+const deleteNotebook = db.transaction((userId, courseId, expectedNotesRevision) => {
+  if (getUserData(userId).notesRevision !== expectedNotesRevision) return null;
+  stmts.clearNotebook.run(now(), userId, courseId);
+  stmts.bumpNotes.run(userId);
+  return getNotebook(userId, courseId);
+});
 
 function importLegacyRows(userId, courses, stats) {
   const batchId = `legacy-import:${userId}`;
@@ -349,9 +449,14 @@ function saveUserData(userId, data, expectedRevision, importLegacy = false) {
   return saveUserDataTx(userId, data, expectedRevision, importLegacy);
 }
 
-const importUserDataTx = db.transaction((userId, data, expectedRevision) => {
+const importUserDataTx = db.transaction((userId, data, expectedRevision, expectedNotesRevision) => {
   const importedAt = now();
   stmts.createData.run(userId, importedAt);
+  if (getUserData(userId).notesRevision !== expectedNotesRevision) return null;
+  const notebooks = noteModel.validateRecords(data.notebooks || []);
+  const existingKeys = new Set(stmts.notesByUser.all(userId).map(row => row.course_id + '/' + row.video_id));
+  for (const record of notebooks) existingKeys.add(record.courseId + '/' + record.videoId);
+  if (existingKeys.size > noteModel.MAX_DOCUMENTS) throw new Error('Too many notebook documents.');
   const result = stmts.saveData.run({
     userId,
     courses: JSON.stringify(data.courses),
@@ -363,6 +468,12 @@ const importUserDataTx = db.transaction((userId, data, expectedRevision) => {
   });
   if (!result.changes) return null;
 
+  stmts.clearNotes.run(importedAt, userId);
+  for (const record of notebooks) {
+    if (!record.document) continue;
+    stmts.writeNote.run({ ...record, userId, document: JSON.stringify(record.document), updatedAt: importedAt });
+  }
+  stmts.bumpNotes.run(userId);
   stmts.deleteActivity.run(userId);
   stmts.deleteWatch.run(userId);
   stmts.deleteBatches.run(userId);
@@ -387,8 +498,8 @@ const importUserDataTx = db.transaction((userId, data, expectedRevision) => {
   return Number(stmts.dataByUser.get(userId).revision);
 });
 
-function importUserData(userId, data, expectedRevision) {
-  return importUserDataTx(userId, data, expectedRevision);
+function importUserData(userId, data, expectedRevision, expectedNotesRevision = 0) {
+  return importUserDataTx(userId, data, expectedRevision, expectedNotesRevision);
 }
 
 const trackTx = db.transaction((userId, payload) => {
@@ -529,7 +640,7 @@ function getHistory(userId, page = 1, pageSize = 50) {
   }));
 }
 
-function getExportData(userId) {
+const getExportData = db.transaction(userId => {
   const user = getUserById(userId);
   const data = getUserData(userId);
   const activity = stmts.activityRows.all(userId).map((row) => ({
@@ -548,13 +659,14 @@ function getExportData(userId) {
   }));
   return {
     schema: 'focustube-user-export',
-    schemaVersion: 1,
+    schemaVersion: 2,
     exportedAt: now(),
     profile: publicUser(user),
     courses: data.courses,
     stats: data.stats,
     settings: data.settings,
     workspace: data.workspace,
+    notebooks: stmts.notesByUser.all(userId).filter(row => row.document_json).map(noteRecord),
     dashboard: {
       summary: getStatsSummary(userId),
       dailyActivity: activity,
@@ -563,10 +675,11 @@ function getExportData(userId) {
     source: {
       app: 'FocusTube',
       profileRevision: data.revision,
+      notesRevision: data.notesRevision,
       profileUpdatedAt: data.updatedAt,
     },
   };
-}
+});
 
 function cleanup() {
   const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
@@ -596,6 +709,10 @@ module.exports = {
   deleteSession,
   revokeUserSessions,
   getUserData,
+  getNotebooks,
+  getNotebook,
+  saveNote,
+  deleteNotebook,
   saveUserData,
   importUserData,
   track,

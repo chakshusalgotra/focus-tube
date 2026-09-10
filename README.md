@@ -9,7 +9,7 @@ No recommendation feed. No comments. No unrelated rabbit holes.
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![Express](https://img.shields.io/badge/Express-4.x-111111?logo=express)](https://expressjs.com/)
 [![SQLite](https://img.shields.io/badge/SQLite-local%20first-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
-[![Security audit](https://img.shields.io/badge/npm%20audit-0%20vulnerabilities-2fd57b)](#validation)
+[![Security audit](https://img.shields.io/badge/npm%20audit-review%20required-f0ad4e)](#validation)
 
 </div>
 
@@ -17,7 +17,7 @@ No recommendation feed. No comments. No unrelated rabbit holes.
 
 ## Overview
 
-FocusTube is a local-first web application that converts a public YouTube playlist or a single YouTube video into a distraction-free learning workspace. It combines a custom player, course progress, profiles, streaks, analytics, certificates, and data export in one self-hosted application.
+FocusTube is a local-first web application that converts a public YouTube playlist or a single YouTube video into a distraction-free learning workspace. It combines a custom player, course progress, timestamped notebooks, profiles, streaks, analytics, certificates, and data export in one self-hosted application.
 
 Discover videos and playlists by keyword, or import a YouTube link directly. The application does not require a YouTube Data API key. Search results, playlist data, and video metadata are read from public YouTube pages, while playback uses the YouTube IFrame API.
 
@@ -103,6 +103,20 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 - Add per-course checklists and ordered roadmaps with combined progress and a continue-learning action.
 - Save boards, tasks, sprints, checklists, and roadmaps in the revisioned profile, with export/import support.
 
+### Course notebooks
+
+- Each course has a private notebook with one optional rich-text document per video. Opening an empty editor does not create a saved document.
+- Write beside the video on wide screens or below it on smaller screens. The **Notes** header collapses or expands the pane without discarding edits or changing Read/Edit mode; collapsing gives the player more room on desktop. Headings, bold, italic, lists, links, inline code, and code blocks are supported by a locally served Quill editor.
+- A new paragraph captures the matching video's playback time when you first type into it. The timestamp is hidden metadata, not visible note text. Wrapped screen lines are not separate paragraphs.
+- Editing, formatting, splitting, and undo/redo preserve existing anchors. New notes written without a matching ready player have no timestamp; the app never guesses one from saved progress.
+- Notes open in **Read** mode. Click or keyboard-activate a paragraph to open its source moment without switching to Edit. Choose **Edit** explicitly to write; video changes preserve your selected mode. Authored hyperlinks retain their own destination.
+- Open **Course notebook** while watching, or **Notebooks** in the library, to read all written video documents without starting the player.
+- Notes autosave after 800 ms of inactivity. **Saved** means the server acknowledged that document. Failed saves retain a per-profile, per-tab local draft for reload recovery when browser storage is available. Conflicting edits require **Keep my draft** or **Use saved version**; they are never silently merged.
+- Playlist changes and course removal do not delete notes. Removed courses remain as archived notebooks. **Delete notebook** explicitly clears their documents. Guest notes follow the existing 90-day inactive-profile retention policy.
+- **Export Markdown** creates one portable course document with video source links. **Print / Save PDF** opens the browser print dialog with a clean notebook layout. Code blocks and paragraphs containing authored links use separate Source links where necessary. Link destinations include playback seconds even though displayed text has no time labels.
+
+Limits are 256 KiB, 2,000 paragraphs, and 10,000 document operations per video; 5 MiB of active note content and 20,000 distinct video-note keys per profile. Cleared records keep small revision markers to prevent stale tabs from resurrecting deleted notes. Notes are stored separately from board/task data and have independent save revisions. No AI service, transcript service, or external editor CDN is used.
+
 ### Profiles and persistence
 
 - Username/password accounts using scrypt password hashing.
@@ -135,13 +149,14 @@ The profile menu can export a pretty-printed, versioned JSON file containing:
 - User settings and aggregate statistics
 - Daily site activity
 - Complete watch history
+- Course notebooks, including formatting, hidden playback anchors, and archived notes
 - Export schema and source metadata
 
 Password hashes, salts, session cookies, and session tokens are never included.
 
-The same menu can import a FocusTube schema-version-1 JSON export. Importing atomically replaces the current profile's courses, progress, settings, daily activity, and watch history while preserving its username, password, and sessions. A confirmation shows the number of courses and history records before anything changes.
+The same menu accepts FocusTube schema-version-1 and schema-version-2 JSON exports. Importing atomically replaces the current profile's courses, progress, settings, daily activity, watch history, and notebooks while preserving its username, password, and sessions. A confirmation shows the course, history, and video-note counts before anything changes. Unsaved notes must be resolved before a full export, import, or sign-out.
 
-Workspace boards, tasks, checklists, sprints, and roadmaps are included in new exports and restored on import. Older exports without workspace data restore an empty workspace.
+Workspace boards, tasks, checklists, sprints, and roadmaps are included in exports and restored on import. Older exports without workspace data restore an empty workspace. Version-1 exports have no notebooks and clear existing notes during a full restore, with an explicit warning. New version-2 exports require an updated FocusTube installation to restore. Imports check both profile and notebook revisions so a concurrent edit cannot be silently overwritten.
 
 ### Backend download API
 
@@ -338,12 +353,14 @@ Exports use the versioned schema:
 ```json
 {
   "schema": "focustube-user-export",
-  "schemaVersion": 1,
-  "exportedAt": "2026-08-04T00:00:00.000Z",
+  "schemaVersion": 2,
+  "exportedAt": "2026-09-10T00:00:00.000Z",
   "profile": {},
   "courses": {},
   "stats": {},
   "settings": {},
+  "workspace": {},
+  "notebooks": [],
   "dashboard": {
     "summary": {},
     "dailyActivity": [],
@@ -353,7 +370,7 @@ Exports use the versioned schema:
 }
 ```
 
-Schema-version-1 exports can be restored from the profile menu. New exports include workspace data; older exports without it restore an empty workspace.
+Both schema versions can be restored from the profile menu. Version 2 includes `notebooks` records with course/video IDs, titles, and versioned Delta documents. Paragraph attributes carry `blockId` and optional numeric `anchorSeconds`. Exported revisions are informational; restoring advances the destination's live revisions rather than reusing old ones. The existing 25 MB full-import limit still applies.
 
 ## Security model
 
@@ -423,12 +440,23 @@ Invalid input returns `400`, missing authentication returns `401`, and upstream 
 | `GET` | `/api/data` | Load the current revisioned profile snapshot. |
 | `PUT` | `/api/data` | Save courses, statistics, and settings with revision checking. |
 | `GET` | `/api/export` | Download the complete safe user-data JSON export. |
-| `POST` | `/api/import?revision=...` | Validate and restore a version-1 export, including workspace data, while preserving account identity. |
+| `POST` | `/api/import?revision=...&notesRevision=...` | Atomically restore a version-1 or version-2 export while preserving account identity. |
 | `POST` | `/api/track` | Store an idempotent active/watch-time batch. |
 | `GET` | `/api/stats/summary` | Return aggregate dashboard totals and streaks. |
 | `GET` | `/api/stats/daily` | Return day-level active and watch time. |
 | `GET` | `/api/stats/courses` | Return watch-time distribution by course. |
 | `GET` | `/api/stats/history` | Return paginated watch history. |
+
+### Authenticated notebooks
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/notebooks` | List written notebooks and the profile's `notesRevision`. |
+| `GET` | `/api/notebooks/:courseId` | Load video documents and individual revisions, including cleared-record markers. |
+| `PUT` | `/api/notebooks/:courseId/videos/:videoId` | Save `{document, revision}`; use `null` to clear a document and revision `0` for a new one. |
+| `DELETE` | `/api/notebooks/:courseId?notesRevision=...` | Clear a notebook with a profile-wide notes revision check. |
+
+Ownership always comes from the authenticated session. A new document requires a video already saved in that profile's course; existing archived documents remain editable. A stale write returns `409` with the current `record` and `notesRevision`. The API accepts only validated text Delta documents with supported formatting and HTTP(S) links; embedded files and arbitrary HTML formats are rejected. `GET /api/data` includes `notesRevision` but not note contents, and progress saves do not modify notebooks.
 
 ### Authenticated downloads
 
@@ -457,12 +485,16 @@ focus-tube/
 ├── scripts/
 │   └── update-timeline.js  # Git history and branch-stage snapshot generator
 ├── test/
+│   ├── notebooks.test.js   # Hidden anchors, autosave, notebook API and backup tests
 │   ├── timeline.test.js    # Timeline ordering, provenance, and rendering tests
 │   ├── workspace-persistence.test.js # Isolated workspace restore regression tests
 │   └── youtube-search.test.js # Deterministic search parsing and filter tests
 ├── public/
 │   ├── app.js              # Authenticated SPA, player, dashboard, sync, exports
 │   ├── index.html          # Application views and dialogs
+│   ├── notebook-model.js   # Shared note validation, anchors, and Markdown export
+│   ├── notebook-editor.js  # Quill integration and safe read/print rendering
+│   ├── notebooks.js        # Notebook views, drafts, conflicts, and save lifecycle
 │   └── styles.css          # Responsive application styling
 ├── docs/
 │   ├── timeline.md          # Timeline maintenance and stage definitions
@@ -499,6 +531,9 @@ node --check auth.js
 node --check db.js
 node --check downloads.js
 node --check public/app.js
+node --check public/notebook-model.js
+node --check public/notebook-editor.js
+node --check public/notebooks.js
 node --check youtube-search.js
 npm test
 npm audit --omit=dev
@@ -508,12 +543,14 @@ The latest validation reported:
 
 - No JavaScript syntax errors
 - No VS Code diagnostics
-- Zero known production dependency vulnerabilities
+- The 2026-09-10 audit reported four moderate findings in existing Express/query parsing and PDF dependencies. Quill is pinned to 2.0.2 to avoid the reported 2.0.3 HTML-export advisory; notebook rendering does not use Quill HTML export. Review `npm audit --omit=dev` separately before deployment.
 - Successful account, guest upgrade, logout/login, profile persistence, dashboard, export, and PDF browser flows
 - Verified revision-conflict handling and idempotent activity tracking
 - Verified loopback-only default binding
 
-`npm test` runs deterministic search, workspace persistence, and timeline tests. Coverage includes YouTube renderer formats and filters, safe result URLs, workspace export/import round trips and revision conflicts, chronological ordering, branch-stage evidence, and safe snapshot embedding. The tests require no network access; database tests use isolated in-memory SQLite databases. Live YouTube search and browser workflows should also be checked when the upstream page format changes.
+`npm test` runs deterministic search, workspace persistence, notebook, and timeline tests. Notebook coverage includes hidden anchors (including zero seconds), edits and paste boundaries, explicit playback starts, Markdown formatting, in-flight saves, recovered drafts, conflicts, ownership, deletion markers, archived notes, and backup round trips. Database tests use isolated in-memory SQLite databases; HTTP tests use a temporary loopback server with controlled authentication and require no external services. Live YouTube search and browser workflows should also be checked when the upstream page format changes.
+
+Notebook browser checks covered writing, review, exact source jumps with a controlled player clock, save failure/reload recovery, sign-out, archived notebooks, and 1440/1024/375-pixel layouts. A Chrome-generated four-page PDF was inspected with macOS PDFKit for Unicode text, code, and timestamp link annotations. PDF link preservation can differ between browsers and print drivers. The existing small mobile topbar overflow is not changed by notebooks.
 
 ## Troubleshooting
 

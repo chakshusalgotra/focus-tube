@@ -7,6 +7,7 @@ const store = require('./db');
 const { createAuth } = require('./auth');
 const { createDownloads } = require('./downloads');
 const { createSearchRequest, parseSearchResults } = require('./youtube-search');
+const noteModel = require('./public/notebook-model');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -51,6 +52,7 @@ app.use((req, res, next) => {
   next();
 });
 app.use('/api/import', express.json({ limit: '25mb' }));
+app.use('/api/notebooks', express.json({ limit: '300kb' }));
 app.use(express.json({ limit: '3mb' }));
 app.use('/api', (req, res, next) => {
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
@@ -88,6 +90,12 @@ app.get('/vendor/jspdf.js', (_req, res) =>
 );
 app.get('/vendor/chart.js', (_req, res) =>
   res.sendFile(path.join(__dirname, 'node_modules/chart.js/dist/chart.umd.js'))
+);
+app.get('/vendor/quill.js', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'node_modules/quill/dist/quill.js'))
+);
+app.get('/vendor/quill.css', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'node_modules/quill/dist/quill.snow.css'))
 );
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -522,10 +530,16 @@ function profileSnapshot(value) {
 }
 
 function importedExport(value) {
-  if (value?.schema !== 'focustube-user-export' || value?.schemaVersion !== 1) {
-    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1).');
+  if (value?.schema !== 'focustube-user-export' || ![1, 2].includes(value?.schemaVersion)) {
+    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1 or 2).');
   }
   const snapshot = profileSnapshot(value);
+  let notebooks;
+  try {
+    notebooks = noteModel.validateRecords(value.schemaVersion === 2 ? value.notebooks : []);
+  } catch (err) {
+    throw new HttpError(400, err.message);
+  }
   const dailyActivity = value.dashboard?.dailyActivity;
   const watchHistory = value.dashboard?.watchHistory;
   if (!Array.isArray(dailyActivity) || !Array.isArray(watchHistory)) {
@@ -579,10 +593,39 @@ function importedExport(value) {
   const downloadQuality = allowedQualities.has(value.profile?.downloadQuality)
     ? value.profile.downloadQuality
     : null;
-  return { ...snapshot, dailyActivity, watchHistory, downloadQuality };
+  return { ...snapshot, notebooks, dailyActivity, watchHistory, downloadQuality };
 }
 
 /* ---------- routes ---------- */
+
+app.get('/api/notebooks', auth.requireAuth, (req, res) => {
+  res.json(store.getNotebooks(req.user.id));
+});
+
+app.get('/api/notebooks/:courseId', auth.requireAuth, (req, res) => {
+  if (!noteModel.validId(req.params.courseId)) return res.status(400).json({ error: 'Invalid course.' });
+  res.json(store.getNotebook(req.user.id, req.params.courseId));
+});
+
+app.put('/api/notebooks/:courseId/videos/:videoId', auth.requireAuth, (req, res) => {
+  try {
+    const result = store.saveNote(req.user.id, req.params.courseId, req.params.videoId, req.body?.document, req.body?.revision);
+    if (result.conflict) return res.status(409).json({ ...result, error: 'This note changed in another tab. Choose which version to keep.' });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Could not save this note.' });
+  }
+});
+
+app.delete('/api/notebooks/:courseId', auth.requireAuth, (req, res) => {
+  const revision = Number(req.query.notesRevision);
+  if (!noteModel.validId(req.params.courseId) || !Number.isSafeInteger(revision) || revision < 0) {
+    return res.status(400).json({ error: 'A course and notebook revision are required.' });
+  }
+  const result = store.deleteNotebook(req.user.id, req.params.courseId, revision);
+  if (!result) return res.status(409).json({ error: 'Your notes changed. Reload the notebook before deleting it.' });
+  res.json(result);
+});
 
 app.get('/api/data', auth.requireAuth, (req, res) => {
   res.json(store.getUserData(req.user.id));
@@ -600,10 +643,12 @@ app.get('/api/export', auth.requireAuth, (req, res) => {
 app.post('/api/import', auth.requireAuth, (req, res) => {
   try {
     const revision = Number(req.query.revision);
+    const notesRevision = Number(req.query.notesRevision);
     if (!Number.isInteger(revision) || revision < 0) throw new HttpError(400, 'A profile revision is required.');
-    const nextRevision = store.importUserData(req.user.id, importedExport(req.body), revision);
+    if (!Number.isSafeInteger(notesRevision) || notesRevision < 0) throw new HttpError(400, 'A notebook revision is required. Reload before importing.');
+    const nextRevision = store.importUserData(req.user.id, importedExport(req.body), revision, notesRevision);
     if (nextRevision === null) {
-      return res.status(409).json({ error: 'Progress changed in another tab. Try importing again.' });
+      return res.status(409).json({ error: 'Progress or notes changed in another tab. Try importing again.' });
     }
     res.json({ ok: true, revision: nextRevision, user: store.publicUser(store.getUserById(req.user.id)) });
   } catch (err) {
@@ -769,6 +814,11 @@ app.get('/api/video/:id', async (req, res) => {
     if (!err.status) console.error(err);
     res.status(status).json({ error: err.message || 'Something went wrong.' });
   }
+});
+
+app.use((err, req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next(err);
+  res.status(err.status || 500).json({ error: err.status === 413 ? 'This request is too large.' : 'Invalid request data.' });
 });
 
 const cleanupTimer = setInterval(() => store.cleanup(), 6 * 60 * 60_000);

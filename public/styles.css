@@ -302,6 +302,109 @@ body.side-collapsed #sidebar { margin-left: -360px; }
 /* Never squeeze the player, controls or panels — the whole pane scrolls instead. */
 .stage > * { flex-shrink: 0; }
 
+.study-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; min-width: 0; }
+.lesson-content { display: flex; flex-direction: column; gap: 16px; min-width: 0; container-type: inline-size; }
+.lesson-content > * { flex-shrink: 0; }
+.course-notes { min-width: 0; border-left: 1px solid var(--border); padding-left: 20px; }
+.course-notes-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; font-size: 13px; font-weight: 600; cursor: pointer; list-style: none; }
+.course-notes-toggle::-webkit-details-marker { display: none; }
+.course-notes-toggle:hover { color: var(--green); }
+.course-notes-toggle:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; border-radius: 4px; }
+.course-notes[open] > .course-notes-toggle { margin-bottom: 12px; }
+.course-notes:not([open]) > .course-notes-toggle .chev { transform: rotate(-90deg); }
+@media (min-width: 1200px) {
+  .study-layout:has(> .course-notes:not([open])) { grid-template-columns: minmax(0, 1fr) 88px; }
+}
+.notebook-open-link { color: var(--muted); font-size: 12px; text-decoration: none; display: inline-block; margin-bottom: 12px; }
+.notebook-open-link:hover { color: var(--text); text-decoration: underline; }
+.notes-widget { min-width: 0; }
+.note-heading h3 { margin: 0 0 12px; font-size: 15px; font-weight: 650; letter-spacing: 0; text-transform: none; overflow-wrap: anywhere; }
+.note-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 34px; }
+.note-status { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; flex: 1; min-width: 60px; }
+.note-save-error { color: var(--danger); }
+.note-conflict { border-block: 1px solid var(--danger); padding: 12px 0; margin-bottom: 12px; }
+.note-conflict p { margin: 0 0 10px; }
+.note-conflict .btn { margin: 0 4px 6px 0; font-size: 12px; padding: 7px 8px; }
+.note-editor .ql-toolbar.ql-snow { border: 1px solid var(--border); border-radius: 6px 6px 0 0; padding: 7px 4px; font-family: inherit; background: var(--panel2); }
+.note-editor .ql-toolbar .ql-formats { margin: 0 3px 3px 0; }
+.note-editor .ql-container.ql-snow { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 6px 6px; font: inherit; background: var(--panel); }
+.note-editor .ql-editor { min-height: 300px; max-height: min(65vh, 720px); color: var(--text); font-size: 14px; line-height: 1.65; padding: 14px; overflow-wrap: anywhere; }
+.note-editor .ql-snow .ql-stroke { stroke: var(--muted); }
+.note-editor .ql-snow .ql-fill { fill: var(--muted); }
+.note-editor .ql-snow .ql-picker { color: var(--text); }
+.note-editor .ql-snow .ql-picker-options, .note-editor .ql-snow .ql-tooltip { background: var(--panel2); color: var(--text); border-color: var(--border); z-index: 20; }
+.note-editor .ql-snow .ql-tooltip { white-space: normal; width: min(280px, 100%); left: 0 !important; }
+.note-editor .ql-snow .ql-tooltip input { color: var(--text); background: var(--panel); max-width: 100%; border-color: var(--border); }
+.note-editor .ql-toolbar button:focus-visible, .note-anchored:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.note-editor .ql-editor h2 { font-size: 20px; }
+.note-editor .ql-editor h3 { font-size: 17px; text-transform: none; letter-spacing: 0; }
+.note-editor .ql-editor .ql-code-block-container { background: var(--bg); color: var(--text); white-space: pre-wrap; }
+.note-content { font-size: 14px; line-height: 1.75; overflow-wrap: anywhere; }
+.note-reader { max-height: 70vh; overflow-y: auto; padding: 0 8px; }
+.note-content h2 { font-size: 20px; line-height: 1.4; margin: 16px 0 8px; }
+.note-content h3 { font-size: 17px; text-transform: none; letter-spacing: 0; margin: 12px 0 6px; }
+.note-content p { margin: 0 0 12px; white-space: pre-wrap; }
+.note-content a { color: var(--green); }
+.note-content pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel2); padding: 10px 12px; border-radius: 4px; font-size: 12px; }
+.note-code-group > .note-block { display: block; min-height: 1.75em; }
+.note-content code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; }
+.note-anchored { cursor: pointer; border-left: 2px solid transparent; padding-left: 8px; }
+.note-anchored:hover { border-left-color: var(--green); background: rgba(47, 213, 123, 0.04); }
+.notebook-shell { max-width: 1100px; margin: 0 auto; padding: 28px 28px 72px; }
+.notebook-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--border); padding-bottom: 20px; margin-bottom: 20px; }
+.notebook-heading > div:first-child { min-width: 0; }
+.notebook-heading h1 { font-size: 25px; line-height: 1.3; letter-spacing: 0; margin: 0; overflow-wrap: anywhere; }
+.notebook-heading p { margin: 6px 0 0; font-size: 13px; }
+.notebook-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex-shrink: 0; }
+.notebook-actions .btn { border-radius: 6px; font-size: 12px; }
+.notebook-row { display: flex; align-items: center; gap: 20px; padding: 18px 0; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; }
+.notebook-row:hover h2 { text-decoration: underline; }
+.notebook-cover { width: 112px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.notebook-row-main { min-width: 0; }
+.notebook-row h2 { margin: 0; font-size: 17px; overflow-wrap: anywhere; }
+.notebook-row p { margin: 4px 0 0; font-size: 12px; }
+.notebook-filter { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 12px; margin: 20px 0; }
+.notebook-filter select { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 6px; font: inherit; padding: 9px; max-width: 100%; min-width: 0; }
+.note-document { padding: 18px 0 28px; border-bottom: 1px solid var(--border); }
+.note-document-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.note-document-heading h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.note-document-heading .btn { flex-shrink: 0; }
+#notebookEditorHost { max-width: 800px; }
+#notebookPrint { display: none; }
+@container (max-width: 700px) {
+  #controls .btn-row { flex-wrap: wrap; justify-content: flex-start; }
+  #controls .btn-row .spacer { flex-basis: 100%; height: 0; }
+  #controls #volBar { max-width: 70px; }
+}
+@media (max-width: 1199px) {
+  .study-layout { grid-template-columns: minmax(0, 1fr); }
+  .course-notes { border-left: 0; border-top: 1px solid var(--border); padding: 20px 0 0; }
+  .notebook-heading { flex-direction: column; }
+  .notebook-actions { justify-content: flex-start; flex-shrink: 1; }
+}
+@media (max-width: 600px) {
+  .notebook-shell { padding: 20px 16px 48px; }
+  .notebook-heading h1 { font-size: 22px; }
+  .notebook-actions { gap: 6px; }
+  .notebook-cover { width: 80px; }
+  .note-editor .ql-editor { min-height: 240px; max-height: 50vh; }
+  .note-controls .seg-toggle { flex-shrink: 0; }
+}
+@media print {
+  body.notebook-printing { height: auto; background: white; color: black; }
+  body.notebook-printing > :not(#notebookPrint) { display: none !important; }
+  body.notebook-printing #notebookPrint { display: block; color: black; font: 11pt/1.6 Georgia, serif; }
+  #notebookPrint h1 { font-size: 22pt; line-height: 1.3; overflow-wrap: anywhere; }
+  #notebookPrint h2, #notebookPrint h3, #notebookPrint .note-document-heading { break-after: avoid; }
+  #notebookPrint .note-document { border-color: #bbb; padding: 10pt 0; }
+  #notebookPrint .note-content { font-size: 11pt; }
+  #notebookPrint p { orphans: 3; widows: 3; }
+  #notebookPrint pre { color: black; background: #f3f3f3; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #notebookPrint a { color: #165548; text-decoration: none; }
+  #notebookPrint .note-source-link { font: 9pt sans-serif; margin-left: 6pt; }
+  @page { margin: 18mm; }
+}
+
 #playerShell {
   background: #000; border: 1px solid var(--border); border-radius: var(--radius);
   overflow: hidden; display: flex; flex-direction: column;
