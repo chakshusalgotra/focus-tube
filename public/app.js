@@ -3349,6 +3349,63 @@ async function exportProfileData() {
   }
 }
 
+async function importProfileData(file) {
+  const button = $('#importDataBtn');
+  const exportButton = $('#exportDataBtn');
+  const originalText = button.textContent;
+  try {
+    if (file.size > 25 * 1024 * 1024) throw new Error('Choose a JSON export smaller than 25 MB.');
+    let imported;
+    try {
+      imported = JSON.parse(await file.text());
+    } catch {
+      throw new Error('That file is not valid JSON.');
+    }
+    if (imported?.schema !== 'focustube-user-export' || imported?.schemaVersion !== 1) {
+      throw new Error('Choose a FocusTube user export (schema version 1).');
+    }
+    const courseCount =
+      imported.courses && typeof imported.courses === 'object' && !Array.isArray(imported.courses)
+        ? Object.keys(imported.courses).length
+        : 0;
+    const historyCount = Array.isArray(imported.dashboard?.watchHistory)
+      ? imported.dashboard.watchHistory.length
+      : 0;
+    if (
+      !confirm(
+        `Import ${courseCount} course(s) and ${historyCount} watch-history record(s) from "${file.name}"?\n\n` +
+          'This replaces the data in your current profile. Your username and password will not change.'
+      )
+    ) {
+      return;
+    }
+
+    button.disabled = true;
+    exportButton.disabled = true;
+    button.textContent = 'Importing…';
+    const activitySaved = await flushActivity();
+    const profileSaved = await persistRemoteData();
+    if (!activitySaved || !profileSaved) {
+      throw new Error('Could not sync the latest progress. Check your connection and try again.');
+    }
+    const result = await api(`/api/import?revision=${profileRevision}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(imported),
+    });
+    button.textContent = 'Import complete';
+    $('#profileModal').classList.add('hidden');
+    if (await finishAuth(result.user || authUser)) toast('Your FocusTube data was imported ✓');
+  } catch (err) {
+    toast(err.message, { error: true, ms: 5000 });
+  } finally {
+    button.disabled = false;
+    exportButton.disabled = false;
+    button.textContent = originalText;
+    $('#importDataInput').value = '';
+  }
+}
+
 /* ================= event wiring ================= */
 $('#loginTab').addEventListener('click', () => setAuthMode('login'));
 $('#registerTab').addEventListener('click', () => setAuthMode('register'));
@@ -3602,6 +3659,15 @@ $('#roadmapAddSelect').addEventListener('change', () => {
 
 profileBtn.addEventListener('click', openProfile);
 $('#exportDataBtn').addEventListener('click', exportProfileData);
+$('#importDataBtn').addEventListener('click', () => {
+  const input = $('#importDataInput');
+  input.value = '';
+  input.click();
+});
+$('#importDataInput').addEventListener('change', (event) => {
+  const [file] = event.target.files;
+  if (file) importProfileData(file);
+});
 $('#dashboardRange').addEventListener('change', loadDashboard);
 $('#historyMore').addEventListener('click', async () => {
   historyPage++;
