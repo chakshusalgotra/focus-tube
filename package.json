@@ -13,11 +13,19 @@
     "node": ">=22"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "5.3.0",
+    "@fontsource/ibm-plex-sans": "5.3.0",
+    "@prometheus-io/client": "0.16.1",
     "archiver": "^8.0.0",
     "better-sqlite3": "^13.0.2",
     "canvas-confetti": "^1.9.3",
     "chart.js": "^4.4.9",
     "express": "^4.19.2",
-    "jspdf": "^4.2.1"
+    "jspdf": "^4.2.1",
+    "lucide": "1.44.0",
+    "nodemailer": "10.0.9",
+    "pino": "10.3.1",
+    "pino-roll": "4.0.0",
+    "quill": "2.0.2"
   }
 }

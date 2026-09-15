@@ -1,0 +1,59 @@
+services:
+  app:
+    environment:
+      METRICS_ALLOWED_ADDRESSES: 172.30.26.3
+    networks:
+      default:
+      monitoring:
+        ipv4_address: 172.30.26.2
+        aliases:
+          - metrics.focustube.internal
+
+  alloy:
+    image: grafana/alloy:v1.19.2
+    profiles: [monitoring]
+    command:
+      - run
+      - --server.http.listen-addr=127.0.0.1:12345
+      - --storage.path=/var/lib/alloy
+      - --disable-reporting
+      - /etc/alloy/config.alloy
+    environment:
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      GRAFANA_METRICS_URL: ${GRAFANA_METRICS_URL:-}
+      GRAFANA_METRICS_USER: ${GRAFANA_METRICS_USER:-}
+      GRAFANA_LOGS_URL: ${GRAFANA_LOGS_URL:-}
+      GRAFANA_LOGS_USER: ${GRAFANA_LOGS_USER:-}
+      GRAFANA_API_TOKEN: ${GRAFANA_API_TOKEN:-}
+    volumes:
+      - ./ops/monitoring/config.alloy:/etc/alloy/config.alloy:ro
+      - focustube-logs:/var/log/focustube:ro
+      - alloy-data:/var/lib/alloy
+    networks:
+      default:
+      monitoring:
+        ipv4_address: 172.30.26.3
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 384m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: '5m'
+        max-file: '2'
+
+networks:
+  monitoring:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.26.0/29
+
+volumes:
+  alloy-data:

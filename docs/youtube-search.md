@@ -9,12 +9,14 @@ No YouTube Data API key, YouTube account connection, or additional dependency is
 Follow the [quick start](../README.md#quick-start) to run FocusTube, then sign in or choose **Continue as guest**. Both account types can search and save courses.
 
 1. On the library page, enter a topic such as `python programming`, `SQL window functions`, or `React testing`.
-2. Choose **All**, **Videos**, **Playlists**, or **Courses**. Changing a filter with a keyword already entered starts a new search; otherwise, select **Search** or press Enter.
+2. The **All**, **Videos**, **Playlists**, and **Courses** controls appear once keyword input is non-empty. Choose a result type to search, or select **Search** or press Enter. Typing alone does not issue a request.
 3. Review the title, creator, description snippet or lesson previews, and available duration or video count.
 4. Select **Create course** on a matching result. FocusTube fetches its current metadata and adds the course to your library while leaving the search results open.
 5. The result changes to **In library** with an **Open course** button. Open it to start learning, or continue adding other results.
 
 Result titles and thumbnails open the original video or playlist in a new tab. **Open on YouTube**, above the results, opens the current search with the same query refinement and type filter. The back-arrow control labeled **Back to library** clears the search results and input.
+
+Empty or whitespace-only input hides the result-type controls. Clearing the input also cancels an in-flight search so a late response cannot restore old results. These controls are separate from the saved library's status and Bookmarked filters, which are not reset when YouTube search is cleared.
 
 FocusTube does not automatically decide whether a result exactly matches your description. Review the content before adding it; search snippets can be incomplete.
 
@@ -33,7 +35,7 @@ The **Courses** filter is a query refinement, not an official course-only search
 
 ## Paste a Link Instead
 
-The same input also supports direct import. Recognized link input changes the submit button to **Create course** and disables the keyword filters. A successful direct import opens the course immediately.
+The same input also supports direct import. Recognized link input changes the submit button to **Create course** and hides the keyword filters. A successful direct import opens the course immediately.
 
 | Input | Behavior |
 | --- | --- |

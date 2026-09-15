@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Terms &amp; Privacy - FocusTube</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/vendor/fonts/plex/400.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/500.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/600.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/700.css" />
+  <link rel="stylesheet" href="/vendor/fonts/manrope/index.css" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body class="policy-page">
+  <a class="skip-link" href="#policyContent">Skip to content</a>
+  <header class="policy-header">
+    <a class="brand" href="/" aria-label="FocusTube home"><span class="brand-wordmark">focustube<span class="brand-dot">.</span></span></a>
+    <a class="policy-return" href="/">Back to FocusTube</a>
+  </header>
+  <main id="policyContent" class="policy-document" tabindex="-1">
+    <h1>Terms &amp; Privacy</h1>
+    <p class="policy-date">Effective <time datetime="2026-09-15">15 September 2026</time></p>
+    <nav class="policy-navigation" aria-label="Policy sections">
+      <a href="#terms">Terms and conditions</a>
+      <a href="#privacy">Privacy policy</a>
+      <a href="#contact">Contact</a>
+    </nav>
+
+    <section id="terms" class="policy-section" aria-labelledby="termsTitle" tabindex="-1">
+      <h2 id="termsTitle">Terms and conditions</h2>
+      <p>These terms describe the use of this FocusTube instance, an invitation-only learning workspace managed by its site administrator. By using the service, you agree to these terms. If you do not agree, do not use the service. Nothing in these terms limits rights that cannot be excluded under applicable law.</p>
+
+      <h3>Your account</h3>
+      <p>Use an invitation intended for you and provide details you are authorized to use. Keep your password, verification codes, invitation links, and account exports private. You are responsible for activity you authorize through your account. Contact the site administrator if you suspect unauthorized access. Changing your username or password does not transfer ownership of your learning data.</p>
+
+      <h3>Acceptable use</h3>
+      <p>Use FocusTube lawfully and respect other people and their content. Do not access another person's account without permission, bypass access controls or rate limits, disrupt the service, or submit content you are not entitled to use. The administrator may restrict access to address misuse, security risks, or legal obligations, subject to applicable law.</p>
+
+      <h3>Your notes and third-party content</h3>
+      <p>You retain your rights in original notes and other content you provide. You permit the service to store and process that content as needed to operate, synchronize, and back up your workspace. This does not grant other members a right to your private notes.</p>
+      <p>YouTube videos belong to their respective rights holders and remain subject to <a href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">YouTube's terms</a>. FocusTube does not grant permission to copy or redistribute third-party material. Videos may be removed, changed, or unavailable for embedding independently of FocusTube.</p>
+
+      <h3>Progress, certificates, and backups</h3>
+      <p>Progress and activity statistics reflect information recorded by the application; they are not a guarantee of learning outcomes. A FocusTube completion certificate is a record of application completion, not an accredited qualification or endorsement by a video creator.</p>
+      <p>You can export your workspace from Settings. Importing a backup replaces the current profile's courses, progress, notes, settings, and history after confirmation. It does not replace your account credentials. Keep exports secure and review import warnings before proceeding.</p>
+
+      <h3>Availability and changes</h3>
+      <p>The service may change or be interrupted by maintenance, network issues, or third-party availability. No uninterrupted availability or error-free operation is promised. Material changes to these terms will be reflected by an updated effective date; the administrator is responsible for any additional notice required by law.</p>
+
+      <h3>Leaving the service</h3>
+      <p>You can stop using FocusTube at any time. Export any data you want to retain and contact the administrator to request account closure or deletion. Signing out alone does not delete an account, its learning data, or backups.</p>
+    </section>
+
+    <section id="privacy" class="policy-section" aria-labelledby="privacyTitle" tabindex="-1">
+      <h2 id="privacyTitle">Privacy policy</h2>
+      <p>This notice explains how the FocusTube application handles data. The site administrator operates this instance and is responsible for its hosting, provider configuration, access to backups, and applicable privacy obligations. Hosting and third-party services may also process information under their own notices.</p>
+
+      <h3>Information we process</h3>
+      <ul>
+        <li><strong>Account details:</strong> email, verification status, display name, optional username, role, account status, and creation date. Passwords are stored as salted scrypt hashes, not as plaintext passwords.</li>
+        <li><strong>Learning data:</strong> saved course and video metadata, playback positions, progress, notes, tasks, checklists, roadmaps, settings, and recorded site and watch activity.</li>
+        <li><strong>Security and activity information:</strong> hashed session tokens, hashed verification challenges, rate-limit records, limited account events, and coarse activity status. Source addresses and identifiers are used to enforce security limits; stored rate-limit keys are HMAC-derived.</li>
+        <li><strong>Operational information:</strong> request counts, response codes, timing, service health, and bounded diagnostic logs. Application logs exclude raw request bodies, cookies, password/code values, email addresses, and note content. Hosting or proxy logs can differ.</li>
+      </ul>
+
+      <h3>Why information is used</h3>
+      <p>We use this information to authenticate accounts, send verification messages, operate and restore your workspace, display learning statistics, prevent abuse, and troubleshoot failures. The application does not implement advertising profiles, session replay, or recording of typed keystrokes. Cursor reflection coordinates are used only to render the effect on your device and are not sent to the server by that feature.</p>
+
+      <h3>Cookies and device storage</h3>
+      <p>An HttpOnly, SameSite=Strict session cookie maintains sign-in. Session lifetime is configured by the administrator, with a default of 30 days. Signing out invalidates that session. Changing your password revokes old sessions and creates a replacement session for the browser completing the change.</p>
+      <p>Browser storage holds preferences such as theme, appearance, course-panel visibility, and notes dimensions. It may also hold unsynchronized note drafts for recovery or earlier browser-only course data. Clearing browser storage removes these preferences and may remove unsaved drafts. Device-only preferences are not included in server data exports.</p>
+
+      <h3>Who can access information</h3>
+      <p>Members can access their own learning records through the application. Active administrators can view limited account and usage metadata for administration; that role does not itself grant application access to other members' private notes or courses. People operating the server or maintaining its database and backups may have infrastructure-level access and must protect it appropriately.</p>
+      <p>The configured email provider processes recipient addresses and verification messages. Loading YouTube scripts, videos, or thumbnails can send browser and network information to Google/YouTube. The player first uses YouTube's privacy-enhanced host but may fall back to the standard embed host; this is not a guarantee of zero third-party tracking. See <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Google's privacy policy</a>.</p>
+      <p>Cloudflare Turnstile is contacted only when the administrator enables CAPTCHA. It processes challenge information and the source address to check for abuse; see <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener noreferrer">Cloudflare's privacy policy</a>. Optional external monitoring may receive sanitized operational logs and metrics when enabled. Ask the administrator which hosting, mail, security, and monitoring providers are used by this instance and where they process data.</p>
+
+      <h3>Retention</h3>
+      <p>Email codes expire after ten minutes and allow at most five incorrect guesses. Session and security records are subject to configured expiry, rate limits, and periodic cleanup. Account-event history retains up to 30 days and is capped at 10,000 records; daily membership aggregates retain up to 90 days. Old last-sign-in/activity timestamps are cleared by periodic cleanup after 30 days. Diagnostic logs use bounded rotation rather than a guaranteed fixed number of days.</p>
+      <p>Regular account and learning data have no automatic age-based deletion in the application. Removing a course preserves its notebook. Deleting a notebook clears its content while retaining revision markers to prevent stale tabs from restoring it. Existing guest profiles are removed after 90 days of inactivity. Backups can retain earlier data after live records are deleted, until the administrator removes or expires those backups.</p>
+
+      <h3>Your choices and requests</h3>
+      <p>You can export your learning data, update supported account details, change your password, and delete notebook content in the application. Self-service account deletion and arbitrary changes to an existing email address are not currently available. Contact the administrator for access, correction, deletion, retention, or other privacy requests. Requests may require verification of account ownership and are handled according to applicable law and the instance's operational requirements.</p>
+
+      <h3>Security</h3>
+      <p>Access controls, hashed credentials, and encrypted mail transport help protect information, but no service can guarantee perfect security. Production deployments must use HTTPS. Protect your device and exports, use a unique password, and report suspected security issues to the administrator.</p>
+    </section>
+
+    <section id="contact" class="policy-section" aria-labelledby="contactTitle" tabindex="-1">
+      <h2 id="contactTitle">Contact the administrator</h2>
+      <p>For support, privacy requests, or questions about these terms, contact the administrator responsible for the FocusTube instance you use through your existing invitation or support channel. If you do not know who operates the instance, ask the person who invited you before providing additional personal information.</p>
+      <p>The administrator is responsible for providing any further operator identity, contact details, legal bases, provider disclosures, or notices required for their deployment and jurisdiction.</p>
+    </section>
+    <footer class="policy-footer"><a href="#policyContent">Back to top</a><a href="/">Back to FocusTube</a></footer>
+  </main>
+</body>
+</html>
