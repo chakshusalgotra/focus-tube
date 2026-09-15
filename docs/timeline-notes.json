@@ -6,7 +6,7 @@
       "id": "design-language",
       "title": "Refresh the library, player, navigation, and notes workspace",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Make finding courses, watching lessons, and writing notes feel consistent on desktop and small screens.",
       "changes": [
         "Support light and dark themes, using teal actions and coral brand/streak accents; follow the system appearance until a choice is saved.",
@@ -26,7 +26,7 @@
       "id": "invite-only-accounts",
       "title": "Add invitation-only accounts with verified email",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Control who can join while preserving existing accounts and keeping each member's learning data private.",
       "changes": [
         "Create accounts only after a valid one-use invitation and an emailed six-digit code are verified; require matching password confirmation and allow an optional unique username.",
@@ -43,7 +43,7 @@
       "id": "settings-and-policies",
       "title": "Add account settings, password changes, and public policies",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Give members one place to manage their account and workspace without interrupting lessons or losing drafts.",
       "changes": [
         "Organize Settings into Account, Appearance, Data, Terms and Privacy, and administrator-only sections with guarded dismissal and keyboard navigation.",
@@ -59,7 +59,7 @@
       "id": "operational-monitoring",
       "title": "Add private usage monitoring, sanitized logs, and health checks",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Help the operator understand application health and coarse usage without exposing members' courses or notes.",
       "changes": [
         "Provide an administrator-only view of approximate active members, account activity, origin traffic, process memory, and application storage.",
@@ -75,7 +75,7 @@
       "id": "docker-refresh",
       "title": "Refresh the local Docker app without replacing stored data",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Resolve the older local image observed on 10 September and run the current frontend and backend together.",
       "changes": [
         "The 2026-09-10 check found an old localhost:3002 image without YouTube search; that historical pending item is now resolved locally.",
@@ -89,7 +89,7 @@
       "id": "download-ui-review",
       "title": "Document course downloads as a backend-only capability",
       "recordedDate": "2026-09-15",
-      "commits": [],
+      "commits": ["dcd13de"],
       "why": "Describe the accepted website accurately without restoring previously removed download controls.",
       "changes": [
         "The 2026-09-10 review preserved a pre-existing browser download-UI removal whose original reason was not recorded.",
