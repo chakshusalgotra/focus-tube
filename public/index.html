@@ -554,8 +554,13 @@
       <section id="settingsAdmin" class="hidden" role="tabpanel" aria-labelledby="settingsAdminTab" tabindex="0">
       <div id="inviteAdmin" class="profile-data-block hidden">
         <h3>Member invitations</h3>
-        <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Site monitoring</button>
-        <button id="createInvite" class="btn ghost" type="button"><span data-ui-icon="UserPlus"></span>Create invitation</button>
+        <form id="inviteForm" class="auth-form compact">
+          <label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required /></label>
+          <div class="auth-actions">
+            <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Site monitoring</button>
+            <button id="createInvite" class="btn ghost" type="submit"><span data-ui-icon="UserPlus"></span>Create invitation</button>
+          </div>
+        </form>
         <div id="inviteResult" class="auth-form compact hidden">
           <label>Invitation link<input id="issuedInviteLink" type="text" readonly autocomplete="off" spellcheck="false" /></label>
           <div class="invite-result-actions"><span id="inviteExpiry" class="muted"></span><button id="copyInvite" class="icon-btn" type="button" title="Copy invitation link" aria-label="Copy invitation link"><span data-ui-icon="Copy"></span></button></div>

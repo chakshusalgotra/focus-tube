@@ -137,6 +137,8 @@ db.transaction(() => {
       id INTEGER PRIMARY KEY,
       token_hash TEXT NOT NULL UNIQUE CHECK(length(token_hash) = 64 AND token_hash NOT GLOB '*[^0-9a-f]*'),
       is_admin INTEGER NOT NULL DEFAULT 0 CHECK(is_admin IN (0, 1)),
+      max_uses INTEGER NOT NULL DEFAULT 1 CHECK(typeof(max_uses) = 'integer' AND max_uses BETWEEN 1 AND 1000 AND (is_admin = 0 OR max_uses = 1)),
+      use_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(use_count) = 'integer' AND use_count BETWEEN 0 AND max_uses),
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL CHECK(expires_at > created_at),
       consumed_at TEXT CHECK(consumed_at IS NULL OR (consumed_at >= created_at AND consumed_at < expires_at))
@@ -196,6 +198,14 @@ db.transaction(() => {
     );
     CREATE INDEX IF NOT EXISTS auth_audit_time_idx ON auth_audit(created_at DESC);
   `);
+  const invitationColumns = new Set(db.pragma('table_info(invitations)').map(column => column.name));
+  if (!invitationColumns.has('max_uses')) {
+    db.exec("ALTER TABLE invitations ADD COLUMN max_uses INTEGER NOT NULL DEFAULT 1 CHECK(typeof(max_uses) = 'integer' AND max_uses BETWEEN 1 AND 1000 AND (is_admin = 0 OR max_uses = 1))");
+  }
+  if (!invitationColumns.has('use_count')) {
+    db.exec("ALTER TABLE invitations ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(use_count) = 'integer' AND use_count BETWEEN 0 AND max_uses)");
+    db.exec('UPDATE invitations SET use_count = 1 WHERE consumed_at IS NOT NULL');
+  }
   if (firstSetup) db.prepare('INSERT INTO auth_workspace (id, max_members) VALUES (1, 100)').run();
 }).immediate();
 
@@ -445,8 +455,9 @@ function setMemberLimit(limit) {
 const activeAdmin = db.prepare("SELECT 1 FROM users WHERE is_admin = 1 AND account_state = 'active' LIMIT 1");
 const inviteByHash = db.prepare('SELECT * FROM invitations WHERE token_hash = ?');
 
-const issueInvitationTx = db.transaction(({ tokenHash, actorSessionHash, bootstrap = false }) => {
+const issueInvitationTx = db.transaction(({ tokenHash, actorSessionHash, bootstrap = false, maxUses = 1 }) => {
   getAuthWorkspace();
+  if (!Number.isSafeInteger(maxUses) || maxUses < 1 || maxUses > 1000 || (bootstrap && maxUses !== 1)) throw authFailure('INVALID_REQUEST');
   const createdAt = now();
   if (bootstrap) {
     if (activeAdmin.get()) throw authFailure('ADMIN_EXISTS');
@@ -457,9 +468,9 @@ const issueInvitationTx = db.transaction(({ tokenHash, actorSessionHash, bootstr
   }
   const expiresAt = new Date(Date.parse(createdAt) + 86400000).toISOString();
   const result = db.prepare(`
-    INSERT INTO invitations (token_hash, is_admin, created_at, expires_at) VALUES (?, ?, ?, ?)
-  `).run(tokenHash, bootstrap ? 1 : 0, createdAt, expiresAt);
-  return { id: Number(result.lastInsertRowid), expiresAt };
+    INSERT INTO invitations (token_hash, is_admin, max_uses, created_at, expires_at) VALUES (?, ?, ?, ?, ?)
+  `).run(tokenHash, bootstrap ? 1 : 0, maxUses, createdAt, expiresAt);
+  return { id: Number(result.lastInsertRowid), expiresAt, maxUses, useCount: 0 };
 });
 
 function issueInvitation(values) {
@@ -468,7 +479,7 @@ function issueInvitation(values) {
 
 function invitationAvailable(inviteHash) {
   const invitation = inviteByHash.get(inviteHash);
-  return !!invitation && !invitation.consumed_at && invitation.expires_at > now();
+  return !!invitation && !invitation.consumed_at && invitation.use_count < invitation.max_uses && invitation.expires_at > now();
 }
 
 const issueEmailVerificationTx = db.transaction(values => {
@@ -545,7 +556,7 @@ const redeemInvitationTx = db.transaction(values => {
   const workspace = getAuthWorkspace();
   const createdAt = now();
   const invitation = inviteByHash.get(values.inviteHash);
-  if (!invitation || invitation.consumed_at || invitation.expires_at <= createdAt) throw authFailure('INVALID_INVITATION');
+  if (!invitation || invitation.consumed_at || invitation.use_count >= invitation.max_uses || invitation.expires_at <= createdAt) throw authFailure('INVALID_INVITATION');
   const guest = values.guestSessionHash ? stmts.sessionUser.get(values.guestSessionHash, createdAt) : null;
   if (values.guestSessionHash && !guest) throw authFailure('UNAUTHENTICATED');
   if (guest && (!guest.is_guest || invitation.is_admin)) throw authFailure('REGISTRATION_CONFLICT');
@@ -566,8 +577,9 @@ const redeemInvitationTx = db.transaction(values => {
     userId = Number(result.lastInsertRowid);
     stmts.createData.run(userId, createdAt);
   }
-  const consumed = db.prepare(`UPDATE invitations SET consumed_at = ?
-    WHERE token_hash = ? AND consumed_at IS NULL AND expires_at > ?`).run(createdAt, values.inviteHash, createdAt);
+  const consumed = db.prepare(`UPDATE invitations SET use_count = use_count + 1,
+    consumed_at = CASE WHEN use_count + 1 = max_uses THEN ? ELSE NULL END
+    WHERE token_hash = ? AND consumed_at IS NULL AND use_count < max_uses AND expires_at > ?`).run(createdAt, values.inviteHash, createdAt);
   if (consumed.changes !== 1) throw authFailure('INVALID_INVITATION');
   db.prepare('UPDATE users SET email_verified_at = ? WHERE id = ?').run(createdAt, userId);
   const expiresAt = new Date(Date.parse(createdAt) + values.sessionMs).toISOString();

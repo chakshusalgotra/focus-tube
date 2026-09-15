@@ -4808,23 +4808,28 @@ for (const kind of ['auth', 'enrollment']) $('#' + kind + 'Resend').addEventList
     button.disabled = Number(button.dataset.retryUntil || 0) > Date.now() || Date.now() < (emailChallenges[kind]?.resendAt || 0);
   }
 });
-$('#createInvite').addEventListener('click', async () => {
+$('#inviteForm').addEventListener('submit', async event => {
+  event.preventDefault();
   const button = $('#createInvite');
-  if (button.disabled) return;
+  const limit = $('#inviteMaxUses');
+  if (button.disabled || !event.currentTarget.reportValidity()) return;
+  const maxUses = limit.valueAsNumber;
   const generation = sessionGeneration;
   button.disabled = true;
+  limit.disabled = true;
   clearIssuedInvite();
   $('#inviteError').classList.add('hidden');
   try {
-    const result = await api('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    const result = await api('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxUses }) });
     if (generation !== sessionGeneration || !$('#profileModal').open) return;
     $('#issuedInviteLink').value = result.inviteUrl;
-    $('#inviteExpiry').textContent = `Expires ${new Date(result.expiresAt).toLocaleString()}`;
+    $('#inviteExpiry').textContent = `Limit: ${result.maxUses} signup${result.maxUses === 1 ? '' : 's'}. Expires ${new Date(result.expiresAt).toLocaleString()}`;
     $('#inviteResult').classList.remove('hidden');
   } catch (err) {
     if (generation === sessionGeneration) showAccountError(err, $('#inviteError'), button);
   } finally {
     button.disabled = Number(button.dataset.retryUntil || 0) > Date.now();
+    limit.disabled = false;
   }
 });
 $('#copyInvite').addEventListener('click', async () => {

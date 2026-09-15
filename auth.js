@@ -29,6 +29,7 @@ const errors = {
   CAPTCHA_FAILED: [400, 'The security check expired or failed. Try it again.'],
   CAPTCHA_UNAVAILABLE: [503, 'The security check is temporarily unavailable. Try again later.'],
   INVALID_INVITATION: [400, 'This invitation is invalid or unavailable.'],
+  INVALID_INVITATION_LIMIT: [400, 'Allowed signups must be a whole number between 1 and 1,000.'],
   INVALID_CREDENTIALS: [401, 'Invalid email or password.'],
   UNAUTHENTICATED: [401, 'Sign in to continue.'],
   FORBIDDEN: [403, 'This action is not allowed.'],
@@ -350,9 +351,11 @@ function createAuth(store, options = {}) {
   invitesRouter.post('/', requireAuth, route((req, res) => {
     if (!req.user.is_admin) fail('FORBIDDEN');
     reserve(req, [{ key: budgetKey('invite-issuer', req.user.id), limit: 20 }]);
-    validateBody(req.body, []);
+    validateBody(req.body, ['maxUses']);
+    const maxUses = req.body.maxUses === undefined ? 1 : req.body.maxUses;
+    if (!Number.isSafeInteger(maxUses) || maxUses < 1 || maxUses > 1000) fail('INVALID_INVITATION_LIMIT');
     const token = crypto.randomBytes(32).toString('base64url');
-    const result = store.issueInvitation({ tokenHash: tokenHash(token), actorSessionHash: req.sessionHash });
+    const result = store.issueInvitation({ tokenHash: tokenHash(token), actorSessionHash: req.sessionHash, maxUses });
     observe('invite', 'success');
     res.status(201).json({ ...result, inviteUrl: `${req.authOrigin}/#join=${token}` });
   }));

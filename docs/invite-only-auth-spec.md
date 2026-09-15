@@ -6,9 +6,9 @@ Status: implemented and verified locally on port 3002. Release documentation upd
 
 | Action | Current behavior |
 | --- | --- |
-| Join | Requires an unused invitation, verified six-digit email code, and matching password confirmation. A unique username is optional. |
+| Join | Requires an unexpired invitation with remaining uses, a verified six-digit email code, and matching password confirmation. A unique username is optional. |
 | Sign in | Existing members use email or username and their password. No new invitation is needed. |
-| Invite someone | Active administrators create member invitations. The first administrator invitation comes only from the local operator command. |
+| Invite someone | Active administrators choose 1-1,000 allowed signups per member invitation (default 1). The first administrator invitation remains single-use and comes only from the local operator command. |
 | Edit an account | Settings saves display name and username. Adding or changing the username requires the current password. |
 | Change a password | Requires the current password and matching new-password confirmation; revokes old sessions and issues a replacement to the current browser atomically. |
 | Verify an existing account | Members retain access while unverified. Email verification requires a code and current password; no invented address or automatic verification is applied. |
@@ -393,3 +393,15 @@ Configuration names and safe defaults are in [.env.example](../.env.example); se
 Verification includes real-route tests for required confirmation, usernames, email-code context/expiry/guess limits, delivery failure, resend replacement, verification rollback, account-session binding, password rotation, and optional CAPTCHA enforcement. Browser fixtures cover confirmation before requests, two-stage signup, profile verification, CAPTCHA-required behavior, cleanup, and no browser-storage persistence. The full deterministic suite passed 119 tests on 2026-09-15 without sending real email.
 
 The initial email tests used controlled delivery because local SMTP was not configured at that time. A separate local SMTP check on 2026-09-14 subsequently authenticated with verified TLS and received provider acceptance for a labeled test message. That does not establish inbox delivery or hosted mail readiness. Live Turnstile challenges and inbox delivery are not claimed. An installation without SMTP still correctly disables new signup while preserving existing-member sign-in and learning data.
+
+## 15. Reusable Member Invitations
+
+This extension supersedes the single-use-only member-invitation contract above. **Settings > Administration > Member invitations** includes an **Allowed signups** numeric input from 1 to 1,000, defaulting to 1. The Site monitoring control and other settings remain available. `POST /api/invites` accepts only optional `maxUses`; invalid types, fractions, zero, negative values, and values above 1,000 are rejected. Its response adds `maxUses` and initial `useCount: 0` to the existing ID, secret link, and expiry. The UI displays the selected limit and expiry, not invitation history or live usage.
+
+- `invitations.max_uses` and `use_count` are constrained integers. The additive transaction maps every old link to a limit of 1, with already-consumed links at count 1; reopening the database never resets counts. Bootstrap administrator invitations are constrained to one use in both the store and schema.
+- Registration and guest conversion recheck remaining uses inside the existing immediate SQLite transaction. A guarded increment commits with the email proof, account, profile, session, and auth audit event. `consumed_at` is set only when the final place is used. Failed attempts and transaction failures leave the count unchanged; visits and email challenges never reserve places.
+- The 24-hour expiry, email verification/CAPTCHA rules, admin-only issuance, normal-member role, and total workspace member cap are unchanged. A larger invitation limit cannot bypass workspace capacity or source rate limits.
+- Tests cover legacy migration, restart persistence, guest conversion, expiry, rollback, real-route validation/exhaustion, and independent SQLite connections competing for remaining invitation uses and the workspace's last member slot. Form regressions cover validation, duplicate submission, closed/account-changed views, and request errors.
+- The link remains a bearer credential and uses the approved request origin. External onboarding requires the existing reachable HTTPS deployment; a localhost URL is not a public invitation. This feature does not add revocation, an invitation dashboard, a new delivery provider, or public network exposure.
+
+Back up the target database and deploy frontend/backend together. An older application image treats every invitation as single-use, so image rollback does not retain reusable-link behavior. Existing accounts, credentials, sessions, and learning records are not rewritten by this migration.
