@@ -54,6 +54,112 @@
       window.addEventListener('afterprint', () => document.body.classList.remove('notebook-printing'));
       this.editor.enable(false);
       this.setMode(this.mode);
+      this.setupPanelSize();
+    }
+
+    setupPanelSize() {
+      const layout = find('#studyLayout');
+      const pane = find('#courseNotesHost');
+      const content = find('#courseNotesContent');
+      const toggle = find('#courseNotesToggle');
+      const handles = { width: find('#notesWidthHandle'), height: find('#notesHeightHandle') };
+      const sizes = {};
+      try {
+        const saved = JSON.parse(localStorage.getItem('ft_notes_size') || '{}');
+        for (const axis of ['width', 'height']) {
+          if (Number.isFinite(saved?.[axis]) && saved[axis] >= (axis === 'width' ? 300 : 240) && saved[axis] <= (axis === 'width' ? 900 : 1600)) {
+            sizes[axis] = saved[axis];
+            layout.style.setProperty(`--notes-${axis}`, `${saved[axis]}px`);
+          }
+        }
+      } catch {}
+      const bounds = axis => axis === 'width'
+        ? { min: 300, max: Math.max(300, Math.min(900, layout.clientWidth - 436)) }
+        : { min: 240, max: 1600 };
+      const measure = axis => (axis === 'width' ? pane : content).getBoundingClientRect()[axis];
+      const update = () => {
+        const label = pane.open ? 'Hide notes' : 'Show notes';
+        toggle.setAttribute('aria-expanded', String(pane.open));
+        toggle.setAttribute('aria-label', label);
+        toggle.title = label;
+        for (const [axis, handle] of Object.entries(handles)) {
+          const { min, max } = bounds(axis);
+          const value = Math.round(Math.max(min, Math.min(max, measure(axis))));
+          handle.setAttribute('aria-valuemin', String(min));
+          handle.setAttribute('aria-valuemax', String(max));
+          handle.setAttribute('aria-valuenow', String(value));
+          handle.setAttribute('aria-valuetext', `${value} pixels`);
+        }
+      };
+      const persist = () => {
+        try { localStorage.setItem('ft_notes_size', JSON.stringify(sizes)); } catch {}
+      };
+      const resize = (axis, value) => {
+        const { min, max } = bounds(axis);
+        sizes[axis] = Math.round(Math.max(min, Math.min(max, value)));
+        layout.style.setProperty(`--notes-${axis}`, `${sizes[axis]}px`);
+        update();
+      };
+      for (const [axis, handle] of Object.entries(handles)) {
+        let drag = null;
+        const finish = () => {
+          if (!drag) return;
+          const pointerId = drag.pointerId;
+          drag = null;
+          if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
+          document.body.classList.remove(`notes-resizing-${axis}`);
+          this.finishPanelResize = null;
+          persist();
+        };
+        const reset = () => {
+          delete sizes[axis];
+          layout.style.removeProperty(`--notes-${axis}`);
+          update();
+          persist();
+        };
+        handle.addEventListener('pointerdown', event => {
+          if (event.button !== 0 || !pane.open) return;
+          event.preventDefault();
+          this.finishPanelResize?.();
+          drag = { pointerId: event.pointerId, position: axis === 'width' ? event.clientX : event.clientY, size: measure(axis) };
+          handle.setPointerCapture(event.pointerId);
+          document.body.classList.add(`notes-resizing-${axis}`);
+          this.finishPanelResize = finish;
+        });
+        handle.addEventListener('pointermove', event => {
+          if (!drag || event.pointerId !== drag.pointerId) return;
+          const delta = axis === 'width' ? drag.position - event.clientX : event.clientY - drag.position;
+          resize(axis, drag.size + delta);
+        });
+        for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) handle.addEventListener(event, finish);
+        handle.addEventListener('dblclick', reset);
+        handle.addEventListener('keydown', event => {
+          const directions = axis === 'width' ? { ArrowLeft: 1, ArrowRight: -1 } : { ArrowDown: 1, ArrowUp: -1 };
+          if (!Object.hasOwn(directions, event.key) && !['Home', 'End', 'Enter'].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          if (event.key === 'Enter') return reset();
+          const range = bounds(axis);
+          const value = event.key === 'Home' ? range.min : event.key === 'End' ? range.max : measure(axis) + directions[event.key] * (event.shiftKey ? 64 : 16);
+          resize(axis, value);
+          persist();
+        });
+      }
+      this.setPanelOpen = open => {
+        pane.open = open;
+        if (!pane.open) this.finishPanelResize?.();
+        update();
+      };
+      toggle.addEventListener('click', () => {
+        this.setPanelOpen(!pane.open);
+        this.options.onPanelToggle?.(pane.open);
+      });
+      pane.addEventListener('toggle', () => { if (!pane.open) this.finishPanelResize?.(); update(); });
+      window.addEventListener('blur', () => this.finishPanelResize?.());
+      this.paneResizeObserver = new ResizeObserver(update);
+      this.paneResizeObserver.observe(layout);
+      this.paneResizeObserver.observe(content);
+      update();
     }
 
     report(error) {
@@ -296,7 +402,7 @@
 
     showVideo(courseId, videoId) {
       find('#courseNotebookLink').href = '#notebook=' + encodeURIComponent(courseId);
-      return this.bind(courseId, videoId, find('#courseNotesHost'));
+      return this.bind(courseId, videoId, find('#courseNotesContent'));
     }
 
     records(courseId) {
@@ -451,6 +557,7 @@
     }
 
     leave() {
+      this.finishPanelResize?.();
       this.editor.quill.update();
       if (this.active) this.save(this.active);
       this.binding++;
@@ -461,6 +568,7 @@
     }
 
     reset() {
+      this.finishPanelResize?.();
       this.states.forEach(state => { clearTimeout(state.timer); if (state.dirty) this.keepDraft(state); });
       this.generation++;
       this.requests.forEach(controller => controller.abort());

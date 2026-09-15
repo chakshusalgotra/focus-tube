@@ -1,0 +1,35 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Design assets setup",
+			"type": "shell",
+			"command": "git --no-pager status --short && npm install --save-exact @fontsource/ibm-plex-sans @fontsource-variable/manrope lucide",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Design shell verification",
+			"type": "shell",
+			"command": "node --check public/app.js && node --check server.js && node -e 'const assert = require(\"node:assert/strict\"); const fs = require(\"node:fs\"); const lucide = require(\"lucide\"); for (const name of [\"Play\", \"Pause\", \"LibraryBig\", \"PanelLeft\", \"NotebookPen\", \"ChartNoAxesCombined\", \"CircleCheck\", \"LockKeyhole\", \"Route\"]) assert.ok(lucide.icons[name], name); for (const file of [\"node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2\", \"node_modules/@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2\"]) assert.ok(fs.existsSync(file)); console.log(\"PASS: shell scripts and local design assets\");' && npm test",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Design language regressions",
+			"type": "shell",
+			"command": "node --test test/design-language.test.js && node --check public/app.js",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Design keyboard checks",
+			"type": "shell",
+			"command": "node --test test/design-language.test.js test/notebooks.test.js && node --check public/app.js",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

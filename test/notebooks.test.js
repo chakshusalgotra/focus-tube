@@ -37,21 +37,28 @@ function controllerFixture() {
   const elementFor = selector => {
     if (!elements.has(selector)) {
       const classes = new Set();
+      const properties = new Map();
       elements.set(selector, {
         classList: {
           add: value => classes.add(value), remove: value => classes.delete(value), contains: value => classes.has(value),
           toggle(value, force) { if (force) classes.add(value); else classes.delete(value); },
         },
-        setAttribute() {}, replaceChildren() {},
+        attributes: {}, listeners: {}, rectangle: { width: 380, height: 600 }, clientWidth: 1000, open: true,
+        style: { setProperty: (name, value) => properties.set(name, value), removeProperty: name => properties.delete(name), getPropertyValue: name => properties.get(name) || '' },
+        addEventListener(name, callback) { this.listeners[name] = callback; },
+        setAttribute(name, value) { this.attributes[name] = value; }, replaceChildren() {},
+        getBoundingClientRect() { return this.rectangle; },
+        setPointerCapture() {}, hasPointerCapture() { return false; },
         append(child) { child.parentElement = this; },
       });
     }
     return elements.get(selector);
   };
-  const window = { NotebookModel: model };
+  const window = { NotebookModel: model, addEventListener() {} };
   const localStorage = { getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key) };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/notebooks.js'), 'utf8'), {
-    window, document: { querySelector: elementFor }, NotebookEditor: { render() {} }, localStorage, clearTimeout, setTimeout,
+    window, document: { querySelector: elementFor, body: elementFor('body') }, NotebookEditor: { render() {} }, localStorage, clearTimeout, setTimeout,
+    ResizeObserver: class { constructor(callback) { this.callback = callback; } observe() { this.callback(); } },
   });
   const controller = Object.create(window.Notebooks.prototype);
   Object.assign(controller, {
@@ -100,6 +107,7 @@ test('player note jumps bypass resume heuristics and queue stable video identiti
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   const implementation = source.slice(source.indexOf('function playVideo('), source.indexOf('function nextIndex('));
   const requests = [];
+  let controlsResets = 0;
   const context = vm.createContext({
     NotebookModel: model, requests, sessionGeneration: 7,
     current: { course: { id: 'course1', videos: [{ id: 'aqz-KE-bpKQ', durationSeconds: 120 }], completed: {}, positions: { 'aqz-KE-bpKQ': 90 } } },
@@ -110,6 +118,7 @@ test('player note jumps bypass resume heuristics and queue stable video identiti
       setPlaybackRate() {},
     },
     safe: callback => callback(), saveCourses() {}, hideOverlays() {}, updateNowPlaying() {}, loadVideoExtras() {}, syncCourseUI() {},
+    resetPlayerControls() { controlsResets++; },
     notebooks: { showVideo() {} }, speedSel: {}, rowEls: [], posterTitle: {}, posterOverlay: { classList: { remove() {} } },
   });
   vm.runInContext('let pendingLoad = null;\n' + implementation + '\nplayVideo(0, {startSeconds: 0});', context);
@@ -120,6 +129,7 @@ test('player note jumps bypass resume heuristics and queue stable video identiti
   assert.equal(queued.videoId, 'aqz-KE-bpKQ');
   assert.equal(queued.startSeconds, 65);
   assert.equal(queued.generation, 7);
+  assert.equal(controlsResets, 2);
 });
 
 test('note mode stays in Read through source-video binds until Edit is explicitly selected', async () => {
@@ -157,7 +167,7 @@ test('a delayed note load respects a newer Read selection', async () => {
   assert.equal(elementFor('#noteEditor').classList.contains('hidden'), true);
 });
 
-test('the notes disclosure keeps native keyboard activation without controlling playback', () => {
+test('the notes toolbar button keeps native keyboard activation without controlling playback', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   const keyboard = source.slice(source.indexOf('/* keyboard shortcuts */'), source.indexOf("window.addEventListener('hashchange'"));
   let handler;
@@ -167,12 +177,71 @@ test('the notes disclosure keeps native keyboard activation without controlling 
     document: { addEventListener: (_event, callback) => { handler = callback; } },
     current: {}, togglePlay: () => playbackToggles++,
   });
-  const target = { tagName: 'SUMMARY', closest: selector => selector.includes('.course-notes-toggle') ? {} : null };
+  const target = { tagName: 'BUTTON', closest: selector => selector.includes('.course-notes-toggle') ? {} : null };
   handler({ key: ' ', target, preventDefault: () => { prevented = true; } });
   assert.equal(playbackToggles, 0);
   assert.equal(prevented, false);
   handler({ key: ' ', target: { tagName: 'BODY', closest: () => null }, preventDefault: () => {} });
   assert.equal(playbackToggles, 1);
+});
+
+test('notes resizing clamps dimensions and preserves the active document and mode', () => {
+  const { controller, elementFor, storage } = controllerFixture();
+  const active = { document: note('Unchanged note') };
+  controller.active = active;
+  controller.setupPanelSize();
+  const width = elementFor('#notesWidthHandle');
+  const height = elementFor('#notesHeightHandle');
+  const layout = elementFor('#studyLayout');
+  width.listeners.pointerdown({ button: 0, pointerId: 1, clientX: 600, preventDefault() {} });
+  width.listeners.pointermove({ pointerId: 1, clientX: -100 });
+  width.listeners.pointerup({ pointerId: 1 });
+  assert.equal(layout.style.getPropertyValue('--notes-width'), '564px');
+  height.listeners.keydown({ key: 'ArrowDown', preventDefault() {}, stopPropagation() {} });
+  assert.equal(layout.style.getPropertyValue('--notes-height'), '616px');
+  assert.deepEqual(JSON.parse(storage.get('ft_notes_size')), { width: 564, height: 616 });
+  assert.equal(controller.active, active);
+  assert.equal(controller.mode, 'read');
+  assert.equal(elementFor('body').classList.contains('notes-resizing-width'), false);
+  width.listeners.keydown({ key: 'Home', preventDefault() {}, stopPropagation() {} });
+  assert.equal(layout.style.getPropertyValue('--notes-width'), '300px');
+  height.listeners.dblclick();
+  assert.equal(layout.style.getPropertyValue('--notes-height'), '');
+});
+
+test('notes sizing restores valid device preferences without applying invalid values', () => {
+  const { controller, elementFor, storage } = controllerFixture();
+  storage.set('ft_notes_size', JSON.stringify({ width: 520, height: -1 }));
+  controller.setupPanelSize();
+  const layout = elementFor('#studyLayout');
+  assert.equal(layout.style.getPropertyValue('--notes-width'), '520px');
+  assert.equal(layout.style.getPropertyValue('--notes-height'), '');
+  assert.equal(elementFor('#notesWidthHandle').attributes['aria-valuemax'], '564');
+});
+
+test('the toolbar Notes toggle preserves the document, mode, and size preferences', () => {
+  const { controller, elementFor, storage } = controllerFixture();
+  const active = { document: note('Keep this note') };
+  controller.active = active;
+  storage.set('ft_notes_size', JSON.stringify({ width: 460, height: 520 }));
+  controller.setupPanelSize();
+  const pane = elementFor('#courseNotesHost');
+  const toggle = elementFor('#courseNotesToggle');
+  assert.equal(toggle.attributes['aria-expanded'], 'true');
+  assert.equal(toggle.attributes['aria-label'], 'Hide notes');
+  toggle.listeners.click();
+  assert.equal(pane.open, false);
+  assert.equal(toggle.attributes['aria-expanded'], 'false');
+  assert.equal(toggle.title, 'Show notes');
+  toggle.listeners.click();
+  assert.equal(pane.open, true);
+  assert.equal(toggle.attributes['aria-expanded'], 'true');
+  assert.equal(controller.active, active);
+  assert.equal(controller.mode, 'read');
+  assert.deepEqual(JSON.parse(storage.get('ft_notes_size')), { width: 460, height: 520 });
+  pane.open = false;
+  pane.listeners.toggle();
+  assert.equal(toggle.attributes['aria-expanded'], 'false');
 });
 
 test('joining paragraphs keeps the first surviving anchor and never invents unavailable times', () => {
@@ -327,21 +396,24 @@ test('notebook HTTP endpoints enforce authentication, validation, ownership, and
   const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8').split('const cleanupTimer =')[0];
   vm.runInNewContext(source + '\nmodule.exports = app;', {
     module, console, URL, Buffer, __dirname: path.join(__dirname, '..'),
-    process: { env: { PORT: String(server.address().port), ALLOWED_HOSTS: 'notebook.test' } },
+    process: { env: { PORT: String(server.address().port), ALLOWED_HOSTS: 'notebook.test', LOG_LEVEL: 'silent', APP_ENV: 'test' } },
     require(name) {
       if (name === './db') return store;
       if (name === './downloads') return { createDownloads: () => ({ router: express.Router() }) };
       if (name === './auth') return { createAuth: () => ({
         router: express.Router(),
+        invitesRouter: express.Router(),
         optionalAuth(req, _res, next) { req.user = [user, other].find(owner => String(owner.id) === req.get('x-test-user')); next(); },
         requireAuth(req, res, next) { if (!req.user) return res.status(401).json({ error: 'Sign in' }); next(); },
+        requireSession(req, res, next) { if (!req.user) return res.status(401).json({ error: 'Sign in' }); next(); },
+        requireAdmin(req, res, next) { if (!req.user?.is_admin) return res.status(403).json({ error: 'Administrator required' }); next(); },
       }) };
       return name.startsWith('.') ? require(path.join(__dirname, '..', name)) : require(name);
     },
   });
   server.on('request', module.exports);
   const request = (endpoint, { owner = user.id, body, ...options } = {}) => fetch(`http://127.0.0.1:${server.address().port}${endpoint}`, {
-    ...options, headers: { Host: 'notebook.test', 'Content-Type': 'application/json', ...(owner ? { 'x-test-user': String(owner) } : {}) },
+    ...options, headers: { Origin: `http://127.0.0.1:${server.address().port}`, 'Content-Type': 'application/json', ...(owner ? { 'x-test-user': String(owner) } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   assert.equal((await request('/api/notebooks', { owner: null })).status, 401);

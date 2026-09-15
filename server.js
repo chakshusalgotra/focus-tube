@@ -2,26 +2,46 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('node:crypto');
 const path = require('path');
 const store = require('./db');
 const { createAuth } = require('./auth');
 const { createDownloads } = require('./downloads');
 const { createSearchRequest, parseSearchResults } = require('./youtube-search');
 const noteModel = require('./public/notebook-model');
+const { createObservability } = require('./observability');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
+const monitoring = createObservability({ store, environment: process.env });
+app.locals.monitoring = monitoring;
+app.use(monitoring.middleware);
+app.all('/internal/metrics', monitoring.metricsHandler);
 
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY);
+const isLoopback = hostname => ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
+const localHttp = isLoopback(HOST) || process.env.AUTH_ALLOW_LOOPBACK_HTTP === '1';
+const publicOrigins = new Set([
+  ...(localHttp ? [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`, `http://[::1]:${PORT}`] : []),
+  ...String(process.env.AUTH_PUBLIC_ORIGINS || '').split(',').map(value => value.trim()).filter(Boolean),
+]);
+for (const origin of publicOrigins) {
+  const parsed = new URL(origin);
+  if (parsed.origin !== origin || !['http:', 'https:'].includes(parsed.protocol) ||
+      (parsed.protocol === 'http:' && (!localHttp || !isLoopback(parsed.hostname)))) {
+    throw new Error('AUTH_PUBLIC_ORIGINS requires exact HTTPS origins or approved loopback HTTP origins.');
+  }
+}
 const allowedHosts = new Set(
   [
     `localhost:${PORT}`,
     `127.0.0.1:${PORT}`,
     `[::1]:${PORT}`,
+    ...[...publicOrigins].map(origin => new URL(origin).host),
     ...String(process.env.ALLOWED_HOSTS || '')
       .split(',')
       .map((value) => value.trim().toLowerCase())
@@ -31,12 +51,13 @@ const allowedHosts = new Set(
 app.use((req, res, next) => {
   const requestHost = String(req.get('host') || '').toLowerCase();
   if (!allowedHosts.has(requestHost)) return res.status(400).send('Invalid Host header.');
+  const captchaSource = auth.captchaSiteKey ? ' https://challenges.cloudflare.com' : '';
   res.set({
     'Content-Security-Policy': [
       "default-src 'self'",
-      "script-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
-      "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
-      "connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+      "script-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
+      "frame-src https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
+      "connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
       "img-src 'self' data: https://i.ytimg.com",
       "style-src 'self' 'unsafe-inline'",
       "object-src 'none'",
@@ -44,42 +65,105 @@ app.use((req, res, next) => {
       "form-action 'self'",
       "frame-ancestors 'none'",
     ].join('; '),
-    'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
   });
   next();
 });
-app.use('/api/import', express.json({ limit: '25mb' }));
-app.use('/api/notebooks', express.json({ limit: '300kb' }));
-app.use(express.json({ limit: '3mb' }));
 app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  if (req.method === 'GET' && req.path === '/health') return next();
+  const expected = `${req.secure ? 'https' : 'http'}://${String(req.get('host')).toLowerCase()}`;
+  if (!publicOrigins.has(expected)) return res.status(403).json({ error: 'This connection is not approved for account access.', code: 'UNAPPROVED_ORIGIN' });
+  req.authOrigin = expected;
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
   const origin = req.get('origin');
-  if (!origin) return next();
   try {
-    if (new URL(origin).host !== req.get('host')) {
-      return res.status(403).json({ error: 'Cross-site request blocked.' });
+    if (!origin || new URL(origin).origin !== origin || origin !== expected) {
+      return res.status(403).json({ error: 'Cross-site request blocked.', code: 'INVALID_ORIGIN' });
     }
   } catch {
-    return res.status(403).json({ error: 'Invalid request origin.' });
+    return res.status(403).json({ error: 'Invalid request origin.', code: 'INVALID_ORIGIN' });
   }
   next();
 });
+app.use(['/api/auth', '/api/invites'], (req, res, next) => {
+  if (req.method !== 'POST') return next();
+  const bodylessLogout = req.originalUrl.split('?')[0] === '/api/auth/logout' && !req.get('transfer-encoding') && !Number(req.get('content-length') || 0);
+  if (!bodylessLogout && !req.is('application/json')) return res.status(415).json({ error: 'Send account details as JSON.', code: 'UNSUPPORTED_MEDIA_TYPE' });
+  next();
+}, express.json({ limit: '8kb' }));
+app.use('/api/import', express.json({ limit: '25mb' }));
+app.use('/api/notebooks', express.json({ limit: '300kb' }));
+app.use(express.json({ limit: '3mb' }));
 
-const auth = createAuth(store);
+const auth = createAuth(store, { observe: monitoring.observe });
 app.use('/api/auth', auth.router);
+app.use('/api/invites', auth.invitesRouter);
 app.use('/api', auth.optionalAuth);
-const downloads = createDownloads(store, auth.requireAuth);
+const downloads = createDownloads(store, auth.requireAuth, { observe: monitoring.observe });
 app.use('/api/downloads', downloads.router);
 app.get('/api/health', (_req, res) => {
+  const started = Date.now();
   try {
     store.db.prepare('SELECT 1').get();
     res.json({ status: 'ok', database: 'ok', uptimeSeconds: Math.floor(process.uptime()) });
   } catch (err) {
-    console.error('Health check failed:', err);
+    monitoring.observe('health', 'failed', (Date.now() - started) / 1000);
+    monitoring.reportError(err);
     res.status(503).json({ status: 'error', database: 'unavailable' });
+  }
+});
+
+function monitoringLink(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? url.href : null;
+  } catch { return null; }
+}
+
+app.get('/api/admin/monitoring', auth.requireAdmin, (req, res) => {
+  const page = Number(req.query.page || 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 100000) return res.status(400).json({ error: 'Invalid page.' });
+  try {
+    res.json({ ...monitoring.snapshot(), usage: store.getAdminUsage(page),
+      links: { grafana: monitoringLink(process.env.GRAFANA_DASHBOARD_URL), uptime: monitoringLink(process.env.UPTIME_DASHBOARD_URL) },
+      collection: { metricsEnabled: !!process.env.METRICS_TOKEN, environment: process.env.APP_ENV || 'local' } });
+  } catch (error) {
+    monitoring.reportError(error);
+    res.status(503).json({ error: 'Monitoring is temporarily unavailable.' });
+  }
+});
+
+app.all('/api/presence', auth.requireAuth, (req, res) => {
+  const body = req.body;
+  const tabId = body?.tabId;
+  const fields = req.method === 'PUT' ? ['tabId', 'challenge'] : ['tabId'];
+  if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return res.status(405).set('Allow', 'POST, PUT, DELETE').end();
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !fields.includes(key)) ||
+      typeof tabId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(tabId)) {
+    return res.status(400).json({ error: 'Invalid activity signal.' });
+  }
+  try {
+    if (req.method === 'POST') {
+      const challenge = crypto.randomBytes(32).toString('base64url');
+      const result = store.issuePresenceChallenge(req.sessionHash, tabId, crypto.createHash('sha256').update(challenge).digest('hex'));
+      return res.json({ challenge, ...result });
+    }
+    if (req.method === 'PUT') {
+      if (typeof body.challenge !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.challenge)) return res.status(400).json({ error: 'Invalid activity signal.' });
+      store.confirmPresence(req.sessionHash, tabId, crypto.createHash('sha256').update(body.challenge).digest('hex'));
+    } else store.clearPresence(req.sessionHash, tabId);
+    res.status(204).end();
+  } catch (error) {
+    if (error.code === 'RATE_LIMITED') return res.status(429).set('Retry-After', '15').json({ error: 'Activity update is too frequent.' });
+    if (error.code === 'INVALID_REQUEST') return res.status(400).json({ error: 'Activity signal expired.' });
+    if (error.code === 'UNAUTHENTICATED') return res.status(401).json({ error: 'Sign in to continue.' });
+    monitoring.reportError(error);
+    res.status(503).json({ error: 'Activity update unavailable.' });
   }
 });
 app.get('/vendor/confetti.js', (_req, res) =>
@@ -97,6 +181,11 @@ app.get('/vendor/quill.js', (_req, res) =>
 app.get('/vendor/quill.css', (_req, res) =>
   res.sendFile(path.join(__dirname, 'node_modules/quill/dist/quill.snow.css'))
 );
+app.get('/vendor/lucide.js', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'node_modules/lucide/dist/umd/lucide.min.js'))
+);
+app.use('/vendor/fonts/plex', express.static(path.join(__dirname, 'node_modules/@fontsource/ibm-plex-sans')));
+app.use('/vendor/fonts/manrope', express.static(path.join(__dirname, 'node_modules/@fontsource-variable/manrope')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 class HttpError extends Error {
@@ -613,6 +702,7 @@ app.put('/api/notebooks/:courseId/videos/:videoId', auth.requireAuth, (req, res)
     if (result.conflict) return res.status(409).json({ ...result, error: 'This note changed in another tab. Choose which version to keep.' });
     res.json(result);
   } catch (err) {
+    monitoring.reportError(err);
     res.status(err.status || 500).json({ error: err.message || 'Could not save this note.' });
   }
 });
@@ -631,7 +721,7 @@ app.get('/api/data', auth.requireAuth, (req, res) => {
   res.json(store.getUserData(req.user.id));
 });
 
-app.get('/api/export', auth.requireAuth, (req, res) => {
+app.get('/api/export', auth.requireSession, (req, res) => {
   const date = new Date().toISOString().slice(0, 10);
   const owner = String(req.user.username || `guest-${req.user.id}`)
     .replace(/[^a-zA-Z0-9_.-]/g, '-')
@@ -652,6 +742,7 @@ app.post('/api/import', auth.requireAuth, (req, res) => {
     }
     res.json({ ok: true, revision: nextRevision, user: store.publicUser(store.getUserById(req.user.id)) });
   } catch (err) {
+    monitoring.reportError(err);
     res.status(err.status || 500).json({ error: err.message || 'Could not import this export.' });
   }
 });
@@ -672,6 +763,7 @@ app.put('/api/data', auth.requireAuth, (req, res) => {
     }
     res.json({ ok: true, revision: nextRevision, updatedAt: new Date().toISOString() });
   } catch (err) {
+    monitoring.reportError(err);
     res.status(err.status || 500).json({ error: err.message || 'Could not save progress.' });
   }
 });
@@ -693,6 +785,7 @@ app.post('/api/track', auth.requireAuth, (req, res) => {
     store.track(req.user.id, req.body);
     res.status(204).end();
   } catch (err) {
+    monitoring.reportError(err);
     res.status(err.status || 500).json({ error: err.message || 'Could not record activity.' });
   }
 });
@@ -781,7 +874,7 @@ app.get('/api/playlist', async (req, res) => {
     res.json(result);
   } catch (err) {
     const status = err.status || 500;
-    if (!err.status) console.error(err);
+    monitoring.reportError(err);
     res.status(status).json({ error: err.message || 'Something went wrong.' });
   }
 });
@@ -811,13 +904,14 @@ app.get('/api/video/:id', async (req, res) => {
     });
   } catch (err) {
     const status = err.status || 500;
-    if (!err.status) console.error(err);
+    monitoring.reportError(err);
     res.status(status).json({ error: err.message || 'Something went wrong.' });
   }
 });
 
 app.use((err, req, res, next) => {
   if (!req.path.startsWith('/api/')) return next(err);
+  monitoring.reportError(err);
   res.status(err.status || 500).json({ error: err.status === 413 ? 'This request is too large.' : 'Invalid request data.' });
 });
 
@@ -825,12 +919,25 @@ const cleanupTimer = setInterval(() => store.cleanup(), 6 * 60 * 60_000);
 cleanupTimer.unref();
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(`\n  FocusTube running →  http://localhost:${PORT}\n`);
+  monitoring.observe('startup', 'success');
 });
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is busy. Try: PORT=3001 npm start`);
+    monitoring.observe('startup', 'failed');
     process.exit(1);
   }
   throw err;
+});
+
+let shuttingDown = false;
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  monitoring.observe('shutdown', 'success');
+  const deadline = setTimeout(() => process.exit(1), 9000);
+  deadline.unref();
+  server.close(() => {
+    monitoring.close().finally(() => { store.db.close(); clearTimeout(deadline); process.exit(0); });
+  });
+  server.closeIdleConnections();
 });

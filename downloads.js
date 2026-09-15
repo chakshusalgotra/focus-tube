@@ -34,7 +34,7 @@ function safeName(value, fallback = 'course') {
   return cleaned || fallback;
 }
 
-function createDownloads(store, requireAuth) {
+function createDownloads(store, requireAuth, { observe = () => {} } = {}) {
   const router = express.Router();
   const jobs = new Map();
   let toolsCache = null;
@@ -315,7 +315,7 @@ function createDownloads(store, requireAuth) {
     res.set('Content-Type', 'application/zip');
     const archive = archiver('zip', { zlib: { level: 6 } });
     archive.on('error', (err) => {
-      console.error(err);
+      observe('download', 'failed');
       if (!res.headersSent) res.status(500).end();
       else res.destroy(err);
     });

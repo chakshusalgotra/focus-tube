@@ -3,61 +3,124 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="light dark" />
+  <script src="auth-entry.js"></script>
+  <script src="theme.js"></script>
   <title>FocusTube — distraction-free courses</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%237c5cff'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%230e7566'/%3E%3Cpath d='M9 7l8 5-8 5z' fill='white'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/400.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/500.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/600.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/700.css" />
+  <link rel="stylesheet" href="/vendor/fonts/manrope/index.css" />
   <link rel="stylesheet" href="/vendor/quill.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header id="topbar" class="hidden">
-    <button id="backBtn" class="icon-btn hidden" title="All courses"></button>
-    <button id="sideToggle" class="icon-btn hidden" title="Toggle playlist  [ "></button>
-    <div class="brand" id="brand">Focus<span class="accent">Tube</span></div>
-    <div class="spacer"></div>
-    <button id="resyncBtn" class="icon-btn hidden" title="Re-sync playlist from YouTube"></button>
-    <button id="streakChip" class="streak-chip" title="Streak & stats">🔥 <b id="streakNum">0</b></button>
-    <button id="tasksPanelBtn" class="topbar-command" title="Quick tasks & notes">✓ Tasks</button>
-    <button id="dashboardBtn" class="topbar-command" title="Learning dashboard">Dashboard</button>
-    <button id="profileBtn" class="profile-chip" title="Profile"><span id="profileAvatar">G</span><b id="profileName">Guest</b></button>
+  <a id="skipContent" class="skip-link" href="#homeView">Skip to content</a>
+  <button id="workspaceBackdrop" class="workspace-backdrop hidden" type="button" tabindex="-1" aria-label="Close workspace navigation"></button>
+  <aside id="workspaceRail" class="workspace-rail hidden" aria-label="Workspace" data-glass>
+    <div class="workspace-rail-heading"><span class="nav-label">Workspace</span><button id="workspaceToggle" class="icon-btn" type="button" title="Collapse workspace sidebar" aria-label="Collapse workspace sidebar" aria-controls="workspaceNavigation" aria-expanded="true"><span data-ui-icon="PanelLeftClose"></span></button></div>
+    <div class="workspace-identity"><span id="railAvatar" class="workspace-initial">G</span><div><strong id="railProfileName">My learning</strong><span id="railProfileType">Guest profile</span></div></div>
+    <nav id="workspaceNavigation" class="workspace-nav" aria-label="Main navigation">
+      <a class="workspace-link" href="#" data-section="library" title="Course library" aria-label="Course library"><span data-ui-icon="LibraryBig"></span><span class="nav-text">Library</span></a>
+      <a class="workspace-link" href="#roadmaps" data-section="roadmaps" title="Roadmaps" aria-label="Roadmaps"><span data-ui-icon="Route"></span><span class="nav-text">Roadmaps</span></a>
+      <a class="workspace-link" href="#notebooks" data-section="notebooks" title="Notebooks" aria-label="Notebooks"><span data-ui-icon="NotebookPen"></span><span class="nav-text">Notebooks</span></a>
+      <button id="workspaceBoardBtn" class="workspace-link" type="button" aria-disabled="true" aria-label="Board, coming soon" title="Board, coming soon"><span data-ui-icon="Columns3" aria-hidden="true"></span><span class="nav-text">Board<span class="coming-soon">Coming soon</span></span></button>
+      <a class="workspace-link" href="#tasks" data-section="tasks" title="Tasks" aria-label="Tasks"><span data-ui-icon="ListTodo"></span><span class="nav-text">Tasks</span></a>
+      <a id="dashboardBtn" class="workspace-link" href="#dashboard" data-section="dashboard" title="Learning dashboard" aria-label="Learning dashboard"><span data-ui-icon="ChartNoAxesCombined"></span><span class="nav-text">Dashboard</span></a>
+      <button id="monitoringBtn" class="workspace-link hidden" type="button" title="Site monitoring" aria-label="Site monitoring"><span data-ui-icon="Activity"></span><span class="nav-text">Monitoring</span></button>
+    </nav>
+    <nav id="courseNavigation" class="workspace-nav course-navigation" aria-label="Course tools">
+      <button id="sideToggle" class="workspace-link hidden" type="button" title="Show course content" aria-label="Show course content" aria-controls="sidebar" aria-expanded="false"><span data-ui-icon="ListVideo" aria-hidden="true"></span><span class="nav-text">Course content</span></button>
+      <button id="courseNotesToggle" class="workspace-link course-notes-toggle" type="button" title="Show notes" aria-label="Show notes" aria-controls="courseNotesHost" aria-expanded="false"><span data-ui-icon="NotebookPen" aria-hidden="true"></span><span class="nav-text">Notes</span></button>
+      <button id="videoChatBtn" class="workspace-link" type="button" aria-disabled="true" aria-label="Chat with video, coming soon" title="Chat with video, coming soon"><span data-ui-icon="Sparkles" aria-hidden="true"></span><span class="nav-text">Chat with video<span class="coming-soon">Coming soon</span></span></button>
+    </nav>
+    <footer class="workspace-footer"><span class="workspace-private"><span data-ui-icon="LockKeyhole"></span>Personal workspace</span><button id="railLogoutBtn" class="workspace-link" type="button" title="Sign out" aria-label="Sign out"><span data-ui-icon="LogOut"></span><span class="nav-text">Sign out</span></button></footer>
+  </aside>
+  <div id="workspaceTooltip" class="workspace-tooltip hidden" role="tooltip"></div>
+  <header id="topbar" class="hidden" data-glass>
+    <div class="taskbar-main">
+      <a id="brand" class="brand" href="#" aria-label="FocusTube library" title="Back to library"><span class="brand-symbol" data-ui-icon="BookOpen"></span><span class="brand-wordmark">focustube<span class="brand-dot">.</span></span></a>
+      <div class="workspace-context"><span>Learning workspace</span><strong id="workspaceContext">Library</strong></div>
+      <div class="taskbar-course"><h1 id="courseHeading" class="course-heading"></h1><span class="course-duration" title="Total course duration"><span data-ui-icon="Clock" aria-hidden="true"></span><span id="courseDuration"></span></span></div>
+      <div class="taskbar-actions">
+        <button id="streakChip" class="streak-chip" title="Streak and statistics" aria-label="Streak and statistics"><span data-ui-icon="Flame"></span><b id="streakNum">0</b></button>
+        <button id="themeToggle" class="icon-btn" type="button" aria-label="Dark mode" aria-pressed="false" title="Switch to dark mode"><span class="theme-moon" data-ui-icon="Moon"></span><span class="theme-sun" data-ui-icon="Sun"></span></button>
+        <button id="tasksPanelBtn" class="icon-btn" title="Quick tasks" aria-label="Quick tasks" aria-haspopup="dialog" aria-controls="taskPanel" aria-expanded="false"><span data-ui-icon="ListTodo"></span></button>
+        <button id="profileBtn" class="profile-chip" title="Profile"><span id="profileAvatar">G</span><b id="profileName">Guest</b></button>
+        <button id="mobileLogoutBtn" class="icon-btn mobile-logout" type="button" title="Sign out" aria-label="Sign out"><span data-ui-icon="LogOut"></span></button>
+      </div>
+    </div>
+    <div id="headerNavActions" class="header-nav-actions">
+      <button id="backBtn" class="icon-btn hidden" type="button" title="Back to library" aria-label="Back to library"></button>
+    </div>
   </header>
 
   <main id="authView" class="auth-view">
     <section class="auth-shell">
-      <div class="auth-brand">Focus<span class="accent">Tube</span></div>
-      <h1>Keep your focus. Keep your progress.</h1>
-      <p>Sign in to sync courses, streaks, watch history, and certificates on this device.</p>
-      <div class="auth-tabs" role="tablist">
-        <button id="loginTab" class="active" type="button">Sign in</button>
-        <button id="registerTab" type="button">Create account</button>
+      <div class="auth-brand"><span class="brand-symbol" data-ui-icon="BookOpen"></span><span>focustube<span class="brand-dot">.</span></span></div>
+      <h1 id="authHeading">Your learning workspace.</h1>
+      <p id="authWelcome">Welcome back.</p>
+      <div id="authTabs" class="auth-tabs" role="group" aria-label="Account access">
+        <button id="loginTab" class="active" type="button" aria-pressed="true">Sign in</button>
+        <button id="registerTab" type="button" aria-pressed="false">Join with invitation</button>
+      </div>
+      <p id="inviteRequired" class="auth-notice hidden" role="status">An invitation is required.</p>
+      <div id="inviteAccountChoice" class="hidden">
+        <p id="inviteAccountName" class="auth-notice"></p>
+        <div class="auth-actions"><button id="inviteContinue" class="btn" type="button">Continue to account</button><button id="inviteSignOut" class="btn ghost" type="button">Sign out</button></div>
       </div>
       <form id="authForm" class="auth-form">
-        <label>Username<input id="authUsername" type="text" autocomplete="username" minlength="3" maxlength="32" required /></label>
+        <label><span id="authIdentityLabel">Email or username</span><input id="authUsername" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" required /></label>
+        <label id="authDisplayNameField" class="hidden">Display name<input id="authDisplayName" type="text" autocomplete="name" maxlength="80" /></label>
+        <label id="authHandleField" class="hidden">Username <span class="muted">(optional)</span><input id="authHandle" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" title="3-32 letters, numbers, dots, dashes, or underscores" /></label>
         <label>Password<input id="authPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
+        <label id="authConfirmField" class="hidden">Confirm password<input id="authPasswordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" /></label>
+        <div id="authCodeBlock" class="verification-fields hidden">
+          <p id="authCodeSent" class="muted" role="status"></p>
+          <label for="authCode">6-digit email code</label>
+          <div class="otp-input"><input id="authCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" aria-describedby="authCodeSent authCodeExpiry authError" /><div class="otp-cells" aria-hidden="true"></div></div>
+          <div class="verification-actions"><p id="authCodeExpiry" class="muted"></p><button id="authResend" class="btn ghost slim" type="button"><span data-ui-icon="Mail"></span><span id="authResendLabel">Resend code</span></button></div>
+        </div>
+        <div id="authCaptcha" class="captcha-container hidden"></div>
+        <p id="authCaptchaError" class="add-error hidden" role="alert"></p>
         <button id="authSubmit" class="btn" type="submit">Sign in</button>
       </form>
-      <div id="authError" class="add-error hidden"></div>
-      <div class="auth-divider"><span>or</span></div>
-      <button id="guestLogin" class="btn ghost auth-guest" type="button">Continue as guest</button>
-      <p class="auth-footnote">Guest progress is kept for 90 days of inactivity and can be upgraded later.</p>
+      <p id="authEmailUnavailable" class="auth-notice hidden" role="status">Email verification is not configured. Contact the administrator.</p>
+      <div id="authError" class="add-error hidden" role="alert"></div>
+      <div id="socialAuthOptions" class="auth-providers" role="group" aria-label="Future sign-in options">
+        <button class="btn ghost auth-provider" type="button" aria-disabled="true" title="Google sign-in is not available yet"><span data-ui-icon="LogIn"></span><span>Google<small>Coming soon</small></span></button>
+        <button class="btn ghost auth-provider" type="button" aria-disabled="true" title="GitHub sign-in is not available yet"><span data-ui-icon="LogIn"></span><span>GitHub<small>Coming soon</small></span></button>
+      </div>
+      <nav class="auth-policies" aria-label="Legal information"><a href="/policies.html#terms" target="_blank" rel="noopener noreferrer">Terms and conditions</a><a href="/policies.html#privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></nav>
+      <div id="guestMigration" class="auth-actions hidden">
+        <button id="guestExport" class="btn ghost" type="button"><span data-ui-icon="Download"></span>Export guest data</button>
+        <button id="guestSignOut" class="btn ghost" type="button">Sign out</button>
+      </div>
     </section>
   </main>
 
   <main id="homeView" class="view hidden">
     <section class="hero discovery">
-      <h1>Learn without the <span class="accent">noise</span>.</h1>
-      <p class="sub">What do you want to learn next?</p>
+      <p class="eyebrow">My learning</p>
+      <h1>Course library</h1>
       <form id="addForm" class="add-form">
         <input id="urlInput" type="search" placeholder="Search a topic or paste a YouTube link..." aria-label="Search YouTube or paste a video or playlist link" maxlength="2048" autocomplete="off" spellcheck="false" required />
         <button id="addBtn" class="btn" type="submit">Search</button>
       </form>
-      <fieldset id="searchFilters" class="search-filters" aria-label="YouTube result type">
+      <fieldset id="searchFilters" class="search-filters hidden" aria-label="YouTube result type" disabled>
         <label><input type="radio" name="searchType" value="all" checked /><span>All</span></label>
         <label><input type="radio" name="searchType" value="video" /><span>Videos</span></label>
         <label><input type="radio" name="searchType" value="playlist" /><span>Playlists</span></label>
         <label title="Full-course videos and playlists"><input type="radio" name="searchType" value="course" /><span>Courses</span></label>
       </fieldset>
       <div id="addError" class="add-error hidden" role="alert"></div>
+    </section>
+    <section id="librarySummary" class="library-summary" aria-label="Library overview">
+      <div><span class="summary-icon green" data-ui-icon="LibraryBig"></span><div><strong id="libraryCourseCount">0</strong><span>Saved courses</span></div></div>
+      <div><span class="summary-icon olive" data-ui-icon="Play"></span><div><strong id="libraryLearningCount">0</strong><span>In progress</span></div></div>
+      <div><span class="summary-icon blue" data-ui-icon="CircleCheck"></span><div><strong id="libraryCompletedCount">0</strong><span>Completed courses</span></div></div>
     </section>
     <section id="searchSection" class="search-section hidden" aria-labelledby="searchHeading">
       <div class="search-toolbar">
@@ -76,44 +139,33 @@
     </section>
     <section id="roadmapsSection" class="roadmaps-section hidden">
       <div class="courses-toolbar">
-        <h2>Roadmaps</h2>
-        <button id="newRoadmapBtn" class="btn ghost slim" type="button">＋ Roadmap</button>
+        <div><p class="eyebrow">Learning paths</p><h1>Roadmaps</h1></div>
+        <button id="newRoadmapBtn" class="btn" type="button"><span data-ui-icon="Plus"></span>New roadmap</button>
       </div>
       <div id="roadmapStrip" class="roadmap-strip"></div>
     </section>
     <section class="courses-section">
-      <div class="courses-toolbar">
-        <h2 id="coursesHeading" class="hidden">Your courses</h2>
-        <div class="toolbar-actions">
-          <a href="#notebooks" class="btn ghost slim">Notebooks</a>
-          <button id="pinnedFilterBtn" class="pinned-filter-btn hidden" type="button" title="Show only bookmarked courses">
-            <span id="pinnedFilterIcon" class="pin-ic"></span>Bookmarked
+      <div class="courses-toolbar library-toolbar">
+        <div id="libraryHeading" class="library-heading hidden"><h2 id="coursesHeading">Your courses</h2><span id="libraryResultCount" role="status" aria-live="polite"></span></div>
+        <div id="libraryControls" class="toolbar-actions library-controls hidden">
+          <label class="library-status">Status<select id="libraryStatusFilter" aria-label="Course status"><option value="all">All courses</option><option value="not-started">Not started</option><option value="in-progress">In progress</option><option value="completed">Completed</option></select></label>
+          <button id="pinnedFilterBtn" class="pinned-filter-btn" type="button" title="Show only bookmarked courses" aria-pressed="false">
+            <span id="pinnedFilterIcon" class="pin-ic"></span>Pinned
           </button>
-          <div id="homeViewToggle" class="seg-toggle hidden">
-            <button id="gridModeBtn" class="active" type="button" title="Card grid">Grid</button>
-            <button id="boardModeBtn" type="button" title="Kanban board">Board</button>
+          <div id="homeViewToggle" class="seg-toggle" role="group" aria-label="Library layout">
+            <button id="gridModeBtn" class="active" type="button" title="Grid view" aria-label="Grid view" aria-pressed="true"><span data-ui-icon="LayoutGrid"></span></button>
+            <button id="listModeBtn" type="button" title="List view" aria-label="List view" aria-pressed="false"><span data-ui-icon="List"></span></button>
           </div>
         </div>
       </div>
-      <div id="courseGrid" class="course-grid"></div>
-      <div id="boardWrap" class="board-wrap hidden">
-        <div class="board-toolbar">
-          <div id="boardModeToggle" class="seg-toggle">
-            <button id="statusBoardBtn" class="active" type="button" title="Columns by status">Status</button>
-            <button id="sprintBoardBtn" type="button" title="Time-boxed sprint columns">Sprints</button>
-          </div>
-          <div class="spacer"></div>
-          <button id="newTaskBtn" class="btn ghost slim" type="button">＋ Task</button>
-          <button id="addColumnBtn" class="btn ghost slim" type="button">＋ Column</button>
-          <button id="sprintSetupBtn" class="btn ghost slim hidden" type="button">Set up sprints</button>
-        </div>
-        <div id="board" class="board"></div>
-      </div>
+      <div id="courseGrid" class="course-grid" role="list" aria-label="Saved courses"></div>
     </section>
   </main>
 
   <main id="courseView" class="view hidden">
-    <aside id="sidebar">
+    <button id="courseContentBackdrop" class="course-content-backdrop hidden" type="button" tabindex="-1" aria-label="Close course content"></button>
+    <aside id="sidebar" aria-label="Course content">
+      <div class="playlist-heading"><span class="playlist-heading-label">Course content</span><button id="courseContentClose" class="icon-btn" type="button" title="Close course content" aria-label="Close course content"><span data-ui-icon="X" aria-hidden="true"></span></button></div>
       <div class="sidebar-head">
         <div class="side-title-row">
           <div class="course-title" id="sideTitle"></div>
@@ -123,7 +175,7 @@
         <div class="progress-track"><div id="sideProgressFill" class="progress-fill"></div></div>
         <div class="progress-label" id="sideProgressLabel"></div>
       </div>
-      <ol id="videoList"></ol>
+      <ol id="videoList" aria-label="Course lessons"></ol>
       <div class="sidebar-foot">
         <div id="courseChecklistBlock" class="course-checklist">
           <button id="courseChecklistToggle" class="extras-toggle" type="button">Checklist <span id="courseChecklistCount" class="muted"></span><span class="chev">▾</span></button>
@@ -134,42 +186,37 @@
             </form>
           </div>
         </div>
-        <button id="certBtn" class="btn cert-btn" disabled>🏆 Finish every video to unlock</button>
+        <button id="certBtn" class="btn cert-btn" disabled><span data-ui-icon="Trophy"></span>Certificate locked</button>
       </div>
     </aside>
 
     <section class="stage">
-      <div class="study-layout">
+      <div id="studyLayout" class="study-layout">
       <div class="lesson-content">
       <div id="playerShell">
-        <div id="ytWrap">
+        <div id="ytWrap" role="group" aria-label="Video player" tabindex="0">
           <div id="ytFrame"></div>
           <div id="shield"></div>
           <div id="posterOverlay" class="overlay hidden">
             <button id="posterPlay" class="giant-play" title="Play"></button>
             <div id="posterTitle" class="overlay-title"></div>
           </div>
-          <div id="pauseOverlay" class="pause-cover hidden" title="Click to resume">
-            <div class="cover-bar top"></div>
-            <div class="cover-bar bottom">
-              <span class="pause-hint">Paused — press <kbd>space</kbd> or click to resume</span>
-              <button id="peekBtn" class="peek-btn" type="button">Show full frame</button>
-            </div>
-            <button id="peekRestore" class="peek-restore" type="button">Hide YouTube UI</button>
-          </div>
+          <button id="pauseOverlay" class="pause-cover hidden" type="button" aria-label="Resume playback" title="Resume playback">
+            <span class="pause-symbol" aria-hidden="true"><span data-ui-icon="Pause"></span></span>
+          </button>
           <div id="endedOverlay" class="overlay hidden">
-            <div class="overlay-emoji">🎉</div>
+            <div class="overlay-symbol" data-ui-icon="CircleCheck"></div>
             <div class="overlay-title" id="endedTitle">Video complete!</div>
             <div class="overlay-sub hidden" id="endedCountdown"></div>
             <div class="overlay-actions">
               <button id="endedReplay" class="btn ghost">Replay</button>
               <button id="endedNext" class="btn hidden">Next video ▸</button>
               <button id="endedCancel" class="btn ghost hidden">Stay here</button>
-              <button id="endedCert" class="btn hidden">🏆 Get certificate</button>
+              <button id="endedCert" class="btn hidden"><span data-ui-icon="Trophy"></span>Get certificate</button>
             </div>
           </div>
           <div id="errorOverlay" class="overlay hidden">
-            <div class="overlay-emoji">😕</div>
+            <div class="overlay-symbol" data-ui-icon="CircleAlert"></div>
             <div class="overlay-title">This video can’t be embedded</div>
             <div class="overlay-sub">The creator disabled playback outside YouTube.</div>
             <div class="overlay-actions">
@@ -177,12 +224,11 @@
               <button id="errorSkip" class="btn">Skip to next ▸</button>
             </div>
           </div>
-        </div>
 
-        <div id="controls">
+        <div id="controls" role="group" aria-label="Video controls">
           <div class="seek-row">
             <span id="curTime" class="time">0:00</span>
-            <div class="seek-wrap"><input id="seekBar" type="range" min="0" max="1000" step="1" value="0" /><div id="seekMarkers"></div></div>
+            <div class="seek-wrap"><input id="seekBar" type="range" min="0" max="1000" step="1" value="0" aria-label="Seek" /><div id="seekMarkers"></div></div>
             <span id="durTime" class="time">0:00</span>
           </div>
           <div class="btn-row">
@@ -205,11 +251,12 @@
             <button id="fsBtn" class="icon-btn" title="Fullscreen  (F)"></button>
           </div>
         </div>
+        </div>
       </div>
 
       <div class="now-playing">
         <div class="np-text"><h2 id="npTitle"></h2><div id="npMeta" class="np-meta"></div><div id="npChapter" class="np-chapter"></div></div>
-        <button id="npComplete" class="btn ghost">✓ Mark complete</button>
+        <button id="npComplete" class="btn ghost"><span data-ui-icon="Check"></span>Mark complete</button>
       </div>
       <div id="videoExtras" class="video-extras">
         <div id="chaptersSection" class="extras-section open hidden">
@@ -222,9 +269,11 @@
         </div>
       </div>
       </div>
-      <details id="courseNotesHost" class="course-notes" aria-label="Current video notes" open>
-        <summary id="courseNotesToggle" class="course-notes-toggle" title="Show or hide notes"><span>Notes</span><span class="chev" aria-hidden="true">▾</span></summary>
-        <a id="courseNotebookLink" class="notebook-open-link" href="#notebooks">Course notebook</a>
+      <div id="notesWidthHandle" class="note-resize-handle notes-width-handle" role="separator" tabindex="0" aria-label="Notes width" aria-orientation="vertical" aria-controls="courseNotesHost" aria-valuemin="300" aria-valuemax="900" aria-valuenow="380" title="Resize notes width. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripVertical" aria-hidden="true"></span></div>
+      <details id="courseNotesHost" class="course-notes" aria-label="Current video notes">
+        <summary class="hidden">Notes</summary>
+        <div class="course-notes-heading"><strong><span data-ui-icon="NotebookPen" aria-hidden="true"></span>Notes</strong><a id="courseNotebookLink" class="notebook-open-link" href="#notebooks">Course notebook</a></div>
+        <div id="courseNotesContent" class="course-notes-content">
         <section id="notesWidget" class="notes-widget">
           <div class="note-heading"><h3 id="noteVideoTitle">Video notes</h3></div>
           <div class="note-controls">
@@ -242,8 +291,10 @@
           </div>
           <div id="noteEditor" class="note-editor hidden"></div>
           <div id="noteRead" class="note-content note-reader hidden"></div>
-          <p id="noteEmpty" class="empty-state hidden">No written notes yet.</p>
+          <p id="noteEmpty" class="empty-state note-reader hidden">No written notes yet.</p>
         </section>
+        </div>
+        <div id="notesHeightHandle" class="note-resize-handle notes-height-handle" role="separator" tabindex="0" aria-label="Notes height" aria-orientation="horizontal" aria-controls="courseNotesContent" aria-valuemin="240" aria-valuemax="1600" aria-valuenow="600" title="Resize notes height. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripHorizontal" aria-hidden="true"></span></div>
       </details>
       </div>
     </section>
@@ -279,7 +330,7 @@
           <p id="roadmapMeta"></p>
         </div>
         <div class="roadmap-actions">
-          <button id="roadmapContinueBtn" class="btn" type="button">▶ Continue</button>
+          <button id="roadmapContinueBtn" class="btn" type="button">Continue</button>
           <button id="roadmapRenameBtn" class="btn ghost slim" type="button">Rename</button>
           <button id="roadmapDeleteBtn" class="btn danger slim" type="button">Delete</button>
         </div>
@@ -290,7 +341,7 @@
       </div>
       <div id="roadmapCourses" class="roadmap-courses"></div>
       <div class="roadmap-add">
-        <select id="roadmapAddSelect"><option value="">＋ Add a course to this roadmap…</option></select>
+        <select id="roadmapAddSelect"><option value="">Add a course to this roadmap</option></select>
       </div>
     </section>
   </main>
@@ -298,8 +349,8 @@
   <main id="tasksView" class="view hidden">
     <section class="tasks-shell">
       <div class="tasks-heading">
-        <div><h1>Tasks &amp; notes</h1><p>Everything on your plate — across all courses and beyond.</p></div>
-        <button id="tasksPageNew" class="btn" type="button">＋ New task</button>
+        <div><p class="eyebrow">My learning</p><h1>Tasks</h1></div>
+        <button id="tasksPageNew" class="btn" type="button"><span data-ui-icon="Plus"></span>New task</button>
       </div>
       <div class="tasks-filters">
         <select id="taskFilterCourse" title="Filter by course"><option value="">All courses</option></select>
@@ -317,7 +368,7 @@
   <main id="dashboardView" class="view hidden">
     <section class="dashboard-shell">
       <div class="dashboard-heading">
-        <div><h1>Learning dashboard</h1><p>Time, consistency, course progress, and your complete watch history.</p></div>
+        <div><p class="eyebrow">Learning activity</p><h1>Dashboard</h1></div>
         <select id="dashboardRange" title="Dashboard time range"><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="all">All time</option></select>
       </div>
       <div class="dashboard-stats">
@@ -333,16 +384,19 @@
         <section class="dashboard-grid">
           <div class="dash-panel wide">
             <div class="panel-heading"><h2>Daily activity</h2><span>Minutes on FocusTube vs. video watch time</span></div>
-            <div class="chart-wrap"><canvas id="dailyChart"></canvas></div>
+            <div class="chart-wrap"><canvas id="dailyChart" role="img" aria-label="Daily learning and video watch time" aria-describedby="dailyChartData"></canvas></div>
+            <details class="chart-data"><summary>Activity data</summary><div id="dailyChartData" class="chart-data-table" tabindex="0" role="region" aria-label="Daily activity data"></div></details>
           </div>
           <div class="dash-panel">
             <div class="panel-heading"><h2>Course focus</h2><span>Watch time by course</span></div>
-            <div class="chart-wrap donut"><canvas id="courseChart"></canvas></div>
+            <div class="chart-wrap donut"><canvas id="courseChart" role="img" aria-label="Watch time by course" aria-describedby="courseChartData"></canvas></div>
+            <details class="chart-data"><summary>Watch time data</summary><div id="courseChartData" class="chart-data-table" tabindex="0" role="region" aria-label="Course watch time data"></div></details>
           </div>
           <div class="dash-panel">
             <div class="panel-heading"><h2>Consistency</h2><span>Last 20 weeks</span></div>
-            <div id="dashboardHeatmap" class="heatmap dashboard-heatmap"></div>
+            <div id="dashboardHeatmap" class="heatmap dashboard-heatmap" aria-hidden="true"></div>
             <div class="hm-legend"><span>Less</span><i class="hm-cell l0"></i><i class="hm-cell l1"></i><i class="hm-cell l2"></i><i class="hm-cell l3"></i><i class="hm-cell l4"></i><span>More</span></div>
+            <details class="chart-data"><summary>Daily minutes</summary><div id="heatmapData" class="chart-data-table" tabindex="0" role="region" aria-label="Daily consistency data"></div></details>
           </div>
         </section>
         <section class="dash-section">
@@ -358,58 +412,164 @@
     </section>
   </main>
 
-  <div id="statsModal" class="modal-backdrop hidden">
+  <dialog id="monitoringModal" class="modal-backdrop hidden" aria-labelledby="monitoringTitle">
+    <div class="modal monitoring-modal">
+      <button class="modal-close" data-close="monitoringModal" type="button">Close</button>
+      <header class="monitoring-heading"><div><p class="eyebrow">Administration</p><h2 id="monitoringTitle">Site monitoring</h2><p id="monitoringUpdated" class="muted" role="status"></p></div>
+        <button id="monitoringRefresh" class="icon-btn" type="button" title="Refresh monitoring" aria-label="Refresh monitoring"><span data-ui-icon="RefreshCw"></span></button>
+      </header>
+      <p id="monitoringError" class="add-error hidden" role="alert"></p>
+      <p id="monitoringLoading" class="muted" role="status">Loading monitoring data...</p>
+      <div id="monitoringContent" class="hidden">
+        <div class="monitoring-summary">
+          <div><strong id="monitoringActive">0</strong><span>Active now (5 min)</span></div>
+          <div><strong id="monitoringToday">0</strong><span>Active today (UTC)</span></div>
+          <div><strong id="monitoringWeek">0</strong><span>Active this week</span></div>
+          <div><strong id="monitoringMembers">0</strong><span>Enabled members</span></div>
+        </div>
+        <div class="monitoring-charts">
+          <section><div class="panel-heading"><h3>Origin traffic</h3><span>Last hour</span></div><div class="monitoring-chart"><canvas id="monitoringTrafficChart" aria-label="Origin requests and server errors per minute" role="img" aria-describedby="monitoringTrafficData"></canvas></div><p id="monitoringSince" class="muted"></p><details class="chart-data"><summary>Traffic data</summary><div id="monitoringTrafficData" class="chart-data-table" tabindex="0" role="region" aria-label="Traffic data"></div></details></section>
+          <section><div class="panel-heading"><h3>Member activity</h3><span>Last 30 days</span></div><div class="monitoring-chart"><canvas id="monitoringUsersChart" aria-label="Active members per UTC day" role="img" aria-describedby="monitoringUsersData"></canvas></div><details class="chart-data"><summary>Member activity data</summary><div id="monitoringUsersData" class="chart-data-table" tabindex="0" role="region" aria-label="Member activity data"></div></details></section>
+        </div>
+        <section class="monitoring-section"><h3>Application process and volume</h3><dl class="monitoring-system">
+          <div><dt>Process uptime</dt><dd id="monitoringUptime"></dd></div><div><dt>Process memory</dt><dd id="monitoringMemory"></dd></div>
+          <div><dt>Heap used</dt><dd id="monitoringHeap"></dd></div><div><dt>Volume space</dt><dd id="monitoringDisk"></dd></div>
+          <div><dt>Database size</dt><dd id="monitoringDatabase"></dd></div><div><dt>Write-ahead log</dt><dd id="monitoringWal"></dd></div>
+        </dl></section>
+        <section class="monitoring-section"><div class="panel-heading"><h3>Members</h3><span id="monitoringPage"></span></div>
+          <div class="monitoring-table-wrap" tabindex="0" role="region" aria-label="Member activity table"><table class="monitoring-table"><thead><tr><th>Username</th><th>Activity</th><th>Role</th><th>Last sign-in</th><th>Last active</th></tr></thead><tbody id="monitoringUsers"></tbody></table></div>
+          <div class="monitoring-paging"><button id="monitoringPrevious" class="icon-btn" type="button" title="Previous member page" aria-label="Previous member page"><span data-ui-icon="ChevronLeft"></span></button><button id="monitoringNext" class="icon-btn" type="button" title="Next member page" aria-label="Next member page"><span data-ui-icon="ChevronRight"></span></button></div>
+        </section>
+        <section class="monitoring-section"><div class="panel-heading"><h3>Recent account events</h3><span>30-day retention</span></div><ul id="monitoringEvents" class="monitoring-events"></ul></section>
+        <footer class="monitoring-section monitoring-links"><div><span id="monitoringCollector" class="muted"></span><a id="monitoringGrafana" class="btn ghost slim hidden" target="_blank" rel="noopener noreferrer"><span data-ui-icon="ExternalLink"></span>Grafana</a></div>
+          <div><span id="monitoringOutageState" class="muted"></span><a id="monitoringUptimeLink" class="btn ghost slim hidden" target="_blank" rel="noopener noreferrer"><span data-ui-icon="ExternalLink"></span>Uptime history</a></div>
+        </footer>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="statsModal" class="modal-backdrop hidden">
     <div class="modal">
       <button class="modal-close" data-close="statsModal">✕</button><h2>Your learning stats</h2>
       <div class="stat-grid">
-        <div class="stat-card"><div class="stat-num" id="statStreak">0</div><div class="stat-label">day streak 🔥</div></div>
+        <div class="stat-card"><div class="stat-num" id="statStreak">0</div><div class="stat-label">day streak</div></div>
         <div class="stat-card"><div class="stat-num" id="statBest">0</div><div class="stat-label">best streak</div></div>
         <div class="stat-card"><div class="stat-num" id="statTime">0m</div><div class="stat-label">total watch time</div></div>
         <div class="stat-card"><div class="stat-num" id="statDays">0</div><div class="stat-label">days active</div></div>
       </div>
-      <h3>Last 20 weeks</h3><div id="heatmap" class="heatmap"></div>
+      <h3>Last 20 weeks</h3><div id="heatmap" class="heatmap" aria-hidden="true"></div>
       <div class="hm-legend"><span>Less</span><i class="hm-cell l0"></i><i class="hm-cell l1"></i><i class="hm-cell l2"></i><i class="hm-cell l3"></i><i class="hm-cell l4"></i><span>More</span></div>
+      <details class="chart-data"><summary>Daily watch time</summary><div id="statsActivityData" class="chart-data-table" tabindex="0" role="region" aria-label="Daily watch time data"></div></details>
       <h3>Keyboard shortcuts</h3>
       <div class="kbd-list"><span><kbd>space</kbd>/<kbd>K</kbd> play·pause</span><span><kbd>J</kbd>/<kbd>L</kbd> ±10s</span><span><kbd>←</kbd>/<kbd>→</kbd> ±5s</span><span><kbd>↑</kbd>/<kbd>↓</kbd> volume</span><span><kbd>&lt;</kbd>/<kbd>&gt;</kbd> speed</span><span><kbd>M</kbd> mute</span><span><kbd>C</kbd> captions</span><span><kbd>F</kbd> fullscreen</span><span><kbd>N</kbd>/<kbd>P</kbd> next·prev</span><span><kbd>[</kbd> sidebar</span></div>
     </div>
-  </div>
+  </dialog>
 
-  <div id="certModal" class="modal-backdrop hidden">
+  <dialog id="certModal" class="modal-backdrop hidden">
     <div class="modal cert">
-      <button class="modal-close" data-close="certModal">✕</button><div class="cert-emoji">🏆</div><h2>Course complete!</h2>
-      <p id="certCourseName" class="cert-course"></p><p class="muted">You finished an entire YouTube course without falling into the recommendation abyss. Legendary focus.</p>
+      <button class="modal-close" data-close="certModal">✕</button><div class="cert-symbol" data-ui-icon="Trophy"></div><h2>Course complete</h2>
+      <p id="certCourseName" class="cert-course"></p><p class="muted">Every lesson completed.</p>
       <label class="cert-label">Name on certificate<input id="certName" type="text" placeholder="Your name" maxlength="60" /></label>
       <button id="certDownload" class="btn">Download certificate (PDF)</button>
     </div>
-  </div>
+  </dialog>
 
-  <div id="profileModal" class="modal-backdrop hidden">
+  <dialog id="profileModal" class="modal-backdrop hidden">
     <div class="modal profile-modal">
       <button class="modal-close" data-close="profileModal">✕</button>
-      <div class="profile-identity"><div id="profileModalAvatar" class="profile-avatar-large">G</div><div><h2 id="profileModalName">Guest</h2><p id="profileModalType" class="muted">Guest profile</p></div></div>
-      <div id="upgradeBlock" class="upgrade-block hidden">
-        <h3>Keep this progress permanently</h3>
-        <form id="upgradeForm" class="auth-form compact">
-          <label>Username<input id="upgradeUsername" type="text" autocomplete="username" minlength="3" maxlength="32" required /></label>
-          <label>Password<input id="upgradePassword" type="password" autocomplete="new-password" minlength="8" maxlength="128" required /></label>
-          <button class="btn" type="submit">Create account from guest</button>
+      <h2 id="settingsTitle">Settings</h2>
+      <div class="profile-identity"><div id="profileModalAvatar" class="profile-avatar-large">G</div><div><strong id="profileModalName">Guest</strong><p id="profileModalType" class="muted">Guest profile</p><p id="profileEmailStatus" class="muted"></p></div></div>
+      <div class="settings-layout">
+      <nav class="settings-nav" role="tablist" aria-label="Settings sections" aria-orientation="vertical" data-glass>
+        <button id="settingsAccountTab" type="button" role="tab" aria-selected="true" aria-controls="settingsAccount" data-settings="account"><span data-ui-icon="UserRound"></span>Account</button>
+        <button id="settingsAppearanceTab" type="button" role="tab" aria-selected="false" aria-controls="settingsAppearance" data-settings="appearance" tabindex="-1"><span data-ui-icon="SlidersHorizontal"></span>Appearance</button>
+        <button id="settingsDataTab" type="button" role="tab" aria-selected="false" aria-controls="settingsData" data-settings="data" tabindex="-1"><span data-ui-icon="Database"></span>Data</button>
+        <button id="settingsPoliciesTab" type="button" role="tab" aria-selected="false" aria-controls="settingsPolicies" data-settings="policies" tabindex="-1"><span data-ui-icon="ShieldCheck"></span>Terms &amp; Privacy</button>
+        <button id="settingsAdminTab" class="hidden" type="button" role="tab" aria-selected="false" aria-controls="settingsAdmin" data-settings="admin" tabindex="-1"><span data-ui-icon="UsersRound"></span>Administration</button>
+      </nav>
+      <div class="settings-content">
+      <section id="settingsAccount" role="tabpanel" aria-labelledby="settingsAccountTab" tabindex="0">
+        <h3>Account details</h3>
+        <p id="accountJoined" class="muted"></p>
+        <form id="accountForm" class="auth-form">
+          <label>Display name<input id="accountDisplayName" type="text" autocomplete="name" maxlength="80" required /></label>
+          <label>Username<input id="accountUsername" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" aria-describedby="accountUsernameHint accountUsernameError" /></label>
+          <p id="accountUsernameHint" class="field-hint">3-32 letters, numbers, dots, dashes, or underscores.</p>
+          <p id="accountUsernameError" class="add-error hidden" role="alert"></p>
+          <label id="accountPasswordField" class="hidden">Current password<input id="accountPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" aria-describedby="accountError" disabled /></label>
+          <p id="accountError" class="add-error hidden" role="alert"></p>
+          <div class="settings-save"><button id="accountCancel" class="btn ghost" type="button">Cancel</button><button id="accountSave" class="btn" type="submit" disabled>Save changes</button><span id="accountSaveStatus" class="muted" role="status"></span></div>
         </form>
-        <div id="upgradeError" class="add-error hidden"></div>
+      <div id="passwordSettings" class="profile-data-block">
+        <h3 id="passwordHeading">Change password</h3>
+        <p id="passwordSessionNotice">Other sessions will be signed out. This browser stays signed in.</p>
+        <form id="passwordForm" class="auth-form" aria-labelledby="passwordHeading" aria-describedby="passwordSessionNotice">
+          <label>Current password<input id="passwordCurrent" type="password" autocomplete="current-password" minlength="8" maxlength="128" required aria-describedby="passwordError" /></label>
+          <label>New password<input id="passwordNew" type="password" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="passwordRequirements passwordError" /></label>
+          <p id="passwordRequirements" class="field-hint">8-128 characters. Choose a password you do not use elsewhere.</p>
+          <label>Confirm new password<input id="passwordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" required aria-describedby="passwordError" /></label>
+          <p id="passwordError" class="add-error hidden" role="alert" tabindex="-1"></p>
+          <div class="settings-save"><button id="passwordCancel" class="btn ghost" type="button">Clear</button><button id="passwordSubmit" class="btn" type="submit">Change password</button><span id="passwordStatus" class="muted" role="status"></span></div>
+        </form>
       </div>
-      <div class="profile-data-block">
+      <div id="emailEnrollment" class="profile-data-block hidden">
+        <h3>Account email</h3>
+        <form id="emailEnrollmentForm" class="auth-form compact">
+          <label>Email<input id="enrollmentEmail" type="email" autocomplete="email" maxlength="254" required /></label>
+          <label>Current password<input id="enrollmentPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
+          <div id="enrollmentCodeBlock" class="verification-fields hidden">
+            <p id="enrollmentCodeSent" class="muted" role="status"></p>
+            <label for="enrollmentCode">6-digit email code</label>
+            <div class="otp-input"><input id="enrollmentCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" aria-describedby="enrollmentCodeSent enrollmentCodeExpiry enrollmentError" /><div class="otp-cells" aria-hidden="true"></div></div>
+            <div class="verification-actions"><p id="enrollmentCodeExpiry" class="muted"></p><button id="enrollmentResend" class="btn ghost slim" type="button"><span data-ui-icon="Mail"></span><span id="enrollmentResendLabel">Resend code</span></button></div>
+          </div>
+          <div id="enrollmentCaptcha" class="captcha-container hidden"></div>
+          <p id="enrollmentCaptchaError" class="add-error hidden" role="alert"></p>
+          <button id="enrollmentSubmit" class="btn" type="submit">Send verification code</button>
+        </form>
+        <p id="enrollmentEmailUnavailable" class="auth-notice hidden" role="status">Email verification is not configured. Contact the administrator.</p>
+        <div id="enrollmentError" class="add-error hidden" role="alert"></div>
+      </div>
+      </section>
+      <section id="settingsAppearance" class="hidden" role="tabpanel" aria-labelledby="settingsAppearanceTab" tabindex="0">
+        <h3>Appearance</h3>
+        <label class="settings-option"><span>Cursor reflection</span><input id="appearanceReflection" type="checkbox" role="switch" checked /></label>
+        <label class="settings-option"><span>Reduce transparency</span><input id="appearanceTransparency" type="checkbox" role="switch" /></label>
+      </section>
+      <section id="settingsData" class="hidden" role="tabpanel" aria-labelledby="settingsDataTab" tabindex="0">
         <h3>Your data</h3>
-        <p>Create a backup or restore one. Importing replaces this profile's courses, progress, settings, and history; account credentials are unchanged.</p>
+        <p class="muted">Importing replaces this profile's courses, progress, notes, settings, and history. Account credentials are unchanged.</p>
         <div class="profile-data-actions">
-          <button id="exportDataBtn" class="btn ghost" type="button">Export data (JSON)</button>
-          <button id="importDataBtn" class="btn ghost" type="button">Import data (JSON)</button>
+          <button id="exportDataBtn" class="btn ghost" type="button"><span data-ui-icon="Download"></span>Export data (JSON)</button>
+          <button id="importDataBtn" class="btn ghost" type="button"><span data-ui-icon="Upload"></span>Import data (JSON)</button>
         </div>
         <input id="importDataInput" class="hidden" type="file" accept=".json,application/json" aria-label="Choose FocusTube JSON export" />
+      </section>
+      <section id="settingsPolicies" class="hidden" role="tabpanel" aria-labelledby="settingsPoliciesTab" tabindex="0">
+        <h3>Terms &amp; Privacy</h3>
+        <p class="muted">Effective 15 September 2026</p>
+        <a class="policy-status" href="/policies.html#terms" target="_blank" rel="noopener noreferrer" aria-label="Terms and conditions (opens in a new tab)"><strong>Terms and conditions</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
+        <a class="policy-status" href="/policies.html#privacy" target="_blank" rel="noopener noreferrer" aria-label="Privacy policy (opens in a new tab)"><strong>Privacy policy</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
+      </section>
+      <section id="settingsAdmin" class="hidden" role="tabpanel" aria-labelledby="settingsAdminTab" tabindex="0">
+      <div id="inviteAdmin" class="profile-data-block hidden">
+        <h3>Member invitations</h3>
+        <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Site monitoring</button>
+        <button id="createInvite" class="btn ghost" type="button"><span data-ui-icon="UserPlus"></span>Create invitation</button>
+        <div id="inviteResult" class="auth-form compact hidden">
+          <label>Invitation link<input id="issuedInviteLink" type="text" readonly autocomplete="off" spellcheck="false" /></label>
+          <div class="invite-result-actions"><span id="inviteExpiry" class="muted"></span><button id="copyInvite" class="icon-btn" type="button" title="Copy invitation link" aria-label="Copy invitation link"><span data-ui-icon="Copy"></span></button></div>
+        </div>
+        <div id="inviteError" class="add-error hidden" role="alert"></div>
       </div>
-      <button id="logoutBtn" class="btn danger profile-logout" type="button">Sign out</button>
+      </section>
+      </div>
+      </div>
+      <footer class="settings-footer"><button id="logoutBtn" class="btn ghost" type="button"><span data-ui-icon="LogOut"></span>Sign out</button></footer>
     </div>
-  </div>
+  </dialog>
 
-  <div id="taskModal" class="modal-backdrop hidden">
+  <dialog id="taskModal" class="modal-backdrop hidden">
     <div class="modal task-modal">
       <button class="modal-close" data-close="taskModal">✕</button>
       <h2 id="taskModalTitle">New task</h2>
@@ -439,13 +599,12 @@
         </div>
       </form>
     </div>
-  </div>
+  </dialog>
 
-  <div id="sprintModal" class="modal-backdrop hidden">
+  <dialog id="sprintModal" class="modal-backdrop hidden">
     <div class="modal sprint-modal">
       <button class="modal-close" data-close="sprintModal">✕</button>
       <h2>Sprint setup</h2>
-      <p class="muted">Generate time-boxed sprint columns. New sprints continue after your last one.</p>
       <form id="sprintForm" class="auth-form compact">
         <div class="task-form-row">
           <label>Cadence<select id="sprintCadence">
@@ -463,33 +622,31 @@
         </div>
       </form>
     </div>
-  </div>
+  </dialog>
 
-  <div id="roadmapModal" class="modal-backdrop hidden">
+  <dialog id="roadmapModal" class="modal-backdrop hidden">
     <div class="modal roadmap-modal">
       <button class="modal-close" data-close="roadmapModal">✕</button>
       <h2>New roadmap</h2>
-      <p class="muted">An ordered path through several courses with combined progress.</p>
       <form id="roadmapForm" class="auth-form compact">
         <label>Name<input id="roadmapName" type="text" maxlength="80" required placeholder="e.g. Backend fundamentals" /></label>
         <div id="roadmapCoursePick" class="roadmap-pick"></div>
         <button class="btn" type="submit">Create roadmap</button>
       </form>
     </div>
-  </div>
+  </dialog>
 
-  <div id="taskPanelBackdrop" class="panel-backdrop hidden"></div>
-  <aside id="taskPanel" class="task-panel" aria-hidden="true">
+  <dialog id="taskPanel" class="task-panel" aria-labelledby="taskPanelTitle">
     <div class="task-panel-head">
-      <h2>Quick tasks</h2>
+      <h2 id="taskPanelTitle">Quick tasks</h2>
       <button id="taskPanelAllBtn" class="btn ghost slim" type="button">All tasks</button>
       <button id="taskPanelClose" class="icon-btn" title="Close  (Esc)">✕</button>
     </div>
     <form id="quickTaskForm" class="quick-task-form">
-      <input id="quickTaskInput" type="text" placeholder="Add a task, press Enter…" maxlength="200" />
+      <input id="quickTaskInput" type="text" placeholder="Add a task..." aria-label="New task title" maxlength="200" />
     </form>
     <div id="taskPanelList" class="task-panel-list"></div>
-  </aside>
+  </dialog>
 
   <div id="toasts"></div>
   <div id="notebookPrint"></div>
@@ -497,6 +654,7 @@
   <script src="/vendor/jspdf.js" defer></script>
   <script src="/vendor/chart.js" defer></script>
   <script src="/vendor/quill.js" defer></script>
+  <script src="/vendor/lucide.js" defer></script>
   <script src="notebook-model.js" defer></script>
   <script src="notebook-editor.js" defer></script>
   <script src="notebooks.js" defer></script>

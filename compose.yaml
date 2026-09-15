@@ -5,11 +5,40 @@ services:
     build: .
     environment:
       ALLOWED_HOSTS: localhost:3002,127.0.0.1:3002
+      AUTH_ALLOW_LOOPBACK_HTTP: '1'
+      AUTH_PUBLIC_ORIGINS: http://localhost:3002,http://127.0.0.1:3002
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-0}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      APP_ENV: local
+      LOG_DIRECTORY: /app/logs
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      METRICS_ALLOWED_ADDRESSES: ${METRICS_ALLOWED_ADDRESSES:-127.0.0.1,::1}
+      GRAFANA_DASHBOARD_URL: ${GRAFANA_DASHBOARD_URL:-}
+      UPTIME_DASHBOARD_URL: ${UPTIME_DASHBOARD_URL:-}
     ports:
       - "127.0.0.1:3002:3000"
     volumes:
       - focustube-data:/app/data
+      - focustube-logs:/app/logs
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(4000) }).then(async response => { if (!response.ok || (await response.json()).database !== 'ok') process.exit(1); }).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
 volumes:
   focustube-data:
+  focustube-logs:
