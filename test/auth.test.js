@@ -71,6 +71,82 @@ test('session insert failure rolls back every registration write', context => {
   assert.equal(store.db.prepare('SELECT consumed_at FROM invitations').get().consumed_at, null);
 });
 
+test('a reusable invitation counts only completed signups and stops at its limit', context => {
+  const store = memoryStore(context);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const issued = store.issueInvitation({ tokenHash: digest('shared'), actorSessionHash: admin.sessionHash, maxUses: 2 });
+  assert.equal(issued.maxUses, 2);
+  assert.equal(issued.useCount, 0);
+  const first = registration(store, 'shared', 'first@example.com');
+  const second = registration(store, 'shared', 'second@example.com');
+  const extra = registration(store, 'shared', 'extra@example.com');
+  const usage = () => store.db.prepare('SELECT * FROM invitations WHERE token_hash = ?').get(first.inviteHash);
+  assert.equal(usage().use_count, 0, 'Requesting verification must not reserve a signup');
+  assert.equal(store.redeemInvitation(first).user.is_admin, 0);
+  assert.equal(usage().use_count, 1);
+  assert.equal(usage().consumed_at, null);
+  assert.equal(store.invitationAvailable(first.inviteHash), true);
+  assert.throws(() => store.redeemInvitation(first), { code: 'REGISTRATION_CONFLICT' });
+  store.db.exec("CREATE TRIGGER fail_session BEFORE INSERT ON sessions BEGIN SELECT RAISE(ABORT, 'injected'); END");
+  assert.throws(() => store.redeemInvitation(second), /injected/);
+  assert.equal(usage().use_count, 1, 'Failed transactions must not spend a use');
+  assert.equal(store.getUserByEmail(second.email), undefined);
+  assert.equal(store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash = ?').get(second.verificationHash).consumed_at, null);
+  store.db.exec('DROP TRIGGER fail_session');
+  assert.equal(store.redeemInvitation(second).user.is_admin, 0);
+  assert.equal(usage().use_count, 2);
+  assert.ok(usage().consumed_at);
+  assert.equal(store.invitationAvailable(first.inviteHash), false);
+  assert.throws(() => store.redeemInvitation(extra), { code: 'INVALID_INVITATION' });
+  assert.equal(store.getUserByEmail(extra.email), undefined);
+  assert.equal(usage().use_count, 2);
+});
+
+test('invitation usage limits reject invalid counts and keep bootstrap single-use', context => {
+  const store = memoryStore(context);
+  for (const maxUses of [0, -1, 1.5, 1001, '10', null, true, NaN, Infinity, 2]) {
+    assert.throws(() => store.issueInvitation({ tokenHash: digest('invalid'), bootstrap: true, maxUses }), { code: 'INVALID_REQUEST' });
+  }
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  for (const maxUses of [0, -1, 1.5, 1001, '10', null, true]) {
+    assert.throws(() => store.issueInvitation({ tokenHash: digest('invalid'), actorSessionHash: admin.sessionHash, maxUses }), { code: 'INVALID_REQUEST' });
+  }
+  assert.equal(store.issueInvitation({ tokenHash: digest('upper-bound'), actorSessionHash: admin.sessionHash, maxUses: 1000 }).maxUses, 1000);
+  assert.throws(() => store.db.prepare('UPDATE invitations SET max_uses = 2 WHERE is_admin = 1').run(), /CHECK constraint failed/);
+  assert.throws(() => store.db.prepare('UPDATE invitations SET use_count = max_uses + 1').run(), /CHECK constraint failed/);
+});
+
+test('invitation usage migration preserves existing unused and consumed links across restarts', context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-invite-migration-'));
+  const filename = path.join(directory, 'focustube.db');
+  const legacy = new Database(filename);
+  legacy.exec(`CREATE TABLE invitations (
+    id INTEGER PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL, consumed_at TEXT
+  )`);
+  const createdAt = new Date(Date.now() - 60000).toISOString();
+  const expiresAt = new Date(Date.now() + 3600000).toISOString();
+  const insert = legacy.prepare('INSERT INTO invitations (token_hash, is_admin, created_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?)');
+  insert.run(digest('unused'), 0, createdAt, expiresAt, null);
+  insert.run(digest('used'), 0, createdAt, expiresAt, new Date().toISOString());
+  insert.run(digest('bootstrap'), 1, createdAt, expiresAt, null);
+  legacy.close();
+  const store = memoryStore(context, filename);
+  const restarted = memoryStore(context, filename);
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  for (const database of [store, restarted]) {
+    const rows = database.db.prepare('SELECT * FROM invitations ORDER BY id').all();
+    assert.deepEqual(Array.from(rows, row => [row.max_uses, row.use_count]), [[1, 0], [1, 1], [1, 0]]);
+    assert.equal(database.invitationAvailable(digest('unused')), true);
+    assert.equal(database.invitationAvailable(digest('used')), false);
+    assert.equal(database.invitationAvailable(digest('bootstrap')), true);
+  }
+});
+
 test('bootstrap rechecks active administrators and member invitations never inherit administrator status', context => {
   const store = memoryStore(context);
   invitation(store, 'first');
@@ -185,7 +261,10 @@ test('real HTTP auth requires invitations, creates only member invites, and logs
   const cookie = cookieOf(response);
   const created = await request('/api/invites', { method: 'POST', headers: { Cookie: cookie }, body: {} });
   assert.equal(created.status, 201);
-  const memberInvite = (await created.json()).inviteUrl.split('#join=')[1];
+  const invitationResult = await created.json();
+  assert.equal(invitationResult.maxUses, 1);
+  assert.equal(invitationResult.useCount, 0);
+  const memberInvite = invitationResult.inviteUrl.split('#join=')[1];
   const member = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(memberInvite), email: 'member@example.com' }) });
   assert.equal(member.status, 201);
   assert.equal((await member.json()).user.isAdmin, false);
@@ -196,6 +275,43 @@ test('real HTTP auth requires invitations, creates only member invites, and logs
   const login = await request('/api/auth/login', { method: 'POST', body: { email: user.email, password: 'test-password-123' } });
   assert.equal(login.status, 200);
   assert.notEqual(cookieOf(login), cookie);
+});
+
+test('admin HTTP invitations validate reusable limits and stop verified signups at capacity', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  assert.equal((await request('/api/invites', { method: 'POST', body: { maxUses: 10 } })).status, 401);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  assert.equal(admin.status, 201);
+  const headers = { Cookie: cookieOf(admin) };
+  for (const maxUses of [0, -1, 1.5, 1001, '10', null, true, {}, []]) {
+    const response = await request('/api/invites', { method: 'POST', headers, body: { maxUses } });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_INVITATION_LIMIT');
+  }
+  for (const extra of [{ isAdmin: true }, { useCount: 0 }]) {
+    assert.equal((await request('/api/invites', { method: 'POST', headers, body: { maxUses: 2, ...extra } })).status, 400);
+  }
+  const created = await request('/api/invites', { method: 'POST', headers, body: { maxUses: 2 } });
+  assert.equal(created.status, 201);
+  assert.equal(created.headers.get('cache-control'), 'no-store');
+  const link = await created.json();
+  assert.equal(link.maxUses, 2);
+  assert.equal(link.useCount, 0);
+  const token = new URL(link.inviteUrl).hash.slice('#join='.length);
+  const bodies = [];
+  for (const email of ['first@example.com', 'second@example.com', 'third@example.com']) bodies.push(await verify({ ...joinBody(token), email }));
+  for (const body of bodies.slice(0, 2)) {
+    const joined = await request('/api/auth/register', { method: 'POST', body });
+    assert.equal(joined.status, 201);
+    assert.equal((await joined.json()).user.isAdmin, false);
+    assert.equal((await request('/api/invites', { method: 'POST', headers: { Cookie: cookieOf(joined) }, body: { maxUses: 20 } })).status, 403);
+  }
+  const exhausted = await request('/api/auth/register', { method: 'POST', body: bodies[2] });
+  assert.equal(exhausted.status, 400);
+  assert.equal((await exhausted.json()).code, 'INVALID_INVITATION');
+  assert.equal(store.db.prepare('SELECT use_count FROM invitations WHERE token_hash = ?').get(digest(token)).use_count, 2);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 3);
+  assert.equal((await request('/api/auth/verification/request', { method: 'POST', body: { email: 'fourth@example.com', inviteToken: token } })).status, 400);
 });
 
 test('password confirmation is required on the backend before an invitation can be consumed', async context => {
@@ -556,6 +672,134 @@ test('independent SQLite connections serialize invitation, bootstrap, email, and
   assert.equal(slots.filter(result => result === 'ok').length, 1);
   assert.equal(slots.filter(result => result === 'REGISTRATION_CONFLICT').length, 1);
   assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 4);
+});
+
+test('reusable invitation races enforce both remaining uses and the workspace member limit', async context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-shared-invite-race-'));
+  const store = memoryStore(context, path.join(directory, 'focustube.db'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  store.issueInvitation({ tokenHash: digest('shared-race'), actorSessionHash: admin.sessionHash, maxUses: 3 });
+  store.redeemInvitation(registration(store, 'shared-race', 'first@example.com'));
+  const candidates = ['second@example.com', 'third@example.com', 'fourth@example.com'].map(email => registration(store, 'shared-race', email));
+  const results = await raceRedemptions(directory, candidates);
+  assert.equal(results.filter(result => result === 'ok').length, 2);
+  assert.equal(results.filter(result => result === 'INVALID_INVITATION').length, 1);
+  assert.equal(store.db.prepare('SELECT use_count FROM invitations WHERE token_hash = ?').get(digest('shared-race')).use_count, 3);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 4);
+  store.setMemberLimit(5);
+  store.issueInvitation({ tokenHash: digest('shared-capacity'), actorSessionHash: admin.sessionHash, maxUses: 20 });
+  const slots = await raceRedemptions(directory, ['last-one@example.com', 'last-two@example.com'].map(email => registration(store, 'shared-capacity', email)));
+  assert.equal(slots.filter(result => result === 'ok').length, 1);
+  assert.equal(slots.filter(result => result === 'REGISTRATION_CONFLICT').length, 1);
+  assert.equal(store.db.prepare('SELECT use_count FROM invitations WHERE token_hash = ?').get(digest('shared-capacity')).use_count, 1);
+  assert.equal(store.invitationAvailable(digest('shared-capacity')), true);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 5);
+});
+
+test('reusable invitations retain usage after guest conversion and reopening, and still expire', context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-shared-invite-state-'));
+  const filename = path.join(directory, 'focustube.db');
+  const store = memoryStore(context, filename);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  store.issueInvitation({ tokenHash: digest('shared-state'), actorSessionHash: admin.sessionHash, maxUses: 3 });
+  const guest = store.createUser({ isGuest: true });
+  const guestSessionHash = digest('shared-guest-session');
+  store.createSession(guestSessionHash, guest.id, new Date(Date.now() + 86400000).toISOString());
+  store.saveUserData(guest.id, { courses: {}, stats: {}, settings: {}, workspace: { tasks: { saved: { title: 'Keep my task' } } } }, 0);
+  const conversion = registration(store, 'shared-state', 'guest@example.com', { guestSessionHash });
+  assert.equal(store.redeemInvitation(conversion).user.id, guest.id);
+  assert.equal(store.getSessionUser(guestSessionHash), undefined);
+  assert.equal(store.getUserData(guest.id).workspace.tasks.saved.title, 'Keep my task');
+  const reopened = memoryStore(context, filename);
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const row = reopened.db.prepare('SELECT max_uses, use_count, consumed_at FROM invitations WHERE token_hash = ?').get(digest('shared-state'));
+  assert.deepEqual(row, { max_uses: 3, use_count: 1, consumed_at: null });
+  assert.equal(reopened.invitationAvailable(digest('shared-state')), true);
+  const candidate = registration(reopened, 'shared-state', 'late@example.com');
+  reopened.db.prepare('UPDATE invitations SET created_at = ?, expires_at = ? WHERE token_hash = ?')
+    .run(new Date(Date.now() - 60000).toISOString(), new Date(Date.now() - 1000).toISOString(), candidate.inviteHash);
+  assert.equal(reopened.invitationAvailable(candidate.inviteHash), false);
+  assert.throws(() => reopened.redeemInvitation(candidate), { code: 'INVALID_INVITATION' });
+  assert.equal(reopened.db.prepare('SELECT use_count FROM invitations WHERE token_hash = ?').get(candidate.inviteHash).use_count, 1);
+  assert.equal(reopened.getUserByEmail(candidate.email), undefined);
+});
+
+test('admin invitation form sends the chosen signup limit and discards stale results', async () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const administration = html.slice(html.indexOf('<section id="settingsAdmin"'), html.indexOf('</section>', html.indexOf('<section id="settingsAdmin"')));
+  assert.match(administration, /<form id="inviteForm"[^>]*>[\s\S]*<label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required/);
+  assert.match(administration, /id="createInvite"[^>]*type="submit"/);
+  assert.match(administration, /id="profileMonitoring"[^>]*type="button"/);
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const handler = source.slice(source.indexOf("$('#inviteForm').addEventListener('submit'"), source.indexOf("$('#copyInvite').addEventListener"));
+  const clear = source.slice(source.indexOf('function clearIssuedInvite()'), source.indexOf('function showAccountError('));
+  const elements = new Map();
+  const element = selector => {
+    if (!elements.has(selector)) {
+      const classes = new Set(['hidden']);
+      elements.set(selector, { value: '', textContent: '', disabled: false, dataset: {},
+        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+        addEventListener(name, callback) { this[name] = callback; } });
+    }
+    return elements.get(selector);
+  };
+  const form = element('#inviteForm');
+  form.reportValidity = () => true;
+  element('#inviteMaxUses').valueAsNumber = 10;
+  element('#profileModal').open = true;
+  const requests = [];
+  let finish;
+  let reject;
+  const context = vm.createContext({
+    $: element, sessionGeneration: 1,
+    api(url, options) { requests.push({ url, options }); return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); },
+    showAccountError(error, target) { target.textContent = error.message; target.classList.remove('hidden'); },
+  });
+  vm.runInContext(clear + '\n' + handler, context);
+  const submit = () => form.submit({ preventDefault() {}, currentTarget: form });
+  const pending = submit();
+  assert.equal(element('#createInvite').disabled, true);
+  assert.equal(element('#inviteMaxUses').disabled, true);
+  await submit();
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, '/api/invites');
+  assert.deepEqual(JSON.parse(requests[0].options.body), { maxUses: 10 });
+  element('#inviteMaxUses').valueAsNumber = 20;
+  const result = { maxUses: 10, useCount: 0, inviteUrl: 'https://example.test/#join=example', expiresAt: '2026-09-17T10:00:00.000Z' };
+  finish(result);
+  await pending;
+  assert.equal(element('#issuedInviteLink').value, result.inviteUrl);
+  assert.match(element('#inviteExpiry').textContent, /^Limit: 10 signups\. Expires /);
+  assert.equal(element('#inviteResult').classList.contains('hidden'), false);
+  assert.equal(element('#createInvite').disabled, false);
+  assert.equal(element('#inviteMaxUses').disabled, false);
+  form.reportValidity = () => false;
+  await submit();
+  assert.equal(requests.length, 1);
+  form.reportValidity = () => true;
+  const closed = submit();
+  element('#profileModal').open = false;
+  finish(result);
+  await closed;
+  assert.equal(element('#issuedInviteLink').value, '');
+  element('#profileModal').open = true;
+  const stale = submit();
+  context.sessionGeneration++;
+  finish(result);
+  await stale;
+  assert.equal(element('#issuedInviteLink').value, '');
+  assert.equal(element('#inviteResult').classList.contains('hidden'), true);
+  const failed = submit();
+  reject(new Error('Request failed'));
+  await failed;
+  assert.equal(element('#inviteError').textContent, 'Request failed');
+  assert.equal(element('#createInvite').disabled, false);
+  assert.equal(element('#inviteMaxUses').disabled, false);
 });
 
 test('invitation entry scrubs secrets before other scripts and never persists or previews them', async () => {
