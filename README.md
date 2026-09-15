@@ -407,7 +407,7 @@ FocusTube is intentionally bound to loopback by default.
 | `PORT` | `3000` | HTTP port used by Express. |
 | `HOST` | `127.0.0.1` | Interface to bind. Keep this value for local use. |
 | `ALLOWED_HOSTS` | empty | Comma-separated additional `Host` header values accepted by the server. Include ports where applicable. |
-| `TRUST_PROXY` | unset | Express proxy-trust setting. Configure only behind a known reverse proxy. |
+| `TRUST_PROXY` | unset | Integer proxy-hop count (`1` trusts the immediate proxy), or an Express named/IP range such as `loopback`. Use only behind the intended proxy, which must overwrite client-supplied forwarding headers. |
 | `FOCUSTUBE_DATA_DIR` | repository `data/` | SQLite and authentication rate-key directory. Use the same directory for the server and local operator command. |
 | `AUTH_PUBLIC_ORIGINS` | native loopback origins for `PORT` | Comma-separated exact approved origins, including scheme and port, without a trailing slash. HTTPS origins must match a trusted TLS/proxy request. |
 | `AUTH_ALLOW_LOOPBACK_HTTP` | off; native loopback binding is allowed | Set to `1` only for an approved loopback-published container. Local Compose sets this explicitly. It never permits an HTTP origin with a non-loopback hostname. |
@@ -442,7 +442,7 @@ Do not expose the default HTTP service directly to the public internet.
 
 Feature branches are reviewed into `dev`. Production promotion is a separate `dev` to `main` pull request; the merge guard rejects other branches targeting `main`.
 
-Pushing a feature branch does not deploy it. The existing deployment workflows run on pushes to `dev` and `main`, so merging those branches can deploy automatically. Before merging this account update, configure the target runtime's exact HTTPS origin, trusted proxy, persistent storage, and SMTP delivery. The existing development and production Compose files have not been updated with those authentication and email settings; the local Compose configuration is not a hosted-deployment template. Keep an external database backup and review the [authentication migration notes](docs/invite-only-auth-spec.md) before promotion.
+Pushing a feature branch does not deploy it. The existing deployment workflows run on pushes to `dev` and `main`, so merging those branches can deploy automatically. Before merging this account update, configure the target runtime's exact HTTPS origin, trusted proxy, persistent storage, and SMTP delivery. Development Compose approves `https://dev-ft.neuralnest.co.in` and uses one trusted proxy hop; production still needs its own approved origin. Both hosted deployments still need SMTP variables passed into the container. The local Compose configuration is not a hosted-deployment template. Keep an external database backup and review the [authentication migration notes](docs/invite-only-auth-spec.md) before promotion.
 
 ## Data storage
 
@@ -729,6 +729,12 @@ AUTH_PUBLIC_ORIGINS=https://focus.example.com TRUST_PROXY=loopback HOST=127.0.0.
 ```
 
 Use that configuration only behind a properly configured HTTPS reverse proxy.
+
+### `This connection is not approved for account access`
+
+The page hostname may be allowed while account requests are still blocked. `ALLOWED_HOSTS` does not replace `AUTH_PUBLIC_ORIGINS`: configure the exact HTTPS origin, including the scheme and any non-default port, without a trailing slash. The proxy must preserve the public Host and forward the original HTTPS scheme, and `TRUST_PROXY` must match that proxy boundary.
+
+Pass these values through the Compose service's `environment` or `env_file`; a project `.env` file alone does not inject them into the container. Rebuild with the updated server code and recreate the app after changing configuration. A plain `docker restart` does not load new code or environment values. Check `/api/auth/status` over the public HTTPS URL; `/api/health` alone does not test the account-origin guard. Do not disable the origin guard or enable public HTTP as a workaround.
 
 ### `better-sqlite3` fails to install
 

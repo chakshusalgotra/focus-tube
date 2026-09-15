@@ -5,6 +5,7 @@ services:
     build: .
     environment:
       ALLOWED_HOSTS: dev-ft.neuralnest.co.in
+      AUTH_PUBLIC_ORIGINS: https://dev-ft.neuralnest.co.in
       TRUST_PROXY: "1"
     ports:
       # Cloudflare tunnel ingress: dev-ft.neuralnest.co.in -> localhost:3002
