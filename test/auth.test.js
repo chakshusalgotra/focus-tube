@@ -144,7 +144,7 @@ async function httpFixture(context, environment = {}, suppliedServices) {
     assert.equal(response.status, 202, JSON.stringify(await response.clone().json()));
     return { ...body, verificationToken: (await response.json()).verificationToken, verificationCode: emails.at(-1).code };
   };
-  return { store, request, origin, verify, emails };
+  return { store, request, origin, verify, emails, app: module.exports };
 }
 
 function bootstrapToken(store) {
@@ -706,6 +706,34 @@ test('Secure cookies require a trusted HTTPS proxy and HTTP remains confined to 
     assert.equal((await request(endpoint, { method: 'POST', headers: { Origin: 'http://foreign.test' }, body: {} })).status, 403, endpoint);
   }
   assert.equal((await fetch(origin + '/api/auth/logout', { method: 'POST' })).status, 403);
+});
+
+test('numeric proxy hop settings admit approved HTTPS without allowing HTTP or foreign origins', async context => {
+  const environment = { HOST: '0.0.0.0', TRUST_PROXY: '1' };
+  const { app, store, request, origin } = await httpFixture(context, environment);
+  const trust = app.get('trust proxy fn');
+  assert.equal(trust('172.18.0.1', 0), true);
+  assert.equal(trust('172.18.0.1', 1), false, 'Only the configured immediate proxy hop is trusted');
+  const headers = { Origin: origin.replace('http:', 'https:'), 'X-Forwarded-Proto': 'https' };
+  assert.equal((await request('/api/auth/status', { headers })).status, 200);
+  for (const protocol of ['', 'http']) {
+    const response = await request('/api/auth/status', { headers: { ...headers, 'X-Forwarded-Proto': protocol } });
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, 'UNAPPROVED_ORIGIN');
+  }
+  const foreign = await request('/api/auth/login', {
+    method: 'POST', headers: { ...headers, Origin: 'https://foreign.example' }, body: {},
+  });
+  assert.equal(foreign.status, 403);
+  assert.equal((await foreign.json()).code, 'INVALID_ORIGIN');
+  store.createUser({ username: 'proxy.member', ...await authModule.hashPassword('proxy-test-password') });
+  const login = await request('/api/auth/login', {
+    method: 'POST', headers, body: { identifier: 'proxy.member', password: 'proxy-test-password' },
+  });
+  assert.equal(login.status, 200);
+  assert.match(login.headers.get('set-cookie'), /; Secure/);
+  const direct = await httpFixture(context, { ...environment, TRUST_PROXY: '0' });
+  assert.equal((await direct.request('/api/auth/status', { headers })).status, 403, 'An untrusted request cannot claim HTTPS');
 });
 
 test('real member sessions isolate profile data, notebooks, imports, exports and statistics even from administrators', async context => {

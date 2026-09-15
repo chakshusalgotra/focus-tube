@@ -22,7 +22,8 @@ app.all('/internal/metrics', monitoring.metricsHandler);
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
-if (process.env.TRUST_PROXY) app.set('trust proxy', process.env.TRUST_PROXY);
+const trustProxy = process.env.TRUST_PROXY;
+if (trustProxy) app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
 const isLoopback = hostname => ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
 const localHttp = isLoopback(HOST) || process.env.AUTH_ALLOW_LOOPBACK_HTTP === '1';
 const publicOrigins = new Set([
