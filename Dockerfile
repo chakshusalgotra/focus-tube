@@ -8,7 +8,7 @@ RUN apk add --no-cache nodejs npm \
     && npm ci --omit=dev \
     && apk del npm .build-deps
 
-COPY auth.js auth-services.js db.js downloads.js server.js youtube-search.js observability.js ./
+COPY auth.js auth-services.js db.js downloads.js feedback.js server.js youtube-search.js observability.js ./
 COPY scripts/auth-admin.js ./scripts/auth-admin.js
 COPY public ./public
 

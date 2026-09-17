@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="referrer" content="no-referrer" />
+  <title>Feedback - FocusTube</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/vendor/fonts/plex/400.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/500.css" />
+  <link rel="stylesheet" href="/vendor/fonts/plex/600.css" />
+  <link rel="stylesheet" href="/vendor/fonts/manrope/index.css" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/vendor/lucide.js" defer></script>
+  <script src="/feedback.js" defer></script>
+</head>
+<body class="feedback-page feedback-auth-pending">
+  <a class="skip-link" href="#feedbackContent">Skip to content</a>
+  <header class="feedback-header"><div class="feedback-header-inner">
+    <a class="brand" href="/" aria-label="FocusTube home"><span class="brand-symbol"><i data-lucide="book-open" aria-hidden="true"></i></span><span class="brand-wordmark">focustube<span class="brand-dot">.</span></span></a>
+    <div class="feedback-header-actions"><span id="feedbackIdentity" class="muted" data-account-content></span><a id="feedbackSignIn" class="btn ghost" href="/" target="_blank" rel="noopener noreferrer" aria-label="Sign in (opens in a new tab)"><i data-lucide="log-in" aria-hidden="true"></i>Sign in</a><a class="feedback-workspace-link" href="/">Learning workspace</a></div>
+  </div></header>
+  <main id="feedbackContent" class="feedback-content" tabindex="-1">
+    <div class="feedback-heading"><h1>Feedback</h1><button id="feedbackNew" class="btn" type="button" hidden data-account-content><i data-lucide="plus" aria-hidden="true"></i>New report</button></div>
+    <nav class="feedback-tabs" aria-label="Feedback views"><a href="#public" data-view="public" aria-current="page">Public</a><a href="#mine" data-view="mine" hidden data-account-content>My reports</a><a href="#all" data-view="all" hidden data-account-content>All reports</a></nav>
+    <p id="feedbackNotice" class="feedback-notice" role="status" aria-live="polite"></p>
+    <p id="feedbackError" class="add-error" role="alert" tabindex="-1" hidden></p>
+    <div class="feedback-toolbar">
+      <form id="feedbackFilters" class="feedback-filters">
+        <label class="feedback-search">Search titles<input id="feedbackQuery" type="search" maxlength="100" autocomplete="off" /></label>
+        <label>Category<select id="feedbackCategory"><option value="">All categories</option><option value="bug">Bug</option><option value="usability">Usability</option><option value="request">Feature request</option></select></label>
+        <label>Status<select id="feedbackStatus"><option value="">All statuses</option><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+        <button class="icon-btn" type="submit" title="Search reports" aria-label="Search reports"><i data-lucide="search" aria-hidden="true"></i></button>
+      </form>
+      <button id="feedbackRefresh" class="icon-btn" type="button" title="Refresh feedback" aria-label="Refresh feedback"><i data-lucide="refresh-cw" aria-hidden="true"></i></button>
+    </div>
+    <p id="feedbackLoading" class="muted" role="status">Loading feedback...</p>
+    <section id="feedbackListPanel" aria-label="Reports" hidden data-account-content>
+      <p id="feedbackCount" class="muted" role="status"></p><ol id="feedbackList" class="feedback-list"></ol>
+      <p id="feedbackEmpty" class="feedback-empty" hidden>No reports found.</p><nav id="feedbackPagination" class="feedback-pagination" aria-label="Report pages"></nav>
+    </section>
+    <section id="feedbackThreadPanel" aria-labelledby="feedbackThreadTitle" hidden data-account-content>
+      <a id="feedbackBack" class="feedback-back" href="#public"><i data-lucide="arrow-left" aria-hidden="true"></i>Reports</a>
+      <article class="feedback-thread"><div id="feedbackThreadMeta" class="feedback-meta"></div><h2 id="feedbackThreadTitle" tabindex="-1"></h2><div id="feedbackThreadBody" class="feedback-prose"></div></article>
+      <section id="feedbackAdminTools" class="feedback-admin-tools" aria-labelledby="feedbackAdminTitle" hidden>
+        <h3 id="feedbackAdminTitle">Admin actions</h3>
+        <form id="feedbackModeration" class="feedback-moderation">
+          <label>Status<select id="feedbackEditStatus"><option value="open">Open</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+          <label class="feedback-check"><input id="feedbackLocked" type="checkbox" />Lock tester replies</label><label class="feedback-check"><input id="feedbackHidden" type="checkbox" />Hide thread</label>
+          <button class="btn ghost" type="submit"><i data-lucide="save" aria-hidden="true"></i>Save status</button>
+        </form>
+      </section>
+      <section class="feedback-conversation" aria-labelledby="feedbackRepliesTitle">
+        <h3 id="feedbackRepliesTitle">Conversation</h3><ol id="feedbackReplies" class="feedback-replies"></ol><nav id="feedbackReplyPagination" class="feedback-pagination" aria-label="Reply pages"></nav>
+        <p id="feedbackReplyUnavailable" class="muted"></p>
+        <form id="feedbackReplyForm" class="feedback-form" hidden>
+          <fieldset id="feedbackReplyFields"><legend>Add a reply</legend><label>Reply<textarea id="feedbackReplyBody" rows="4" maxlength="8000" required></textarea></label>
+            <div class="feedback-screenshot-field"><label for="feedbackReplyScreenshots">Screenshots (optional)</label><input id="feedbackReplyScreenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-describedby="feedbackReplyScreenshotLimits" />
+              <p id="feedbackReplyScreenshotLimits" class="muted">PNG, JPEG, WebP. Up to 3 images, 5 MiB each. Remove sensitive details first.</p><p id="feedbackReplyScreenshotStatus" class="muted" role="status"></p><ul id="feedbackReplyPreviews" class="feedback-screenshots"></ul>
+            </div>
+          </fieldset>
+          <p id="feedbackReplyError" class="add-error" role="alert" hidden></p><div class="feedback-form-actions"><button class="btn" type="submit"><i data-lucide="send" aria-hidden="true"></i>Post reply</button></div>
+        </form>
+      </section>
+    </section>
+    <footer class="feedback-footer"><a href="/policies.html#privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a><a href="/policies.html#terms" target="_blank" rel="noopener noreferrer">Terms and conditions</a></footer>
+    <noscript><p>JavaScript is required to load feedback. <a href="/">Return to FocusTube</a>.</p></noscript>
+  </main>
+  <dialog id="feedbackReportDialog" class="feedback-dialog" aria-labelledby="feedbackReportTitle" data-account-content>
+    <div class="feedback-dialog-heading"><h2 id="feedbackReportTitle">New report</h2><button class="icon-btn" type="button" data-dismiss title="Close report" aria-label="Close report"><i data-lucide="x" aria-hidden="true"></i></button></div>
+    <form id="feedbackReportForm" class="feedback-form">
+      <fieldset id="feedbackReportFields"><legend>Report details</legend>
+        <label>Category<select name="category"><option value="bug">Bug</option><option value="usability">Usability</option><option value="request">Feature request</option></select></label>
+        <label>Title<input name="title" type="text" maxlength="160" required autocomplete="off" /></label><label>Description<textarea name="body" rows="4" maxlength="20000" required></textarea></label>
+        <div class="feedback-screenshot-field"><label for="feedbackReportScreenshots">Screenshots (optional)</label><input id="feedbackReportScreenshots" type="file" accept="image/png,image/jpeg,image/webp" multiple aria-describedby="feedbackReportScreenshotLimits" />
+          <p id="feedbackReportScreenshotLimits" class="muted">PNG, JPEG, WebP. Up to 3 images, 5 MiB each. Remove sensitive details first.</p><p id="feedbackReportScreenshotStatus" class="muted" role="status"></p><ul id="feedbackReportPreviews" class="feedback-screenshots"></ul>
+        </div>
+        <fieldset class="feedback-visibility"><legend>Visibility</legend><label class="feedback-check"><input name="visibility" type="radio" value="private" checked /><i data-lucide="lock-keyhole" aria-hidden="true"></i>Private</label><label class="feedback-check"><input name="visibility" type="radio" value="public" /><i data-lucide="globe" aria-hidden="true"></i>Public</label></fieldset>
+        <p id="feedbackAudience" class="feedback-audience" role="status">Only you and administrators can read and reply.</p>
+        <label id="feedbackPublicConsentLabel" class="feedback-check" hidden><input id="feedbackPublicConsent" type="checkbox" />I agree to publish this report, its screenshots, and my username to the internet.</label>
+        <details class="feedback-reproduction"><summary>Reproduction details (optional)</summary><div>
+          <label>Steps to reproduce<textarea name="steps" rows="3" maxlength="8000"></textarea></label><label>Expected behavior<textarea name="expected" rows="2" maxlength="8000"></textarea></label><label>Actual behavior<textarea name="actual" rows="2" maxlength="8000"></textarea></label><label>Page area and device<input name="context" type="text" maxlength="1000" autocomplete="off" /></label>
+        </div></details>
+      </fieldset>
+      <p id="feedbackReportError" class="add-error" role="alert" hidden></p>
+      <div class="feedback-form-actions"><button class="btn ghost" type="button" data-dismiss>Cancel</button><button id="feedbackReportSubmit" class="btn" type="submit"><i data-lucide="send" aria-hidden="true"></i>Submit report</button></div>
+    </form>
+  </dialog>
+  <dialog id="feedbackImageDialog" class="feedback-dialog feedback-image-dialog" aria-labelledby="feedbackImageTitle" data-account-content>
+    <div class="feedback-dialog-heading"><h2 id="feedbackImageTitle">Screenshot</h2><div class="feedback-image-actions">
+      <button id="feedbackImageZoom" class="icon-btn" type="button" title="Actual size" aria-label="Actual size" aria-pressed="false"><i data-lucide="zoom-in" aria-hidden="true"></i></button>
+      <a id="feedbackImageDownload" class="icon-btn" download="screenshot.png" title="Download screenshot" aria-label="Download screenshot"><i data-lucide="download" aria-hidden="true"></i></a>
+      <button id="feedbackImageClose" class="icon-btn" type="button" title="Close screenshot" aria-label="Close screenshot"><i data-lucide="x" aria-hidden="true"></i></button>
+    </div></div>
+    <div class="feedback-image-stage" tabindex="0" role="region" aria-label="Screenshot"><img id="feedbackImage" alt="" /></div>
+  </dialog>
+</body>
+</html>

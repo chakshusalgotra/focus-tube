@@ -361,7 +361,13 @@ function createAuth(store, options = {}) {
   }));
   invitesRouter.use(respondError);
 
-  return { router, invitesRouter, optionalAuth, requireAuth, requireAdmin, requireSession, captchaSiteKey: services.captchaSiteKey };
+  function reserveFeedbackBudget(req, action) {
+    const limit = { report: 5, reply: 30, moderate: 60, screenshot: 30 }[action];
+    if (!limit || !req.user || req.user.is_guest) fail('FORBIDDEN');
+    reserve(req, [{ key: budgetKey('feedback', action, req.user.id), limit }]);
+  }
+
+  return { router, invitesRouter, optionalAuth, requireAuth, requireAdmin, requireSession, reserveFeedbackBudget, captchaSiteKey: services.captchaSiteKey };
 }
 
 module.exports = { createAuth, hashPassword, verifyPassword, tokenHash, validToken, normalizeEmail };

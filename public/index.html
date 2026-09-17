@@ -30,6 +30,7 @@
       <a class="workspace-link" href="#tasks" data-section="tasks" title="Tasks" aria-label="Tasks"><span data-ui-icon="ListTodo"></span><span class="nav-text">Tasks</span></a>
       <a id="dashboardBtn" class="workspace-link" href="#dashboard" data-section="dashboard" title="Learning dashboard" aria-label="Learning dashboard"><span data-ui-icon="ChartNoAxesCombined"></span><span class="nav-text">Dashboard</span></a>
       <button id="monitoringBtn" class="workspace-link hidden" type="button" title="Site monitoring" aria-label="Site monitoring"><span data-ui-icon="Activity"></span><span class="nav-text">Monitoring</span></button>
+      <a class="workspace-link" href="/feedback" target="_blank" rel="noopener noreferrer" title="Feedback (opens in a new tab)" aria-label="Feedback (opens in a new tab)"><span data-ui-icon="MessageSquare"></span><span class="nav-text">Feedback</span></a>
     </nav>
     <nav id="courseNavigation" class="workspace-nav course-navigation" aria-label="Course tools">
       <button id="sideToggle" class="workspace-link hidden" type="button" title="Show course content" aria-label="Show course content" aria-controls="sidebar" aria-expanded="false"><span data-ui-icon="ListVideo" aria-hidden="true"></span><span class="nav-text">Course content</span></button>
@@ -94,6 +95,7 @@
         <button class="btn ghost auth-provider" type="button" aria-disabled="true" title="GitHub sign-in is not available yet"><span data-ui-icon="LogIn"></span><span>GitHub<small>Coming soon</small></span></button>
       </div>
       <nav class="auth-policies" aria-label="Legal information"><a href="/policies.html#terms" target="_blank" rel="noopener noreferrer">Terms and conditions</a><a href="/policies.html#privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></nav>
+      <nav class="auth-policies" aria-label="Feedback"><a href="/feedback" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
       <div id="guestMigration" class="auth-actions hidden">
         <button id="guestExport" class="btn ghost" type="button"><span data-ui-icon="Download"></span>Export guest data</button>
         <button id="guestSignOut" class="btn ghost" type="button">Sign out</button>
@@ -570,7 +572,7 @@
       </section>
       </div>
       </div>
-      <footer class="settings-footer"><button id="logoutBtn" class="btn ghost" type="button"><span data-ui-icon="LogOut"></span>Sign out</button></footer>
+      <footer class="settings-footer"><a class="btn ghost" href="/feedback" target="_blank" rel="noopener noreferrer" aria-label="Feedback (opens in a new tab)"><span data-ui-icon="MessageSquare"></span>Feedback</a><button id="logoutBtn" class="btn ghost" type="button"><span data-ui-icon="LogOut"></span>Sign out</button></footer>
     </div>
   </dialog>
 

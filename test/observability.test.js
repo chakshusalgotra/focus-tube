@@ -46,6 +46,20 @@ test('request monitoring counts once and logs only safe templates and generated 
   assert.equal((await monitor.registry.getSingleMetric('focustube_http_inflight').get()).values[0].value, 0);
 });
 
+test('forum route metrics use templates without leaking report content or account details', async () => {
+  const { monitor, lines } = fixture();
+  for (const [baseUrl, route] of [['/api/feedback', '/:id/replies'], ['/api/admin/feedback', '/:id']]) {
+    const req = { method: 'POST', baseUrl, route: { path: route }, url: '/PRIVATE_ID?q=PRIVATE_QUERY',
+      headers: { cookie: 'PRIVATE_COOKIE' }, body: { title: 'PRIVATE_TITLE', body: 'PRIVATE_BODY', email: 'private@example.test' } };
+    const res = response(); monitor.middleware(req, res, () => {}); res.emit('finish');
+    assert.equal(lines.at(-1).route, baseUrl + route);
+  }
+  monitor.observe('feedback', 'success');
+  const output = JSON.stringify(lines) + await monitor.registry.metrics();
+  assert.doesNotMatch(output, /PRIVATE_|private@example\.test/);
+  assert.match(output, /feedback/);
+});
+
 test('aborts, unknown paths, unusual methods and health probes have bounded labels', async () => {
   const { monitor, lines } = fixture();
   for (const req of [{ method: 'SECRET_METHOD', url: '/SECRET_PATH', headers: {} },
