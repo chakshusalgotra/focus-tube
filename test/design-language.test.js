@@ -294,14 +294,15 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
     ...properties,
   });
   const control = { matches: () => true };
+  const select = { tagName: 'SELECT', matches: () => false };
   const playerControls = target({
     offsetHeight: 92,
-    classList: { add: name => classes.add(name), remove: name => classes.delete(name) },
-    contains: element => element === control,
+    classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+    contains: element => element === control || element === select,
     querySelector: () => menuOpen,
   });
   const playerPane = target({
-    contains: element => element === control,
+    contains: element => element === control || element === select,
     getBoundingClientRect: () => ({ left: 0, right: 640, top: 0, bottom: 360 }),
   });
   const document = target();
@@ -371,8 +372,33 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
 
   fire(playerPane, 'pointerdown', { target: control, pointerType: 'touch' });
   fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(playerPane, 'pointerleave', { pointerType: 'touch' });
+  assert.equal(visible(), true, 'Touch release must not hide the bar before click delivery');
   advance(2500);
   assert.equal(visible(), false, 'Touch use must not leave a permanent hover state');
+
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(playerPane, 'focusin', { target: select });
+  fire(document, 'pointerup', { target: select, pointerType: 'touch' });
+  fire(playerPane, 'pointerleave', { pointerType: 'touch' });
+  advance(10000);
+  assert.equal(visible(), true, 'A touched native select stays visible even without select:open support');
+  fire(playerControls, 'change', { target: select });
+  assert.equal(visible(), true, 'A completed touch selection retains the normal preview interval');
+  advance(2500);
+  assert.equal(visible(), false);
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(document, 'pointerdown', { target: {}, pointerType: 'touch' });
+  assert.equal(visible(), false, 'Tapping outside clears a cancelled select interaction');
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(playerPane, 'focusout', { target: select, relatedTarget: null });
+  assert.equal(visible(), false, 'Leaving select focus clears its hold');
+  fire(playerPane, 'pointerdown', { target: { id: 'shield' }, pointerType: 'touch' });
+  assert.equal(run('controlsRevealOnly'), true, 'The first surface tap reveals hidden controls without toggling playback');
+  fire(playerPane, 'pointerdown', { target: { id: 'shield' }, pointerType: 'touch' });
+  assert.equal(run('controlsRevealOnly'), false, 'A later surface tap can toggle playback');
   run('showPlayerControls(); resetPlayerControls()');
   assert.equal(visible(), false);
   assert.equal(timers.size, 0, 'Navigation and lesson changes cancel pending timers');
@@ -775,6 +801,19 @@ test('shared refinement uses modest corners and motion with accessible fallbacks
   assert.match(css, /\.task-check \{ width: 44px; height: 44px; min-width: 44px/);
 });
 
+test('text density reduces typography by twenty percent without scaling tap targets or print', () => {
+  const css = read('public/styles.css');
+  assert.match(css, /:root\s*\{[^}]*--text-scale: 0\.8;/);
+  assert.match(css, /font: calc\(14px \* var\(--text-scale\)\)\/1\.5/);
+  assert.match(css, /h1 \{ font-size: calc\(30px \* var\(--text-scale\)\)/);
+  assert.match(css, /@media print\s*\{\s*:root \{ --text-scale: 1; \}/);
+  assert.doesNotMatch(css, /\bzoom\s*:|transform:\s*scale\(0\.8\)|text-size-adjust:\s*none/);
+  assert.match(css, /#controls \.icon-btn \{ width: 44px; height: 44px;/);
+  const fontDeclarations = [...css.matchAll(/\b(?:font-size|font)\s*:\s*([^;{}]+)(?=;|})/g)].map(match => match[1]);
+  assert.ok(fontDeclarations.every(value => !/\dpx\b/.test(value) || value.includes('--text-scale')), 'All fixed on-screen fonts use the shared text scale');
+  assert.match(read('public/app.js'), /Chart\.defaults\.font\.size = 12 \* .*getPropertyValue\('--text-scale'\)/);
+});
+
 test('compact player controls remain reachable without wrapping outside the video', () => {
   const css = read('public/styles.css');
   const start = css.indexOf('@container (max-width: 480px) {\n  #controls');
@@ -783,6 +822,12 @@ test('compact player controls remain reachable without wrapping outside the vide
   assert.match(compact, /#controls \.btn-row \.spacer \{ flex: 0 0 4px/);
   assert.match(compact, /flex-shrink: 0/);
   assert.doesNotMatch(compact, /display: none/);
+  const touch = css.slice(css.indexOf('@media (pointer: coarse), (hover: none), (any-pointer: coarse) {'), css.indexOf('@media (prefers-contrast: more) {'));
+  assert.match(touch, /#controls \.icon-btn \{ width: 44px; height: 44px;/);
+  assert.match(touch, /#controls #speedSel \{ width: 82px;/);
+  assert.match(touch, /#controls #qualitySel \{ width: 96px;/);
+  assert.match(touch, /#controls \.icon-btn > \* \{ pointer-events: none;/);
+  assert.match(touch, /#controls \.btn-row \{ flex-wrap: nowrap; overflow-x: auto;/);
 });
 
 test('course layout defaults are closed and explicit choices persist per account and course', () => {

@@ -1,6 +1,8 @@
 /* FocusTube front-end — courses, player, streaks, certificate. */
 'use strict';
 
+if (window.Chart) Chart.defaults.font.size = 12 * (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--text-scale')) || 1);
+
 /* ================= tiny helpers ================= */
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -3962,11 +3964,13 @@ let controlsPointerNearBottom = false;
 let controlsPointerDown = false;
 let controlsKeyboardFocus = false;
 let controlsPlaybackStarted = false;
+let controlsTouchSelect = null;
+let controlsRevealOnly = false;
 
 function hidePlayerControls() {
   clearTimeout(controlsHideTimer);
   controlsHideTimer = null;
-  if (controlsPointerDown || controlsKeyboardFocus || (controlsPointerInside && controlsPointerNearBottom)) return;
+  if (controlsPointerDown || controlsKeyboardFocus || controlsTouchSelect || (controlsPointerInside && controlsPointerNearBottom)) return;
   if (safe(() => playerControls.querySelector('select:open'))) {
     controlsHideTimer = setTimeout(hidePlayerControls, 2500);
     return;
@@ -3989,6 +3993,8 @@ function resetPlayerControls() {
   controlsPointerDown = false;
   controlsKeyboardFocus = false;
   controlsPlaybackStarted = false;
+  controlsTouchSelect = null;
+  controlsRevealOnly = false;
   playerControls.classList.remove('controls-visible');
 }
 
@@ -4013,15 +4019,25 @@ function trackPlayerPointer(event) {
 function setupPlayerControls() {
   playerPane.addEventListener('pointerenter', trackPlayerPointer);
   playerPane.addEventListener('pointermove', trackPlayerPointer);
-  playerPane.addEventListener('pointerleave', () => {
+  playerPane.addEventListener('pointerleave', event => {
+    if (event.pointerType === 'touch') return;
     controlsPointerInside = false;
     controlsPointerNearBottom = false;
     hidePlayerControls();
   });
   playerPane.addEventListener('pointerdown', event => {
+    controlsRevealOnly = event.pointerType === 'touch' && event.target.id === 'shield' && !playerControls.classList.contains('controls-visible');
     controlsKeyboardFocus = false;
     controlsPointerDown = playerControls.contains(event.target);
+    controlsTouchSelect = event.pointerType === 'touch' && event.target.tagName === 'SELECT' ? event.target : null;
     showPlayerControls();
+  });
+  document.addEventListener('pointerdown', event => {
+    if (playerPane.contains(event.target)) return;
+    controlsTouchSelect = null;
+    controlsPointerInside = false;
+    controlsPointerNearBottom = false;
+    hidePlayerControls();
   });
   const finishPointer = event => {
     if (!controlsPointerDown) return;
@@ -4043,13 +4059,16 @@ function setupPlayerControls() {
     showPlayerControls();
   });
   playerPane.addEventListener('focusout', event => {
+    if (event.target === controlsTouchSelect) controlsTouchSelect = null;
     if (playerPane.contains(event.relatedTarget)) return;
     controlsKeyboardFocus = false;
     if (controlsPointerInside) showPlayerControls();
     else hidePlayerControls();
   });
-  playerControls.addEventListener('change', () => {
-    if (controlsPointerInside || controlsKeyboardFocus) showPlayerControls();
+  playerControls.addEventListener('change', event => {
+    const touchSelection = event.target === controlsTouchSelect;
+    if (touchSelection) controlsTouchSelect = null;
+    if (touchSelection || controlsPointerInside || controlsKeyboardFocus) showPlayerControls();
     else hidePlayerControls();
   });
   document.addEventListener('fullscreenchange', () => {
@@ -5130,7 +5149,10 @@ seekBar.addEventListener('change', () => {
   seeking = false;
 });
 
-$('#shield').addEventListener('click', togglePlay);
+$('#shield').addEventListener('click', () => {
+  if (!controlsRevealOnly) togglePlay();
+  controlsRevealOnly = false;
+});
 $('#shield').addEventListener('dblclick', toggleFullscreen);
 $('#posterPlay').addEventListener('click', () => safe(() => player.playVideo()));
 pauseOverlay.addEventListener('click', () => safe(() => player.playVideo()));

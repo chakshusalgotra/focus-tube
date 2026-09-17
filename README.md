@@ -113,6 +113,7 @@ The interface supports light and dark themes, with teal actions and restrained c
 - Quality selector populated from the levels available to the embedded player.
 - YouTube captions toggle and keyboard shortcuts.
 - Pausing lightly dims the full video and shows a centered resume button. Player controls appear on pointer activity, keyboard focus, or playback changes, then hide when idle. Start, completion, and error states have their own actions.
+- On touch devices, the first video tap reveals hidden controls without pausing. Player buttons keep 44px tap targets, and speed/quality selects have wider tappable areas. The controls remain visible while a touched select is active; choosing a value resumes the normal hide timer. Compact toolbars scroll horizontally without shrinking their controls.
 - Remembers playback position and preferred speed per course.
 - Keeps playback inside the official YouTube embed. YouTube may still display its own paused-frame elements; FocusTube does not promise to remove every embedded overlay.
 
@@ -132,6 +133,7 @@ The interface supports light and dark themes, with teal actions and restrained c
 
 ### Learning workspace
 
+- On-screen typography uses 80% of the previous text sizes, including menus, notes, forms, and chart labels. Icons and touch targets are not scaled down, browser zoom remains available, and notebook print/PDF sizing is unchanged.
 - Use the toggle at the top of the rail on any signed-in screen. Expanded navigation shows icons and labels in a 220px rail; collapsed navigation keeps the same controls in a 64px icon rail with hover and keyboard-focus labels. Course pages show only the three course tools; other pages retain Library, Roadmaps, Notebooks, Tasks, Dashboard, profile controls, and a disabled Board entry. Collapsing the rail does not change whether Course content or Notes is open, and the rail preference is remembered in this browser when local storage is available.
 - At 900px and below, navigation defaults to the icon rail unless a preference was saved. Expanding opens a drawer over the content without reducing the video width. Escape, the backdrop, or choosing a destination closes the drawer; keyboard focus stays inside it while open. The drawer toggle remains available in both states.
 - **Board** is marked **Coming soon** in the global workspace. The previous library Kanban and sprint interface is retired; this entry does not open it. Existing columns, card ordering, overrides, and sprint data are retained rather than deleted.
