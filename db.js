@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 const noteModel = require(path.join(__dirname, 'public/notebook-model'));
 
@@ -197,6 +198,61 @@ db.transaction(() => {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS auth_audit_time_idx ON auth_audit(created_at DESC);
+    CREATE TABLE IF NOT EXISTS feedback_threads (
+      id TEXT PRIMARY KEY,
+      reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      submission_id TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      category TEXT NOT NULL CHECK(category IN ('bug', 'usability', 'request')),
+      visibility TEXT NOT NULL CHECK(visibility IN ('public', 'private')),
+      title TEXT NOT NULL CHECK(length(title) BETWEEN 1 AND 160),
+      body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 20000),
+      steps TEXT NOT NULL DEFAULT '',
+      expected TEXT NOT NULL DEFAULT '',
+      actual TEXT NOT NULL DEFAULT '',
+      context TEXT NOT NULL DEFAULT '',
+      environment TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'in_progress', 'resolved', 'closed')),
+      hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0, 1)),
+      locked INTEGER NOT NULL DEFAULT 0 CHECK(locked IN (0, 1)),
+      moderated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      moderated_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(revision > 0),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(reporter_id, submission_id)
+    );
+    CREATE INDEX IF NOT EXISTS feedback_public_idx ON feedback_threads(visibility, hidden, created_at DESC, id);
+    CREATE INDEX IF NOT EXISTS feedback_owner_idx ON feedback_threads(reporter_id, created_at DESC, id);
+    CREATE TABLE IF NOT EXISTS feedback_replies (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL REFERENCES feedback_threads(id) ON DELETE CASCADE,
+      author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      submission_id TEXT NOT NULL,
+      payload_hash TEXT NOT NULL,
+      body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 8000),
+      hidden INTEGER NOT NULL DEFAULT 0 CHECK(hidden IN (0, 1)),
+      moderated_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      moderated_at TEXT,
+      created_at TEXT NOT NULL,
+      UNIQUE(author_id, submission_id)
+    );
+    CREATE INDEX IF NOT EXISTS feedback_replies_thread_idx ON feedback_replies(thread_id, created_at, id);
+    CREATE UNIQUE INDEX IF NOT EXISTS feedback_reply_parent_idx ON feedback_replies(id, thread_id);
+    CREATE TABLE IF NOT EXISTS feedback_screenshots (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL REFERENCES feedback_threads(id) ON DELETE CASCADE,
+      reply_id TEXT,
+      owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      position INTEGER NOT NULL CHECK(position BETWEEN 0 AND 2),
+      width INTEGER NOT NULL CHECK(width BETWEEN 1 AND 2560),
+      height INTEGER NOT NULL CHECK(height BETWEEN 1 AND 2560),
+      data BLOB NOT NULL CHECK(typeof(data) = 'blob' AND length(data) BETWEEN 1 AND 4194304),
+      created_at TEXT NOT NULL,
+      FOREIGN KEY(reply_id, thread_id) REFERENCES feedback_replies(id, thread_id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS feedback_screenshots_parent_idx ON feedback_screenshots(thread_id, reply_id, position);
+    CREATE INDEX IF NOT EXISTS feedback_screenshots_owner_idx ON feedback_screenshots(owner_id);
   `);
   const invitationColumns = new Set(db.pragma('table_info(invitations)').map(column => column.name));
   if (!invitationColumns.has('max_uses')) {
@@ -1113,6 +1169,238 @@ const getExportData = db.transaction(userId => {
   };
 });
 
+function feedbackFailure(code, status = 400) {
+  return Object.assign(new Error(code), { code, status });
+}
+
+function feedbackInput(value, fields) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !fields.includes(key))) {
+    throw feedbackFailure('INVALID_FEEDBACK');
+  }
+}
+
+function feedbackText(value, maximum, required = false, singleLine = false) {
+  if (value === undefined && !required) return '';
+  if (typeof value !== 'string' || value.length > maximum || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f]/.test(value) ||
+      (singleLine && /[\r\n\t]/.test(value)) || (required && !value.trim())) throw feedbackFailure('INVALID_FEEDBACK');
+  return value.trim();
+}
+
+function feedbackId(value) {
+  if (typeof value !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(value)) throw feedbackFailure('INVALID_FEEDBACK');
+  return value;
+}
+
+function feedbackViewer(sessionHash, required = false, admin = false) {
+  const user = sessionHash ? getSessionUser(sessionHash) : null;
+  const member = user && !user.is_guest ? user : null;
+  if (required && !member) throw feedbackFailure('UNAUTHENTICATED', 401);
+  if (admin && !member?.is_admin) throw feedbackFailure('FORBIDDEN', 403);
+  return member;
+}
+
+const feedbackHash = value => crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const feedbackSelect = `SELECT thread.*, CASE WHEN author.account_state != 'deleted' THEN author.username END AS author_name,
+  CASE WHEN author.account_state = 'active' THEN author.is_admin ELSE 0 END AS author_admin,
+  (SELECT count(*) FROM feedback_replies reply WHERE reply.thread_id = thread.id AND reply.hidden = 0) AS reply_count
+  FROM feedback_threads thread LEFT JOIN users author ON author.id = thread.reporter_id`;
+
+function feedbackRow(viewer, id) {
+  const row = db.prepare(`${feedbackSelect} WHERE thread.id = ? AND
+    ((thread.visibility = 'public' AND thread.hidden = 0) OR thread.reporter_id = ? OR ? = 1)`)
+    .get(id, viewer?.id || null, viewer?.is_admin ? 1 : 0);
+  if (!row) throw feedbackFailure('FEEDBACK_NOT_FOUND', 404);
+  return row;
+}
+
+function feedbackSummary(row, viewer, detail = false) {
+  return { id: row.id, title: row.title, category: row.category, visibility: row.visibility, status: row.status,
+    hidden: !!row.hidden, locked: !!row.locked, revision: row.revision, replyCount: row.reply_count,
+    author: { name: row.author_name || 'Tester', isAdmin: !!row.author_admin },
+    isOwner: !!viewer && viewer.id === row.reporter_id,
+    canReply: !!viewer && !row.hidden && (!row.locked || !!viewer.is_admin),
+    createdAt: row.created_at, updatedAt: row.updated_at,
+    ...(detail ? { body: row.body, steps: row.steps, expected: row.expected, actual: row.actual, context: row.context,
+      screenshots: feedbackScreenshotList(row.id) } : {}) };
+}
+
+function feedbackScreenshotList(threadId, replyId = null) {
+  return db.prepare(`SELECT id, width, height, length(data) AS bytes FROM feedback_screenshots
+    WHERE thread_id = ? AND reply_id IS ? ORDER BY position`).all(threadId, replyId)
+    .map(row => ({ ...row, url: `/api/feedback/${threadId}/screenshots/${row.id}` }));
+}
+
+function validatedFeedbackScreenshots(screenshots) {
+  if (!Array.isArray(screenshots) || screenshots.length > 3 || screenshots.some(image => !image ||
+      !Buffer.isBuffer(image.data) || image.data.length < 1 || image.data.length > 4 * 1024 * 1024 ||
+      !Number.isSafeInteger(image.width) || image.width < 1 || image.width > 2560 ||
+      !Number.isSafeInteger(image.height) || image.height < 1 || image.height > 2560 ||
+      typeof image.sourceHash !== 'string' || !/^[a-f0-9]{64}$/.test(image.sourceHash))) throw feedbackFailure('INVALID_SCREENSHOT');
+  return screenshots;
+}
+
+function saveFeedbackScreenshots(ownerId, threadId, replyId, screenshots) {
+  if (!screenshots.length) return;
+  const bytes = screenshots.reduce((total, image) => total + image.data.length, 0);
+  const userBytes = db.prepare('SELECT COALESCE(sum(length(data)), 0) AS bytes FROM feedback_screenshots WHERE owner_id = ?').get(ownerId).bytes;
+  const totalBytes = db.prepare('SELECT COALESCE(sum(length(data)), 0) AS bytes FROM feedback_screenshots').get().bytes;
+  if (userBytes + bytes > 100 * 1024 * 1024 || totalBytes + bytes > 1024 * 1024 * 1024) throw feedbackFailure('SCREENSHOT_STORAGE_LIMIT', 413);
+  const insert = db.prepare(`INSERT INTO feedback_screenshots (id, thread_id, reply_id, owner_id, position, width, height, data, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  screenshots.forEach((image, position) => insert.run(crypto.randomUUID(), threadId, replyId, ownerId, position, image.width, image.height, image.data, now()));
+}
+
+function getFeedbackScreenshot(sessionHash, threadId, screenshotId) {
+  const viewer = feedbackViewer(sessionHash);
+  feedbackRow(viewer, threadId);
+  const image = db.prepare(`SELECT image.data, image.width, image.height FROM feedback_screenshots image
+    LEFT JOIN feedback_replies reply ON reply.id = image.reply_id AND reply.thread_id = image.thread_id
+    WHERE image.thread_id = ? AND image.id = ? AND (image.reply_id IS NULL OR reply.hidden = 0 OR ? = 1)`)
+    .get(threadId, screenshotId, viewer?.is_admin ? 1 : 0);
+  if (!image) throw feedbackFailure('FEEDBACK_NOT_FOUND', 404);
+  return image;
+}
+
+function feedbackPage(options = {}) {
+  const page = Number(options.page ?? 1);
+  if (!Number.isSafeInteger(page) || page < 1 || page > 10000) throw feedbackFailure('INVALID_FEEDBACK');
+  return { page, limit: 25, offset: (page - 1) * 25 };
+}
+
+function createFeedback(sessionHash, input, environment = 'local', reserve, images = []) {
+  feedbackInput(input, ['submissionId', 'category', 'visibility', 'publicConsent', 'title', 'body', 'steps', 'expected', 'actual', 'context']);
+  const submissionId = feedbackId(input.submissionId);
+  if (!['bug', 'usability', 'request'].includes(input.category) || !['public', 'private'].includes(input.visibility) ||
+      (input.publicConsent !== undefined && typeof input.publicConsent !== 'boolean')) throw feedbackFailure('INVALID_FEEDBACK');
+  if (input.visibility === 'public' && input.publicConsent !== true) throw feedbackFailure('PUBLIC_CONSENT_REQUIRED');
+  const values = { category: input.category, visibility: input.visibility, title: feedbackText(input.title, 160, true, true),
+    body: feedbackText(input.body, 20000, true), steps: feedbackText(input.steps, 8000), expected: feedbackText(input.expected, 8000),
+    actual: feedbackText(input.actual, 8000), context: feedbackText(input.context, 1000) };
+  if (Object.values(values).join('').length > 20000) throw feedbackFailure('INVALID_FEEDBACK');
+  const screenshots = validatedFeedbackScreenshots(images);
+  const hash = feedbackHash(screenshots.length ? { ...values, screenshotHashes: screenshots.map(image => image.sourceHash) } : values);
+  return db.transaction(() => {
+    const viewer = feedbackViewer(sessionHash, true);
+    const existing = db.prepare('SELECT id, payload_hash FROM feedback_threads WHERE reporter_id = ? AND submission_id = ?').get(viewer.id, submissionId);
+    if (existing && existing.payload_hash !== hash) throw feedbackFailure('FEEDBACK_CONFLICT', 409);
+    if (existing) return { thread: feedbackSummary(feedbackRow(viewer, existing.id), viewer, true), replayed: true };
+    reserve?.();
+    const id = crypto.randomUUID();
+    const timestamp = now();
+    db.prepare(`INSERT INTO feedback_threads (id, reporter_id, submission_id, payload_hash, category, visibility,
+      title, body, steps, expected, actual, context, environment, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(id, viewer.id, submissionId, hash, values.category, values.visibility, values.title, values.body,
+        values.steps, values.expected, values.actual, values.context,
+        ['local', 'dev', 'production', 'test'].includes(environment) ? environment : 'local', timestamp, timestamp);
+      saveFeedbackScreenshots(viewer.id, id, null, screenshots);
+    return { thread: feedbackSummary(feedbackRow(viewer, id), viewer, true), replayed: false };
+  }).immediate();
+}
+
+function listFeedback(sessionHash, scope = 'public', options = {}) {
+  const viewer = feedbackViewer(sessionHash, scope !== 'public', scope === 'all');
+  const { page, limit, offset } = feedbackPage(options);
+  const filters = [];
+  const parameters = [];
+  if (scope === 'public') filters.push("thread.visibility = 'public' AND thread.hidden = 0");
+  else if (scope === 'mine') { filters.push('thread.reporter_id = ?'); parameters.push(viewer.id); }
+  else if (scope !== 'all') throw feedbackFailure('INVALID_FEEDBACK');
+  for (const [key, allowed] of [['category', ['bug', 'usability', 'request']], ['status', ['open', 'in_progress', 'resolved', 'closed']]]) {
+    if (options[key]) {
+      if (!allowed.includes(options[key])) throw feedbackFailure('INVALID_FEEDBACK');
+      filters.push(`thread.${key} = ?`); parameters.push(options[key]);
+    }
+  }
+  if (options.q) { filters.push('instr(lower(thread.title), lower(?)) > 0'); parameters.push(feedbackText(options.q, 100, false, true)); }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : '';
+  const total = db.prepare(`SELECT count(*) AS count FROM feedback_threads thread ${where}`).get(...parameters).count;
+  const items = db.prepare(`${feedbackSelect} ${where} ORDER BY thread.created_at DESC, thread.id DESC LIMIT ? OFFSET ?`)
+    .all(...parameters, limit, offset).map(row => feedbackSummary(row, viewer));
+  return { items, total, page, pageSize: limit };
+}
+
+function getFeedback(sessionHash, id) {
+  const viewer = feedbackViewer(sessionHash);
+  return feedbackSummary(feedbackRow(viewer, id), viewer, true);
+}
+
+function getFeedbackReplies(sessionHash, id, options = {}) {
+  const viewer = feedbackViewer(sessionHash);
+  feedbackRow(viewer, id);
+  const { page, limit, offset } = feedbackPage(options);
+  const visible = viewer?.is_admin ? '1 = 1' : 'reply.hidden = 0';
+  const total = db.prepare(`SELECT count(*) AS count FROM feedback_replies reply WHERE thread_id = ? AND ${visible}`).get(id).count;
+  const items = db.prepare(`SELECT reply.id, reply.body, reply.hidden, reply.created_at,
+    CASE WHEN author.account_state != 'deleted' THEN author.username END AS author_name,
+    CASE WHEN author.account_state = 'active' THEN author.is_admin ELSE 0 END AS author_admin
+    FROM feedback_replies reply LEFT JOIN users author ON author.id = reply.author_id
+    WHERE reply.thread_id = ? AND ${visible} ORDER BY reply.created_at, reply.id LIMIT ? OFFSET ?`)
+    .all(id, limit, offset).map(row => ({ id: row.id, body: row.body, hidden: !!row.hidden, createdAt: row.created_at,
+      author: { name: row.author_name || 'Tester', isAdmin: !!row.author_admin }, screenshots: feedbackScreenshotList(id, row.id) }));
+  return { items, total, page, pageSize: limit };
+}
+
+function addFeedbackReply(sessionHash, threadId, input, reserve, images = []) {
+  feedbackInput(input, ['submissionId', 'body']);
+  const submissionId = feedbackId(input.submissionId);
+  const body = feedbackText(input.body, 8000, true);
+  const screenshots = validatedFeedbackScreenshots(images);
+  const hash = feedbackHash(screenshots.length ? { threadId, body, screenshotHashes: screenshots.map(image => image.sourceHash) } : { threadId, body });
+  return db.transaction(() => {
+    const viewer = feedbackViewer(sessionHash, true);
+    const thread = feedbackRow(viewer, threadId);
+    const existing = db.prepare('SELECT id, payload_hash FROM feedback_replies WHERE author_id = ? AND submission_id = ?').get(viewer.id, submissionId);
+    if (existing && existing.payload_hash !== hash) throw feedbackFailure('FEEDBACK_CONFLICT', 409);
+    if (existing) return { id: existing.id, replayed: true };
+    if (thread.hidden || (thread.locked && !viewer.is_admin)) throw feedbackFailure('FEEDBACK_LOCKED', 409);
+    reserve?.();
+    const id = crypto.randomUUID();
+    db.prepare(`INSERT INTO feedback_replies (id, thread_id, author_id, submission_id, payload_hash, body, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`).run(id, threadId, viewer.id, submissionId, hash, body, now());
+    saveFeedbackScreenshots(viewer.id, threadId, id, screenshots);
+    db.prepare('UPDATE feedback_threads SET revision = revision + 1, updated_at = ? WHERE id = ?').run(now(), threadId);
+    return { id, replayed: false };
+  }).immediate();
+}
+
+function feedbackRevision(value) {
+  if (!Number.isSafeInteger(value) || value < 1) throw feedbackFailure('INVALID_FEEDBACK');
+}
+
+function updateFeedback(sessionHash, id, input) {
+  feedbackInput(input, ['revision', 'status', 'hidden', 'locked']);
+  feedbackRevision(input.revision);
+  if (input.status !== undefined && !['open', 'in_progress', 'resolved', 'closed'].includes(input.status)) throw feedbackFailure('INVALID_FEEDBACK');
+  for (const key of ['hidden', 'locked']) if (input[key] !== undefined && typeof input[key] !== 'boolean') throw feedbackFailure('INVALID_FEEDBACK');
+  if (Object.keys(input).length < 2) throw feedbackFailure('INVALID_FEEDBACK');
+  return db.transaction(() => {
+    const viewer = feedbackViewer(sessionHash, true, true);
+    const thread = feedbackRow(viewer, id);
+    if (thread.revision !== input.revision) throw feedbackFailure('FEEDBACK_CONFLICT', 409);
+    db.prepare(`UPDATE feedback_threads SET status = ?, hidden = ?, locked = ?, moderated_by = ?, moderated_at = ?,
+      updated_at = ?, revision = revision + 1 WHERE id = ?`)
+      .run(input.status ?? thread.status, Number(input.hidden ?? thread.hidden), Number(input.locked ?? thread.locked), viewer.id, now(), now(), id);
+    return feedbackSummary(feedbackRow(viewer, id), viewer, true);
+  }).immediate();
+}
+
+function moderateFeedbackReply(sessionHash, threadId, replyId, input) {
+  feedbackInput(input, ['revision', 'hidden']);
+  feedbackRevision(input.revision);
+  if (typeof input.hidden !== 'boolean') throw feedbackFailure('INVALID_FEEDBACK');
+  return db.transaction(() => {
+    const viewer = feedbackViewer(sessionHash, true, true);
+    const thread = feedbackRow(viewer, threadId);
+    if (thread.revision !== input.revision) throw feedbackFailure('FEEDBACK_CONFLICT', 409);
+    const result = db.prepare('UPDATE feedback_replies SET hidden = ?, moderated_by = ?, moderated_at = ? WHERE id = ? AND thread_id = ?')
+      .run(Number(input.hidden), viewer.id, now(), replyId, threadId);
+    if (!result.changes) throw feedbackFailure('FEEDBACK_NOT_FOUND', 404);
+    db.prepare('UPDATE feedback_threads SET revision = revision + 1, updated_at = ? WHERE id = ?').run(now(), threadId);
+    return { ok: true };
+  }).immediate();
+}
+
 function cleanup() {
   const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
   const batchCutoff = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -1181,5 +1469,13 @@ module.exports = {
   getHistory,
   getExportData,
   importLegacyData,
+  createFeedback,
+  listFeedback,
+  getFeedback,
+  getFeedbackReplies,
+  getFeedbackScreenshot,
+  addFeedbackReply,
+  updateFeedback,
+  moderateFeedbackReply,
   cleanup,
 };

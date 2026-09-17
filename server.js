@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const path = require('path');
 const store = require('./db');
 const { createAuth } = require('./auth');
+const { createFeedback } = require('./feedback');
 const { createDownloads } = require('./downloads');
 const { createSearchRequest, parseSearchResults } = require('./youtube-search');
 const noteModel = require('./public/notebook-model');
@@ -59,7 +60,7 @@ app.use((req, res, next) => {
       "script-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
       "frame-src https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
       "connect-src 'self' https://www.youtube.com https://www.youtube-nocookie.com" + captchaSource,
-      "img-src 'self' data: https://i.ytimg.com",
+      "img-src 'self' data: blob: https://i.ytimg.com",
       "style-src 'self' 'unsafe-inline'",
       "object-src 'none'",
       "base-uri 'self'",
@@ -98,12 +99,16 @@ app.use(['/api/auth', '/api/invites'], (req, res, next) => {
 }, express.json({ limit: '8kb' }));
 app.use('/api/import', express.json({ limit: '25mb' }));
 app.use('/api/notebooks', express.json({ limit: '300kb' }));
+app.use(['/api/feedback', '/api/admin/feedback'], (req, res, next) => feedback.parseBody(req, res, next));
 app.use(express.json({ limit: '3mb' }));
 
 const auth = createAuth(store, { observe: monitoring.observe });
 app.use('/api/auth', auth.router);
 app.use('/api/invites', auth.invitesRouter);
 app.use('/api', auth.optionalAuth);
+const feedback = createFeedback(store, auth, { environment: process.env, observe: monitoring.observe });
+app.use('/api/feedback', feedback.router);
+app.use('/api/admin/feedback', feedback.adminRouter);
 const downloads = createDownloads(store, auth.requireAuth, { observe: monitoring.observe });
 app.use('/api/downloads', downloads.router);
 app.get('/api/health', (_req, res) => {
@@ -187,6 +192,7 @@ app.get('/vendor/lucide.js', (_req, res) =>
 );
 app.use('/vendor/fonts/plex', express.static(path.join(__dirname, 'node_modules/@fontsource/ibm-plex-sans')));
 app.use('/vendor/fonts/manrope', express.static(path.join(__dirname, 'node_modules/@fontsource-variable/manrope')));
+app.get('/feedback', (_req, res) => res.sendFile(path.join(__dirname, 'public/feedback.html')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 class HttpError extends Error {
