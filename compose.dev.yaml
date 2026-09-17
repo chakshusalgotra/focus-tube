@@ -5,14 +5,42 @@ services:
     build: .
     environment:
       ALLOWED_HOSTS: dev-ft.neuralnest.co.in
+      AUTH_PUBLIC_ORIGINS: https://dev-ft.neuralnest.co.in
       TRUST_PROXY: "1"
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-0}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
+      APP_ENV: dev
+      LOG_DIRECTORY: /app/logs
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      METRICS_ALLOWED_ADDRESSES: ${METRICS_ALLOWED_ADDRESSES:-127.0.0.1,::1}
+      GRAFANA_DASHBOARD_URL: ${GRAFANA_DASHBOARD_URL:-}
+      UPTIME_DASHBOARD_URL: ${UPTIME_DASHBOARD_URL:-}
     ports:
       # Cloudflare tunnel ingress: dev-ft.neuralnest.co.in -> localhost:3002
       - "127.0.0.1:3002:3000"
     volumes:
       - focustube-data:/app/data
+      - focustube-logs:/app/logs
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('https://dev-ft.neuralnest.co.in/api/health', { signal: AbortSignal.timeout(4000) }).then(async response => { if (!response.ok || (await response.json()).database !== 'ok') process.exit(1); }).catch(() => process.exit(1));"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
 
 volumes:
   # Namespaced by project name -> focustube-dev_focustube-data (separate DB from prod)
   focustube-data:
+  focustube-logs:

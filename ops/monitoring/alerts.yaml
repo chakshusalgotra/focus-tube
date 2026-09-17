@@ -1,0 +1,68 @@
+groups:
+  - name: focustube
+    interval: 30s
+    rules:
+      - alert: FocusTubeScrapeUnavailable
+        expr: up{job="focustube"} == 0 or absent(up{job="focustube"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: FocusTube metrics are unavailable
+          description: Check the app, collector, private network and scrape credentials. Use the independent uptime monitor to determine public availability.
+      - alert: FocusTubeDatabaseUnavailable
+        expr: focustube_database_ready == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: FocusTube cannot read its database
+          description: Check disk space, storage errors and database locking. Do not delete SQLite WAL files or the data volume.
+      - alert: FocusTubeHighServerErrors
+        expr: (sum by (environment) (rate(focustube_http_requests_total{status=~"5.."}[5m])) / sum by (environment) (rate(focustube_http_requests_total[5m])) > 0.02) and (sum by (environment) (increase(focustube_http_requests_total[5m])) > 30)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 2 percent of origin requests fail
+          description: Inspect sanitized request logs and recent deployments; separate upstream YouTube errors from core API errors.
+      - alert: FocusTubeSlowCoreAPI
+        expr: (histogram_quantile(0.95, sum by (le, environment, route) (rate(focustube_http_request_duration_seconds_bucket{route=~"/api/(auth/.*|data|notebooks.*|stats/.*)"}[5m]))) > 1) and on (environment, route) (sum by (environment, route) (increase(focustube_http_request_duration_seconds_count[5m])) > 30)
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: A core API has sustained p95 latency above one second
+          description: Inspect CPU, event loop delay, database locks and concurrent requests before changing limits.
+      - alert: FocusTubeDiskSpaceLow
+        expr: focustube_disk_free_bytes / focustube_disk_total_bytes < 0.15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Less than 15 percent of the application volume is free
+          description: Check log retention, backups and database growth; preserve the active database and WAL.
+      - alert: FocusTubeLogStorageUnavailable
+        expr: focustube_log_storage_ready == 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Rotating application logs cannot be written
+          description: Check the log volume permissions and space. Docker stdout logging may still be available.
+      - alert: FocusTubeEmailFailures
+        expr: sum by (environment) (increase(focustube_operations_total{operation="smtp",outcome="failed"}[5m])) >= 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: Repeated verification-email sending failures
+          description: Check provider availability and configured credentials without logging them. SMTP acceptance does not prove inbox delivery.
+      - alert: FocusTubeEventLoopBlocked
+        expr: focustube_nodejs_eventloop_lag_p99_seconds > 0.25
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Sustained Node event-loop delay
+          description: Check synchronous database work, CPU saturation and request volume.

@@ -1,0 +1,213 @@
+{
+  "version": 1,
+  "repository": "https://github.com/chakshusalgotra/focus-tube",
+  "milestones": [
+    {
+      "id": "design-language",
+      "title": "Refresh the library, player, navigation, and notes workspace",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Make finding courses, watching lessons, and writing notes feel consistent on desktop and small screens.",
+      "changes": [
+        "Support light and dark themes, using teal actions and coral brand/streak accents; follow the system appearance until a choice is saved.",
+        "Serve IBM Plex Sans, Manrope, and Lucide icons locally instead of a remote font or icon CDN.",
+        "Browse courses in Grid or List, combine Pinned with progress filters, and show duration only as precisely as the available lesson metadata permits.",
+        "Show YouTube result filters only for keyword searches, preserving library filters and ignoring stale search responses.",
+        "Provide a collapsible workspace rail and a focused course rail with Course content, Notes, and a disabled Chat with video placeholder.",
+        "Start course panels closed and remember explicit panel choices per account/course without resetting playback or notes.",
+        "Keep the paused video visible under light dimming and a centered resume button; hide player controls when idle and retain keyboard access.",
+        "Resize notes with drag or keyboard controls. Empty, Read, and Edit states share a borderless mint writing surface inside the blue pane, with theme-aware colors and a focus outline.",
+        "Limit optional glass and cursor sheen to navigation; respect reduced motion, reduced transparency, and increased contrast.",
+        "Add keyboard-friendly dialogs, compact player controls, chart data tables, and design regressions. Keep Board and video chat explicitly Coming soon."
+      ],
+      "files": ["public/app.js", "public/index.html", "public/styles.css", "public/theme.js", "public/notebooks.js", "server.js", "README.md", "package.json", "package-lock.json", "test/design-language.test.js", "test/notebooks.test.js", "docs/screenshots/auth.png", "docs/screenshots/dashboard.png", "docs/screenshots/library.png", "docs/screenshots/player.png", "docs/screenshots/profile-export.png"]
+    },
+    {
+      "id": "invite-only-accounts",
+      "title": "Add invitation-only accounts with verified email",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Control who can join while preserving existing accounts and keeping each member's learning data private.",
+      "changes": [
+        "Create accounts only after a valid one-use invitation and an emailed six-digit code are verified; require matching password confirmation and allow an optional unique username.",
+        "Let existing members sign in with email or username without another invitation. Preserve old usernames, account IDs, credentials, and learning data during migration.",
+        "Provide a local-only administrator bootstrap command and member invitations from active administrators, with a configurable member limit.",
+        "Disable new anonymous guests while retaining export and invitation-backed conversion for existing guest sessions.",
+        "Use atomic SQLite transactions, durable rate limits, exact-Origin checks, hashed secrets, and bounded password hashing; back up older databases before authentication migration.",
+        "Send codes over TLS-protected SMTP and optionally validate Cloudflare Turnstile on the server. Missing email configuration fails closed for registration.",
+        "Keep Google and GitHub sign-in as disabled Coming soon controls, without OAuth or automatic account linking."
+      ],
+      "files": ["auth.js", "auth-services.js", "db.js", "public/auth-entry.js", "public/app.js", "public/index.html", "scripts/auth-admin.js", "test/auth.test.js", ".env.example", "docs/invite-only-auth-spec.md"]
+    },
+    {
+      "id": "settings-and-policies",
+      "title": "Add account settings, password changes, and public policies",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Give members one place to manage their account and workspace without interrupting lessons or losing drafts.",
+      "changes": [
+        "Organize Settings into Account, Appearance, Data, Terms and Privacy, and administrator-only sections with guarded dismissal and keyboard navigation.",
+        "Save display names and unique usernames; require the current password for a username change and keep the active player and notebook in place.",
+        "Allow signed-in members to change a known password. Rotate credentials and revoke old sessions atomically while retaining the current browser with a new cookie.",
+        "Retain private JSON export/import and draft protections; never store password inputs in browser storage.",
+        "Publish basic Terms and Privacy without requiring sign-in. Keep the operator/legal review checklist and make no compliance-certification claim.",
+        "Do not add forgotten-password recovery, arbitrary email changes, or account deletion."
+      ],
+      "files": ["auth.js", "db.js", "public/app.js", "public/index.html", "public/policies.html", "public/styles.css", "test/auth.test.js", "test/design-language.test.js", "docs/policies-draft.md"]
+    },
+    {
+      "id": "operational-monitoring",
+      "title": "Add private usage monitoring, sanitized logs, and health checks",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Help the operator understand application health and coarse usage without exposing members' courses or notes.",
+      "changes": [
+        "Provide an administrator-only view of approximate active members, account activity, origin traffic, process memory, and application storage.",
+        "Use short-lived presence challenges and bounded retention; ordinary API calls and delayed learning batches do not count as live activity.",
+        "Write rotating structured logs with safe request IDs and route templates, excluding credentials, raw request bodies, email addresses, and learning content.",
+        "Keep Prometheus metrics disabled unless a separate token and private host/source boundary are configured.",
+        "Include an optional Alloy collector, importable Grafana dashboard, alert rules, and external uptime guidance without enabling cloud export automatically.",
+        "Add local application/database health checks and persistent log storage. Do not treat process uptime as proof of external availability."
+      ],
+      "files": ["observability.js", "server.js", "auth.js", "db.js", "compose.yaml", "compose.monitoring.yaml", "ops/monitoring/config.alloy", "ops/monitoring/dashboard.json", "ops/monitoring/alerts.yaml", "test/observability.test.js", "docs/monitoring.md"]
+    },
+    {
+      "id": "docker-refresh",
+      "title": "Refresh the local Docker app without replacing stored data",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Resolve the older local image observed on 10 September and run the current frontend and backend together.",
+      "changes": [
+        "The 2026-09-10 check found an old localhost:3002 image without YouTube search; that historical pending item is now resolved locally.",
+        "Rebuild the local app on port 3002 with the current assets and matching backend, retaining the existing database and log volumes.",
+        "Verify application/database readiness and that served HTML/CSS match the checkout, including the latest borderless notes surface.",
+        "Keep production and development deployments unchanged. A feature-branch push is not evidence of a hosted deployment."
+      ],
+      "files": ["Dockerfile", "compose.yaml", "public/index.html", "public/styles.css", "README.md"]
+    },
+    {
+      "id": "download-ui-review",
+      "title": "Document course downloads as a backend-only capability",
+      "recordedDate": "2026-09-15",
+      "commits": ["dcd13de"],
+      "why": "Describe the accepted website accurately without restoring previously removed download controls.",
+      "changes": [
+        "The 2026-09-10 review preserved a pre-existing browser download-UI removal whose original reason was not recorded.",
+        "The accepted workspace still has no course-download button; document that limitation in the feature guide and PR.",
+        "Retain the authenticated, permission-confirmed backend API for installations that provide yt-dlp and ffmpeg. The basic Docker image does not bundle these tools."
+      ],
+      "files": ["downloads.js", "public/app.js", "public/index.html", "README.md"]
+    },
+    {
+      "id": "course-notebooks",
+      "title": "Add timestamped course notebooks with collapsible notes",
+      "recordedDate": "2026-09-10",
+      "commits": ["846c51d"],
+      "why": "Let learners capture notes against the exact moment in a video without leaving the player, and keep them separate from course progress data.",
+      "changes": [
+        "Add a private per-course notebook with one optional rich-text document per video; opening an empty editor does not create a saved document.",
+        "Capture the matching video's playback time as hidden metadata on a paragraph's first keystroke, without guessing from saved progress.",
+        "Support headings, bold, italic, lists, links, inline code, and code blocks through a locally served Quill editor.",
+        "Add Read mode for jumping to a paragraph's source moment and an explicit Edit mode for writing, preserved across video changes.",
+        "Persist notebooks with revision-aware saves and conflict detection, and add a delete endpoint guarded by the same revision.",
+        "Extend the JSON export/import schema to version 2 so notebooks travel with a restored profile."
+      ],
+      "files": ["db.js", "server.js", "public/app.js", "public/index.html", "public/notebook-editor.js", "public/notebook-model.js", "public/notebooks.js", "public/styles.css", "test/notebooks.test.js", "README.md", "package.json"]
+    },
+    {
+      "id": "workspace-discovery",
+      "title": "Plan learning and discover YouTube courses",
+      "recordedDate": "2026-09-10",
+      "commits": ["166fd65", "f2647bd"],
+      "why": "Bring course discovery and day-to-day learning planning into the same library without losing saved progress.",
+      "changes": [
+        "Add status and sprint boards, tasks, course checklists, and ordered roadmaps.",
+        "Persist workspace state with revision-aware profile saves and include it in exports.",
+        "Search YouTube by keyword with All, Videos, Playlists, and course-focused filters.",
+        "Create courses from search results, preserve existing progress, and handle retries and stale searches.",
+        "Add search parser regression tests, Docker packaging, and a dedicated usage and API guide.",
+        "Preserve the existing browser download-UI removal while retaining authenticated backend download endpoints.",
+        "Integrate dev's existing JSON profile import and preserve workspace data on restore, with in-memory database regression tests."
+      ],
+      "files": ["db.js", "server.js", "youtube-search.js", "public/app.js", "public/index.html", "public/styles.css", "Dockerfile", "package.json", "test/youtube-search.test.js", "README.md", "docs/youtube-search.md"]
+    },
+    {
+      "id": "timeline",
+      "title": "Publish a traceable release timeline",
+      "recordedDate": "2026-09-10",
+      "commits": ["2f80577"],
+      "why": "Make the feature history, affected files, commit membership, and outstanding release work visible in one newest-first record.",
+      "changes": [
+        "Provide a standalone HTML timeline with search and stage filters.",
+        "Generate commit dates and branch containment from Git rather than treating a merge as proof of deployment.",
+        "Keep feature rationale and dated bug or pending-work observations alongside the generated history."
+      ],
+      "files": ["timeline.html", "scripts/update-timeline.js", "docs/timeline-notes.json", "test/timeline.test.js", "README.md", "package.json"]
+    },
+    {
+      "id": "bookmarks",
+      "title": "Bookmark courses and filter the library",
+      "commits": ["7a7cd0a"],
+      "why": "Keep priority courses easy to find and exclude local SSH material from source control and Docker context.",
+      "changes": ["Add course pinning and a bookmarked-only library filter.", "Ignore the local .ssh directory in Git and Docker builds."]
+    },
+    {
+      "id": "deployment-workflows",
+      "title": "Separate development and production deployments",
+      "commits": ["1be09d6", "268b539"],
+      "why": "Promote changes through dev before main while keeping deployment environments and their stored data separate.",
+      "changes": ["Add development and production Compose definitions and deployment workflows.", "Guard main-branch pull requests so only dev can promote changes.", "Update the Tailscale action and add a connectivity check."]
+    },
+    {
+      "id": "profile-import",
+      "title": "Restore a profile from a JSON export",
+      "commits": ["4d0940f"],
+      "why": "Make exported learning data restorable without replacing account identity or credentials.",
+      "changes": ["Add validated profile import with confirmation and revision conflict protection.", "Restore courses, progress, preferences, and activity history from a supported export."]
+    },
+    {
+      "id": "docker",
+      "title": "Package FocusTube for local Docker use",
+      "commits": ["c2144be", "1cdeb81"],
+      "why": "Provide a repeatable local runtime with persistent SQLite storage and loopback-only access.",
+      "changes": ["Introduce a Docker image and Compose setup, then simplify them for local use.", "Publish the app on localhost:3002 and persist data in a named volume."]
+    },
+    {
+      "id": "project-documentation",
+      "title": "Document setup, architecture, and operations",
+      "commits": ["cc1303b"],
+      "why": "Make the application installable and maintainable with documented workflows, requirements, and limitations.",
+      "changes": ["Add the project README with setup, API, security, and troubleshooting guidance.", "Add screenshots of the library, player, dashboard, and profile workflows."],
+      "image": "docs/screenshots/library.png"
+    },
+    {
+      "id": "foundation",
+      "title": "Build the FocusTube learning application",
+      "commits": ["7923f9b"],
+      "why": "Turn public YouTube playlists and videos into focused courses with durable, per-user learning progress.",
+      "changes": ["Introduce the Node/Express and SQLite application with an authenticated browser interface.", "Provide course import, focused playback, completion tracking, analytics, certificates, and optional downloads."]
+    }
+  ],
+  "observations": [
+    {
+      "id": "release-verification",
+      "date": "2026-09-10",
+      "stage": "pending",
+      "title": "Review and verify dev-to-prod promotion",
+      "why": "A commit on a branch is not evidence that a deployment completed or that a running environment has that revision.",
+      "changes": ["Review the feature PR into dev, then use a separate dev-to-main PR for production promotion.", "Before merging the 2026-09-15 account update, configure exact HTTPS origins, trusted proxy settings, SMTP and persistent backups on the target runtime; the existing hosted Compose files do not yet supply the new authentication/mail settings.", "Merging into dev or main can trigger the existing deployment workflow. Check workflow results and the running application's revision before declaring either environment deployed."],
+      "files": [".github/workflows/merge-guard.yml", ".github/workflows/deploy-dev.yml", ".github/workflows/deploy-prod.yml"],
+      "relatedMilestones": ["workspace-discovery", "timeline", "invite-only-accounts", "operational-monitoring"]
+    },
+    {
+      "id": "image-scan",
+      "date": "2026-09-08",
+      "stage": "bugs",
+      "title": "Review the existing Docker base-image findings",
+      "why": "The editor's image scan reported vulnerabilities in the unchanged alpine:3.24.1 base image.",
+      "changes": ["The observed report contained 2 critical and 7 high findings; this is a dated observation, not a fresh scan or a claim of application exploitability.", "Re-scan the current image, assess findings, and test a base-image update separately."],
+      "files": ["Dockerfile"],
+      "relatedMilestones": ["docker"]
+    }
+  ]
+}

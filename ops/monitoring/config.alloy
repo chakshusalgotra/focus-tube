@@ -1,0 +1,88 @@
+logging {
+  level = "warn"
+  format = "json"
+}
+
+prometheus.scrape "focustube" {
+  targets = [{ "__address__" = "metrics.focustube.internal:3000", "job" = "focustube", "instance" = "focustube" }]
+  metrics_path = "/internal/metrics"
+  scrape_interval = "30s"
+  scrape_timeout = "5s"
+  sample_limit = 3000
+  body_size_limit = "1MiB"
+  label_limit = 12
+  label_value_length_limit = 200
+  follow_redirects = false
+  authorization {
+    type = "Bearer"
+    credentials = sys.env("METRICS_TOKEN")
+  }
+  forward_to = [prometheus.remote_write.cloud.receiver]
+}
+
+prometheus.remote_write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_METRICS_URL")
+    remote_timeout = "15s"
+    basic_auth {
+      username = sys.env("GRAFANA_METRICS_USER")
+      password = sys.env("GRAFANA_API_TOKEN")
+    }
+    queue_config {
+      capacity = 2500
+      min_shards = 1
+      max_shards = 2
+      max_samples_per_send = 500
+    }
+  }
+  wal {
+    truncate_frequency = "15m"
+    min_keepalive_time = "5m"
+    max_keepalive_time = "1h"
+  }
+}
+
+loki.source.file "focustube" {
+  targets = [{ "__path__" = "/var/log/focustube/focustube.*.log", "service" = "focustube", "job" = "focustube" }]
+  tail_from_end = true
+  on_positions_file_error = "restart_from_end"
+  file_match {
+    enabled = true
+    sync_period = "10s"
+  }
+  forward_to = [loki.process.safe.receiver]
+}
+
+loki.process "safe" {
+  stage.json {
+    expressions = { environment = "environment", event = "event", level = "level", timestamp = "time" }
+    drop_malformed = true
+  }
+  stage.timestamp {
+    source = "timestamp"
+    format = "RFC3339Nano"
+    action_on_failure = "skip"
+  }
+  stage.labels {
+    values = { environment = "", event = "", level = "" }
+  }
+  stage.label_drop {
+    values = ["filename"]
+  }
+  forward_to = [loki.write.cloud.receiver]
+}
+
+loki.write "cloud" {
+  endpoint {
+    url = sys.env("GRAFANA_LOGS_URL")
+    remote_timeout = "15s"
+    batch_size = "256KiB"
+    batch_wait = "1s"
+    max_backoff_period = "30s"
+    max_backoff_retries = 5
+    basic_auth {
+      username = sys.env("GRAFANA_LOGS_USER")
+      password = sys.env("GRAFANA_API_TOKEN")
+    }
+  }
+}

@@ -1,0 +1,129 @@
+{
+  "__inputs": [
+    { "name": "DS_PROMETHEUS", "label": "Prometheus", "type": "datasource", "pluginId": "prometheus", "pluginName": "Prometheus" },
+    { "name": "DS_LOKI", "label": "Loki", "type": "datasource", "pluginId": "loki", "pluginName": "Loki" }
+  ],
+  "uid": "focustube-operations",
+  "title": "FocusTube Operations",
+  "description": "Origin application telemetry. No-data is unknown, not zero. External uptime checks are required for public availability and outage history. User identities remain in the private FocusTube admin view.",
+  "tags": ["focustube", "operations"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "utc",
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": { "list": [
+    { "name": "environment", "label": "Environment", "type": "query", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "query": "label_values(focustube_process_start_time_seconds, environment)", "refresh": 1, "multi": false, "includeAll": false }
+  ] },
+  "annotations": { "list": [ { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" }, "enable": true, "hide": true, "iconColor": "#0e7566", "name": "Deployments and incidents", "type": "dashboard" } ] },
+  "panels": [
+    {
+      "id": 1, "title": "Scrape availability", "type": "stat", "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "description": "Collector reachability, not public-site availability. Missing series is unknown.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "up{job=\"focustube\"}", "instant": true } ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "mappings": [ { "type": "value", "options": { "0": { "text": "Down", "color": "red" }, "1": { "text": "Up", "color": "green" } } } ], "noValue": "No data" }, "overrides": [] }
+    },
+    {
+      "id": 2, "title": "Active members (5 min)", "type": "stat", "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "sum(focustube_members_active{environment=\"$environment\"})", "instant": true } ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0, "noValue": "No data" }, "overrides": [] }
+    },
+    {
+      "id": 3, "title": "Server error ratio (5 min)", "type": "stat", "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "sum(rate(focustube_http_requests_total{environment=\"$environment\",status=~\"5..\"}[5m])) / clamp_min(sum(rate(focustube_http_requests_total{environment=\"$environment\"}[5m])), 0.001)", "instant": true } ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "noValue": "No data" }, "overrides": [] }
+    },
+    {
+      "id": 4, "title": "Observed process restarts (1h)", "type": "stat", "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "description": "Changes in process start time while the collector is running. Does not reconstruct outages during collector downtime.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "sum(changes(focustube_process_start_time_seconds{environment=\"$environment\"}[1h]))", "instant": true } ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0, "noValue": "No data" }, "overrides": [] }
+    },
+    {
+      "id": 5, "title": "Origin requests per minute", "type": "timeseries", "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "description": "Excludes health, metrics, presence and monitoring polls. API calls and bots are not unique visitors.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "sum by (route) (rate(focustube_http_requests_total{environment=\"$environment\"}[5m])) * 60", "legendFormat": "{{route}}" } ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 6, "title": "Response latency p95 by route", "type": "timeseries", "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "histogram_quantile(0.95, sum by (le, route) (rate(focustube_http_request_duration_seconds_bucket{environment=\"$environment\"}[5m])))", "legendFormat": "{{route}}" } ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 7, "title": "Application memory", "type": "timeseries", "gridPos": { "x": 0, "y": 12, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "refId": "A", "expr": "focustube_process_resident_memory_bytes{environment=\"$environment\"}", "legendFormat": "Resident memory" },
+        { "refId": "B", "expr": "focustube_nodejs_heap_size_used_bytes{environment=\"$environment\"}", "legendFormat": "Heap used" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "id": 8, "title": "Application CPU cores used", "type": "timeseries", "gridPos": { "x": 8, "y": 12, "w": 8, "h": 7 },
+      "description": "Process CPU seconds per second. 1.0 means one full CPU core, not total physical-host usage.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "rate(focustube_process_cpu_seconds_total{environment=\"$environment\"}[5m])", "legendFormat": "CPU cores" } ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "short" }, "overrides": [] }
+    },
+    {
+      "id": 9, "title": "Application volume free space", "type": "timeseries", "gridPos": { "x": 16, "y": 12, "w": 8, "h": 7 },
+      "description": "Free space on the filesystem containing SQLite. On Docker Desktop this is the Docker VM disk, not every host drive.",
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "focustube_disk_free_bytes{environment=\"$environment\"} / focustube_disk_total_bytes{environment=\"$environment\"}", "legendFormat": "Free fraction" } ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "unit": "percentunit" }, "overrides": [] }
+    },
+    {
+      "id": 10, "title": "Auth and dependency outcomes", "type": "timeseries", "gridPos": { "x": 0, "y": 19, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "sum by (operation, outcome) (rate(focustube_operations_total{environment=\"$environment\"}[5m])) * 60", "legendFormat": "{{operation}}: {{outcome}} / min" } ],
+      "fieldConfig": { "defaults": { "min": 0 }, "overrides": [] }
+    },
+    {
+      "id": 11, "title": "Active members and in-flight requests", "type": "timeseries", "gridPos": { "x": 12, "y": 19, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "refId": "A", "expr": "focustube_members_active{environment=\"$environment\"}", "legendFormat": "Active members" },
+        { "refId": "B", "expr": "focustube_http_inflight{environment=\"$environment\"}", "legendFormat": "In-flight requests" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "id": 12, "title": "Event loop delay p99", "type": "timeseries", "gridPos": { "x": 0, "y": 26, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [ { "refId": "A", "expr": "focustube_nodejs_eventloop_lag_p99_seconds{environment=\"$environment\"}", "legendFormat": "p99 lag" } ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "s" }, "overrides": [] }
+    },
+    {
+      "id": 13, "title": "Database and WAL size", "type": "timeseries", "gridPos": { "x": 8, "y": 26, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "refId": "A", "expr": "focustube_database_size_bytes{environment=\"$environment\"}", "legendFormat": "SQLite" },
+        { "refId": "B", "expr": "focustube_wal_size_bytes{environment=\"$environment\"}", "legendFormat": "WAL" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "id": 14, "title": "Database and log readiness", "type": "timeseries", "gridPos": { "x": 16, "y": 26, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "targets": [
+        { "refId": "A", "expr": "focustube_database_ready{environment=\"$environment\"}", "legendFormat": "Database" },
+        { "refId": "B", "expr": "focustube_log_storage_ready{environment=\"$environment\"}", "legendFormat": "Log storage" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "id": 15, "title": "Sanitized request and operation logs", "type": "logs", "gridPos": { "x": 0, "y": 33, "w": 24, "h": 9 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "targets": [ { "refId": "A", "expr": "{service=\"focustube\", environment=\"$environment\"} | json", "queryType": "range" } ],
+      "options": { "showTime": true, "showLabels": false, "wrapLogMessage": true, "sortOrder": "Descending" }
+    }
+  ]
+}
