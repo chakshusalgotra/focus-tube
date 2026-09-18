@@ -3,6 +3,37 @@
   "repository": "https://github.com/chakshusalgotra/focus-tube",
   "milestones": [
     {
+      "id": "compact-workspace-controls",
+      "title": "Compact the workspace and align navigation and playback controls",
+      "recordedDate": "2026-09-18",
+      "commits": ["18109ccc72e27162d75435813c22a32176f65e35"],
+      "why": "Reclaim space for lessons and notes by reducing component dimensions rather than text size, and make navigation and playback actions consistent.",
+      "changes": [
+        "Restore normal text sizes while reducing sidebar widths, taskbar height, desktop control padding, and notes spacing; retain readable text, focus outlines, and mobile touch targets.",
+        "Keep narrow notes formatting in one horizontally scrollable row, use labeled native heading choices, and retain the selected heading when editor focus leaves.",
+        "Move Notes and the disabled Ask placeholder beside Mark complete below the video. Remove the course-tools rail so closing Course content leaves no reserved left column.",
+        "Place the navigation toggle before the app logo on signed-in screens. Workspace collapse retains navigation icons; expansion reveals labels below the unchanged taskbar, with keyboard and backdrop dismissal.",
+        "Align both workspace and course-content toggles with the collapsed sidebar centerline without shifting the logo or shrinking their tap targets.",
+        "Use one consistent resume indicator while paused. Synchronize the toolbar icon from playback events and periodic checks, clear stale overlays when buffering, and allow Pause during buffering.",
+        "Preserve independent layout preferences, existing note data and formatting, Read/Edit mode, autosave, source links, and completion behavior. Ask remains Coming soon without an AI workflow.",
+        "Verify responsive geometry, native mouse/touch and keyboard actions, note persistence, and light/dark themes with isolated browser fixtures. Local port 3002 was updated with existing data and runtime settings preserved; physical iOS/Safari and live YouTube playback remain unverified. Branch membership is not proof of hosted deployment."
+      ],
+      "files": ["public/app.js", "public/index.html", "public/notebook-editor.js", "public/styles.css", "test/design-language.test.js", "README.md"]
+    },
+    {
+      "id": "player-touch-controls",
+      "title": "Make player controls usable across the full touch target",
+      "commits": ["0dd95f3"],
+      "why": "Speed, quality, and caption controls on phones and tablets should not require precise taps on a small dropdown arrow.",
+      "changes": [
+        "Keep controls visible through touch release and native select interaction, then resume the hide timer after a value is chosen.",
+        "Use 44px player touch targets and wider speed and quality selects; let compact toolbars scroll horizontally without shrinking controls.",
+        "Reveal hidden player controls on the first video tap without pausing playback.",
+        "This change initially reduced text to 80%; the later compact-workspace update restores normal text sizes and reduces component dimensions instead."
+      ],
+      "files": ["public/app.js", "public/styles.css", "test/design-language.test.js", "README.md"]
+    },
+    {
       "id": "design-language",
       "title": "Refresh the library, player, navigation, and notes workspace",
       "recordedDate": "2026-09-15",
