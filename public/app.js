@@ -118,7 +118,6 @@ let homeMode = 'grid';
 let notebooks = null;
 const workspaceNarrowScreen = window.matchMedia('(max-width: 900px)');
 let workspaceCollapsePreference = DB.load('ft_workspace_collapsed', null);
-let courseToolsCollapsePreference = true;
 let courseLayouts = {};
 
 const saveCourses = () => scheduleRemoteSave();
@@ -924,8 +923,6 @@ async function finishAuth(user, transition = ++authTransition) {
   authUser = user;
   authView.classList.add('hidden');
   restoreAppearance(user);
-  const railPreference = DB.load(`ft_course_tools_${user.id}`, true);
-  courseToolsCollapsePreference = typeof railPreference === 'boolean' ? railPreference : true;
   courseLayouts = {};
   topbar.classList.remove('hidden');
   $('#workspaceRail').classList.remove('hidden');
@@ -2766,22 +2763,21 @@ function onPlayerState(e) {
   const S = YT.PlayerState;
   if (e.data === S.PLAYING) {
     hideOverlays();
-    playBtn.innerHTML = I.pause;
     endedHandled = false;
     applyCaptions();
     populateQuality();
     applyQuality();
+  } else if (e.data === S.BUFFERING) {
+    posterOverlay.classList.add('hidden');
+    pauseOverlay.classList.add('hidden');
   } else if (e.data === S.PAUSED) {
-    playBtn.innerHTML = I.play;
     if (overlaysAllHidden()) showPauseCover();
   } else if (e.data === S.ENDED) {
-    playBtn.innerHTML = I.play;
     if (!endedHandled) {
       endedHandled = true;
       onVideoEnded();
     }
   } else if (e.data === S.CUED) {
-    playBtn.innerHTML = I.play;
     const v = curVideo();
     if (v && overlaysAllHidden()) {
       posterTitle.textContent = v.title;
@@ -3379,6 +3375,7 @@ function setPlaylistCollapsed(collapsed, { remember = true } = {}) {
   const label = collapsed ? 'Show course content' : 'Hide course content';
   sideToggle.setAttribute('aria-label', label);
   sideToggle.title = label;
+  sideToggle.innerHTML = icon(collapsed ? 'PanelLeftOpen' : 'PanelLeftClose');
   syncCourseContent();
   if (remember) saveCourseLayout({ contentCollapsed: collapsed });
   if (restoreFocus) sideToggle.focus({ preventScroll: true });
@@ -3449,35 +3446,30 @@ function showNotebooks(courseId, videoId) {
 
 function syncWorkspaceSidebar() {
   const courseActive = !$('#courseView').classList.contains('hidden');
-  const collapsed = courseActive ? courseToolsCollapsePreference : typeof workspaceCollapsePreference === 'boolean' ? workspaceCollapsePreference : workspaceNarrowScreen.matches;
+  const collapsed = courseActive || (typeof workspaceCollapsePreference === 'boolean' ? workspaceCollapsePreference : workspaceNarrowScreen.matches);
   document.body.classList.toggle('workspace-collapsed', collapsed);
   const toggle = $('#workspaceToggle');
-  const name = courseActive ? 'course tools' : 'workspace sidebar';
-  const label = `${collapsed ? 'Expand' : 'Collapse'} ${name}`;
+  const label = `${collapsed ? 'Expand' : 'Collapse'} workspace sidebar`;
   toggle.setAttribute('aria-expanded', String(!collapsed));
   toggle.setAttribute('aria-label', label);
-  toggle.setAttribute('aria-controls', courseActive ? 'courseNavigation' : 'workspaceNavigation');
+  toggle.setAttribute('aria-controls', 'workspaceNavigation');
   toggle.title = label;
   toggle.innerHTML = icon(collapsed ? 'PanelLeftOpen' : 'PanelLeftClose');
-  $('#workspaceRail').setAttribute('aria-label', courseActive ? 'Course tools' : 'Workspace');
-  $('#workspaceBackdrop').setAttribute('aria-label', `Close ${name}`);
-  const overlay = !!authUser && workspaceNarrowScreen.matches && !collapsed;
+  $('#workspaceRail').setAttribute('aria-label', 'Workspace');
+  $('#workspaceBackdrop').setAttribute('aria-label', 'Close workspace navigation');
+  const overlay = !!authUser && !courseActive && workspaceNarrowScreen.matches && !collapsed;
   $('#workspaceBackdrop').classList.toggle('hidden', !overlay);
   document.body.classList.toggle('workspace-drawer-open', overlay);
-  document.querySelectorAll('#topbar, main.view').forEach(element => { element.inert = overlay; });
+  document.querySelectorAll('main.view').forEach(element => { element.inert = overlay; });
   if (overlay && !$('#workspaceRail').contains(document.activeElement)) toggle.focus({ preventScroll: true });
   $('#workspaceTooltip').classList.add('hidden');
   syncCourseContent();
 }
 
 function setWorkspaceCollapsed(collapsed) {
-  if (!$('#courseView').classList.contains('hidden')) {
-    courseToolsCollapsePreference = collapsed;
-    if (authUser) { try { DB.save(`ft_course_tools_${authUser.id}`, collapsed); } catch {} }
-  } else {
-    workspaceCollapsePreference = collapsed;
-    try { DB.save('ft_workspace_collapsed', collapsed); } catch {}
-  }
+  if (!$('#courseView').classList.contains('hidden')) return;
+  workspaceCollapsePreference = collapsed;
+  try { DB.save('ft_workspace_collapsed', collapsed); } catch {}
   syncWorkspaceSidebar();
 }
 
@@ -3525,28 +3517,22 @@ function setupWorkspaceSidebar() {
   rail.addEventListener('scroll', hideTooltip);
   window.addEventListener('resize', () => { hideTooltip(); syncWorkspaceSidebar(); });
   rail.addEventListener('click', event => {
-    if (event.target.closest('a.workspace-link, #sideToggle, #courseNotesToggle') && workspaceNarrowScreen.matches && document.body.classList.contains('workspace-drawer-open')) collapseDrawer();
-    if (event.target.closest('#sideToggle') && !document.body.classList.contains('side-collapsed') && window.innerWidth <= 1200) $('#courseContentClose').focus({ preventScroll: true });
-    if (event.target.closest('#courseNotesToggle') && $('#courseNotesHost').open) {
-      if (window.innerWidth <= 1200) setPlaylistCollapsed(true, { remember: false });
-      if ($('#studyLayout').clientWidth <= 760) $('#courseNotesHost').scrollIntoView({ block: 'start' });
-    }
+    if (event.target.closest('a.workspace-link') && workspaceNarrowScreen.matches && document.body.classList.contains('workspace-drawer-open')) collapseDrawer();
   });
-  rail.addEventListener('keydown', event => {
+  document.addEventListener('keydown', event => {
+    if (!document.body.classList.contains('workspace-drawer-open') || event.defaultPrevented || event.target.closest('dialog')) return;
     if (event.key === 'Escape') {
-      hideTooltip();
-      if (document.body.classList.contains('workspace-drawer-open')) {
-        event.preventDefault();
-        event.stopPropagation();
-        collapseDrawer();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      collapseDrawer();
+      return;
     }
-    if (event.key !== 'Tab' || !document.body.classList.contains('workspace-drawer-open')) return;
-    const controls = [...rail.querySelectorAll('button:not(:disabled), a[href]')].filter(element => element.getClientRects().length);
-    const first = controls[0];
-    const last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    if (event.key !== 'Tab') return;
+    const controls = [toggle, ...rail.querySelectorAll('button:not(:disabled), a[href]')].filter(element => element.getClientRects().length);
+    const index = controls.indexOf(document.activeElement);
+    const next = (index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length;
+    event.preventDefault();
+    controls[next].focus();
   });
   syncWorkspaceSidebar();
 }
@@ -4000,6 +3986,12 @@ function resetPlayerControls() {
 
 function syncPlayerControls(state) {
   const states = YT.PlayerState;
+  const playing = state === states.PLAYING || state === states.BUFFERING;
+  if (playBtn.dataset.playing !== String(playing)) {
+    playBtn.dataset.playing = String(playing);
+    playBtn.innerHTML = playing ? I.pause : I.play;
+    playBtn.setAttribute('aria-label', playing ? 'Pause playback' : 'Resume playback');
+  }
   if ([states.PAUSED, states.CUED, states.ENDED].includes(state)) controlsPlaybackStarted = false;
   if (state === states.PLAYING && !controlsPlaybackStarted) {
     controlsPlaybackStarted = true;
@@ -4088,7 +4080,7 @@ function setupPlayerControls() {
 function togglePlay() {
   if (!playerReady) return;
   const s = safe(() => player.getPlayerState());
-  if (s === YT.PlayerState.PLAYING) safe(() => player.pauseVideo());
+  if (s === YT.PlayerState.PLAYING || s === YT.PlayerState.BUFFERING) safe(() => player.pauseVideo());
   else safe(() => player.playVideo());
 }
 
@@ -4941,7 +4933,11 @@ $('#skipContent').addEventListener('click', event => {
   if (view) { view.tabIndex = -1; view.focus(); }
 });
 backBtn.addEventListener('click', () => (location.hash = !$('#notebooksView').classList.contains('hidden') && notebooks.reviewCourse ? '#notebooks' : ''));
-sideToggle.addEventListener('click', () => setPlaylistCollapsed(!document.body.classList.contains('side-collapsed')));
+sideToggle.addEventListener('click', () => {
+  const collapsed = !document.body.classList.contains('side-collapsed');
+  setPlaylistCollapsed(collapsed);
+  if (!collapsed && window.innerWidth <= 1200) $('#courseContentClose').focus({ preventScroll: true });
+});
 for (const id of ['courseContentClose', 'courseContentBackdrop']) {
   $('#' + id).addEventListener('click', () => { setPlaylistCollapsed(true); sideToggle.focus({ preventScroll: true }); });
 }
@@ -5258,7 +5254,12 @@ setupGlassReflection();
 notebooks = new Notebooks({
   getUser: () => authUser,
   getCourses: () => courses,
-  onPanelToggle: open => saveCourseLayout({ notesOpen: open }),
+  onPanelToggle: open => {
+    saveCourseLayout({ notesOpen: open });
+    if (!open) return;
+    if (window.innerWidth <= 1200) setPlaylistCollapsed(true, { remember: false });
+    if ($('#studyLayout').clientWidth <= 760) $('#courseNotesHost').scrollIntoView({ block: 'start' });
+  },
   getTime(courseId, videoId) {
     if (!playerReady || current?.course.id !== courseId || curVideo()?.id !== videoId || safe(() => player.getVideoData()?.video_id) !== videoId) return null;
     const seconds = safe(() => player.getCurrentTime());
