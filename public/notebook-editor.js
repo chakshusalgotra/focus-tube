@@ -137,13 +137,19 @@
       this.container = container;
       const toolbar = document.createElement('div');
       toolbar.className = 'note-toolbar';
-      toolbar.innerHTML = '<span class="ql-formats"><select class="ql-header" aria-label="Paragraph style"><option selected></option><option value="2"></option><option value="3"></option></select></span><span class="ql-formats"><button class="ql-bold" aria-label="Bold" title="Bold"></button><button class="ql-italic" aria-label="Italic" title="Italic"></button><button class="ql-code" aria-label="Inline code" title="Inline code"></button></span><span class="ql-formats"><button class="ql-list" value="ordered" aria-label="Numbered list" title="Numbered list"></button><button class="ql-list" value="bullet" aria-label="Bullet list" title="Bullet list"></button></span><span class="ql-formats"><button class="ql-link" aria-label="Link" title="Link"></button><button class="ql-code-block" aria-label="Code block" title="Code block"></button></span>';
+      toolbar.innerHTML = '<span class="ql-formats"><select class="ql-header" aria-label="Paragraph style"><option value="" selected>Normal</option><option value="2">Heading 2</option><option value="3">Heading 3</option></select></span><span class="ql-formats"><button class="ql-bold" aria-label="Bold" title="Bold"></button><button class="ql-italic" aria-label="Italic" title="Italic"></button><button class="ql-code" aria-label="Inline code" title="Inline code"></button></span><span class="ql-formats"><button class="ql-list" value="ordered" aria-label="Numbered list" title="Numbered list"></button><button class="ql-list" value="bullet" aria-label="Bullet list" title="Bullet list"></button></span><span class="ql-formats"><button class="ql-link" aria-label="Link" title="Link"></button><button class="ql-code-block" aria-label="Code block" title="Code block"></button></span>';
       const surface = document.createElement('div');
       container.replaceChildren(toolbar, surface);
       this.quill = new Quill(surface, {
         theme: 'snow',
         formats: ['header', 'bold', 'italic', 'code', 'list', 'indent', 'link', 'code-block', 'blockId', 'anchorSeconds'],
         modules: { toolbar, history: { delay: 1000, maxStack: 100, userOnly: false } },
+      });
+      const headingSelect = toolbar.querySelector('select.ql-header');
+      let headingValue = headingSelect.value;
+      this.quill.on('editor-change', () => {
+        if (headingSelect.selectedIndex < 0) headingSelect.value = headingValue;
+        else headingValue = headingSelect.value;
       });
       this.quill.root.setAttribute('aria-label', 'Video notes');
       this.quill.root.setAttribute('role', 'textbox');

@@ -141,21 +141,772 @@
 {
   "version": 1,
   "repository": "https://github.com/chakshusalgotra/focus-tube",
-  "generatedAt": "2026-09-15T04:45:43.025Z",
-  "head": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
-  "branch": "feature/course-notebooks",
+  "generatedAt": "2026-09-18T16:46:39.990Z",
+  "head": "18109ccc72e27162d75435813c22a32176f65e35",
+  "branch": "fix/player-touch-text",
   "refs": {
     "prod": {
       "name": "origin/main",
-      "hash": "337eb4379aad37abcf61c3554fe3229e1940dd98"
+      "hash": "88867d376f6452c44bdf113311ee406d2bebac97"
     },
     "dev": {
       "name": "origin/dev",
-      "hash": "fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e"
+      "hash": "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
     }
   },
-  "commitCount": 21,
+  "commitCount": 35,
   "entries": [
+    {
+      "id": "compact-workspace-controls",
+      "title": "Compact the workspace and align navigation and playback controls",
+      "recordedDate": "2026-09-18",
+      "commits": [
+        {
+          "hash": "18109ccc72e27162d75435813c22a32176f65e35",
+          "date": "2026-09-18T22:15:55+05:30",
+          "authoredAt": "2026-09-18T22:15:55+05:30",
+          "subject": "Refine compact workspace navigation and player controls",
+          "parents": [
+            "0dd95f309bf61f429d72aaf278eb5690c56cbc86"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "public/app.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/styles.css",
+            "test/design-language.test.js"
+          ]
+        }
+      ],
+      "why": "Reclaim space for lessons and notes by reducing component dimensions rather than text size, and make navigation and playback actions consistent.",
+      "changes": [
+        "Restore normal text sizes while reducing sidebar widths, taskbar height, desktop control padding, and notes spacing; retain readable text, focus outlines, and mobile touch targets.",
+        "Keep narrow notes formatting in one horizontally scrollable row, use labeled native heading choices, and retain the selected heading when editor focus leaves.",
+        "Move Notes and the disabled Ask placeholder beside Mark complete below the video. Remove the course-tools rail so closing Course content leaves no reserved left column.",
+        "Place the navigation toggle before the app logo on signed-in screens. Workspace collapse retains navigation icons; expansion reveals labels below the unchanged taskbar, with keyboard and backdrop dismissal.",
+        "Align both workspace and course-content toggles with the collapsed sidebar centerline without shifting the logo or shrinking their tap targets.",
+        "Use one consistent resume indicator while paused. Synchronize the toolbar icon from playback events and periodic checks, clear stale overlays when buffering, and allow Pause during buffering.",
+        "Preserve independent layout preferences, existing note data and formatting, Read/Edit mode, autosave, source links, and completion behavior. Ask remains Coming soon without an AI workflow.",
+        "Verify responsive geometry, native mouse/touch and keyboard actions, note persistence, and light/dark themes with isolated browser fixtures. Local port 3002 was updated with existing data and runtime settings preserved; physical iOS/Safari and live YouTube playback remain unverified. Branch membership is not proof of hosted deployment."
+      ],
+      "files": [
+        "README.md",
+        "public/app.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/styles.css",
+        "test/design-language.test.js"
+      ],
+      "date": "2026-09-18T22:15:55+05:30",
+      "dateKind": "commit",
+      "stage": "branch"
+    },
+    {
+      "id": "player-touch-controls",
+      "title": "Make player controls usable across the full touch target",
+      "commits": [
+        {
+          "hash": "0dd95f309bf61f429d72aaf278eb5690c56cbc86",
+          "date": "2026-09-18T04:43:46+05:30",
+          "authoredAt": "2026-09-18T04:43:46+05:30",
+          "subject": "Fix touch player controls and reduce app text size",
+          "parents": [
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
+          ],
+          "body": "",
+          "stage": "branch",
+          "files": [
+            "README.md",
+            "public/app.js",
+            "public/styles.css",
+            "test/design-language.test.js"
+          ]
+        }
+      ],
+      "why": "Speed, quality, and caption controls on phones and tablets should not require precise taps on a small dropdown arrow.",
+      "changes": [
+        "Keep controls visible through touch release and native select interaction, then resume the hide timer after a value is chosen.",
+        "Use 44px player touch targets and wider speed and quality selects; let compact toolbars scroll horizontally without shrinking controls.",
+        "Reveal hidden player controls on the first video tap without pausing playback.",
+        "This change initially reduced text to 80%; the later compact-workspace update restores normal text sizes and reduces component dimensions instead."
+      ],
+      "files": [
+        "README.md",
+        "public/app.js",
+        "public/styles.css",
+        "test/design-language.test.js"
+      ],
+      "date": "2026-09-18T04:43:46+05:30",
+      "dateKind": "commit",
+      "stage": "branch"
+    },
+    {
+      "id": "commit-88867d376f6452c44bdf113311ee406d2bebac97",
+      "title": "Merge pull request #15 from chakshusalgotra/dev",
+      "date": "2026-09-18T03:30:50+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Dev"
+      ],
+      "commits": [
+        {
+          "hash": "88867d376f6452c44bdf113311ee406d2bebac97",
+          "date": "2026-09-18T03:30:50+05:30",
+          "authoredAt": "2026-09-18T03:30:50+05:30",
+          "subject": "Merge pull request #15 from chakshusalgotra/dev",
+          "parents": [
+            "337eb4379aad37abcf61c3554fe3229e1940dd98",
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
+          ],
+          "body": "Dev",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".github/workflows/deploy-dev.yml",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.dev.yaml",
+            "compose.monitoring.yaml",
+            "compose.prod.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/timeline.md",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "feedback.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/notebook-model.js",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "scripts/update-timeline.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/feedback.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "test/timeline.test.js",
+            "test/workspace-persistence.test.js",
+            "test/youtube-search.test.js",
+            "timeline.html",
+            "youtube-search.js"
+          ]
+        }
+      ],
+      "files": [
+        ".env.example",
+        ".github/workflows/deploy-dev.yml",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.dev.yaml",
+        "compose.monitoring.yaml",
+        "compose.prod.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/timeline.md",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "feedback.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/feedback.html",
+        "public/feedback.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/notebook-model.js",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "scripts/update-timeline.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/feedback.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "test/timeline.test.js",
+        "test/workspace-persistence.test.js",
+        "test/youtube-search.test.js",
+        "timeline.html",
+        "youtube-search.js"
+      ]
+    },
+    {
+      "id": "commit-14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+      "title": "Merge pull request #13 from chakshusalgotra/feature/feedback-forum-pr",
+      "date": "2026-09-18T03:12:18+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add feedback forum with private reports and screenshots"
+      ],
+      "commits": [
+        {
+          "hash": "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+          "date": "2026-09-18T03:12:18+05:30",
+          "authoredAt": "2026-09-18T03:12:18+05:30",
+          "subject": "Merge pull request #13 from chakshusalgotra/feature/feedback-forum-pr",
+          "parents": [
+            "ff1dceca1dee265edf26c1539257e478259380b7",
+            "d21864291121c5b6dd241c562d238e3b627ca1ec"
+          ],
+          "body": "Add feedback forum with private reports and screenshots",
+          "stage": "prod",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "auth.js",
+            "db.js",
+            "feedback.js",
+            "observability.js",
+            "package-lock.json",
+            "package.json",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/policies.html",
+            "public/styles.css",
+            "server.js",
+            "test/feedback.test.js",
+            "test/observability.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "Dockerfile",
+        "README.md",
+        "auth.js",
+        "db.js",
+        "feedback.js",
+        "observability.js",
+        "package-lock.json",
+        "package.json",
+        "public/feedback.html",
+        "public/feedback.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/feedback.test.js",
+        "test/observability.test.js"
+      ]
+    },
+    {
+      "id": "commit-d21864291121c5b6dd241c562d238e3b627ca1ec",
+      "title": "Add feedback forum with private reports and screenshots",
+      "date": "2026-09-18T02:56:39+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Add feedback forum with private reports and screenshots"
+      ],
+      "commits": [
+        {
+          "hash": "d21864291121c5b6dd241c562d238e3b627ca1ec",
+          "date": "2026-09-18T02:56:39+05:30",
+          "authoredAt": "2026-09-18T02:56:39+05:30",
+          "subject": "Add feedback forum with private reports and screenshots",
+          "parents": [
+            "ff1dceca1dee265edf26c1539257e478259380b7"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "auth.js",
+            "db.js",
+            "feedback.js",
+            "observability.js",
+            "package-lock.json",
+            "package.json",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/policies.html",
+            "public/styles.css",
+            "server.js",
+            "test/feedback.test.js",
+            "test/observability.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "Dockerfile",
+        "README.md",
+        "auth.js",
+        "db.js",
+        "feedback.js",
+        "observability.js",
+        "package-lock.json",
+        "package.json",
+        "public/feedback.html",
+        "public/feedback.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/feedback.test.js",
+        "test/observability.test.js"
+      ]
+    },
+    {
+      "id": "commit-ff1dceca1dee265edf26c1539257e478259380b7",
+      "title": "Merge pull request #11 from chakshusalgotra/feature/reusable-invitations",
+      "date": "2026-09-16T00:30:47+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add reusable invitation links with signup limits"
+      ],
+      "commits": [
+        {
+          "hash": "ff1dceca1dee265edf26c1539257e478259380b7",
+          "date": "2026-09-16T00:30:47+05:30",
+          "authoredAt": "2026-09-16T00:30:47+05:30",
+          "subject": "Merge pull request #11 from chakshusalgotra/feature/reusable-invitations",
+          "parents": [
+            "4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+            "eb8b4ccb3327741e5124dbf96ee926bb2eaa1456"
+          ],
+          "body": "Add reusable invitation links with signup limits",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "auth.js",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "public/app.js",
+            "public/index.html",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "public/app.js",
+        "public/index.html",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-eb8b4ccb3327741e5124dbf96ee926bb2eaa1456",
+      "title": "Add configurable signup limits to member invitations",
+      "date": "2026-09-16T00:11:38+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Keep existing and bootstrap invitations single-use; atomically count successful registrations and guest upgrades. Add Administration controls, migration/HTTP/concurrency regressions, and usage documentation."
+      ],
+      "commits": [
+        {
+          "hash": "eb8b4ccb3327741e5124dbf96ee926bb2eaa1456",
+          "date": "2026-09-16T00:11:38+05:30",
+          "authoredAt": "2026-09-16T00:11:38+05:30",
+          "subject": "Add configurable signup limits to member invitations",
+          "parents": [
+            "4c15d86b522b12dfc0943d6b12cbfc0f9189643e"
+          ],
+          "body": "Keep existing and bootstrap invitations single-use; atomically count successful registrations and guest upgrades. Add Administration controls, migration/HTTP/concurrency regressions, and usage documentation.",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "auth.js",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "public/app.js",
+            "public/index.html",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "public/app.js",
+        "public/index.html",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+      "title": "Merge pull request #10 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T14:08:47+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Enhance Docker Compose configuration for development and production"
+      ],
+      "commits": [
+        {
+          "hash": "4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+          "date": "2026-09-15T14:08:47+05:30",
+          "authoredAt": "2026-09-15T14:08:47+05:30",
+          "subject": "Merge pull request #10 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+            "38a882c7641ec83138c6c7c9e59537f74b07d0d9"
+          ],
+          "body": "Enhance Docker Compose configuration for development and production",
+          "stage": "prod",
+          "files": [
+            "compose.dev.yaml",
+            "compose.prod.yaml"
+          ]
+        }
+      ],
+      "files": [
+        "compose.dev.yaml",
+        "compose.prod.yaml"
+      ]
+    },
+    {
+      "id": "commit-38a882c7641ec83138c6c7c9e59537f74b07d0d9",
+      "title": "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options.",
+      "date": "2026-09-15T14:07:26+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options."
+      ],
+      "commits": [
+        {
+          "hash": "38a882c7641ec83138c6c7c9e59537f74b07d0d9",
+          "date": "2026-09-15T14:07:26+05:30",
+          "authoredAt": "2026-09-15T14:07:26+05:30",
+          "subject": "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options.",
+          "parents": [
+            "bd08779f4a2724ae241d6486e2bbf3d49a8c2625"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "compose.dev.yaml",
+            "compose.prod.yaml"
+          ]
+        }
+      ],
+      "files": [
+        "compose.dev.yaml",
+        "compose.prod.yaml"
+      ]
+    },
+    {
+      "id": "commit-75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+      "title": "Merge pull request #8 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T13:06:37+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Feature/course notebooks"
+      ],
+      "commits": [
+        {
+          "hash": "75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+          "date": "2026-09-15T13:06:37+05:30",
+          "authoredAt": "2026-09-15T13:06:37+05:30",
+          "subject": "Merge pull request #8 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "3d9012d81f5d764671d82756458e8514ef05b22c",
+            "bd08779f4a2724ae241d6486e2bbf3d49a8c2625"
+          ],
+          "body": "Feature/course notebooks",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            "README.md",
+            "compose.dev.yaml",
+            "server.js",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml",
+        "README.md",
+        "compose.dev.yaml",
+        "server.js",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-bd08779f4a2724ae241d6486e2bbf3d49a8c2625",
+      "title": "Fix dev HTTPS account access behind the reverse proxy",
+      "date": "2026-09-15T12:25:15+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Approve the dev HTTPS origin and interpret numeric TRUST_PROXY settings as proxy-hop counts instead of IP-address strings. Preserve named/IP proxy settings, secure cookies, and exact-origin protections.\n\nAdd regression coverage for approved HTTPS login, bounded proxy trust, rejected HTTP and foreign origins, and untrusted forwarding. Document the connection error and container recreation requirements.\n\nValidation: focused origin/proxy tests, JavaScript syntax, Compose configuration and whitespace checks pass. The full 120-test suite passed during implementation."
+      ],
+      "commits": [
+        {
+          "hash": "bd08779f4a2724ae241d6486e2bbf3d49a8c2625",
+          "date": "2026-09-15T12:25:15+05:30",
+          "authoredAt": "2026-09-15T12:25:15+05:30",
+          "subject": "Fix dev HTTPS account access behind the reverse proxy",
+          "parents": [
+            "cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8"
+          ],
+          "body": "Approve the dev HTTPS origin and interpret numeric TRUST_PROXY settings as proxy-hop counts instead of IP-address strings. Preserve named/IP proxy settings, secure cookies, and exact-origin protections.\n\nAdd regression coverage for approved HTTPS login, bounded proxy trust, rejected HTTP and foreign origins, and untrusted forwarding. Document the connection error and container recreation requirements.\n\nValidation: focused origin/proxy tests, JavaScript syntax, Compose configuration and whitespace checks pass. The full 120-test suite passed during implementation.",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "compose.dev.yaml",
+            "server.js",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "compose.dev.yaml",
+        "server.js",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8",
+      "title": "Fix dev deployment Docker credential configuration",
+      "date": "2026-09-15T12:01:56+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Select the dedicated helper-free Docker configuration inside the remote WSL session before building the dev application. This avoids the Windows credential-store logon-session error while leaving the normal Docker Desktop configuration unchanged.\n\nValidated the one-line workflow change, runner and remote Bash syntax, and whitespace. The isolated configuration, Docker engine identity, Compose/Buildx access, and Alpine pull were previously verified over non-interactive SSH."
+      ],
+      "commits": [
+        {
+          "hash": "cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8",
+          "date": "2026-09-15T12:01:56+05:30",
+          "authoredAt": "2026-09-15T12:01:56+05:30",
+          "subject": "Fix dev deployment Docker credential configuration",
+          "parents": [
+            "7dcdcba7caba0acbba06d0a73ec55559d9163524"
+          ],
+          "body": "Select the dedicated helper-free Docker configuration inside the remote WSL session before building the dev application. This avoids the Windows credential-store logon-session error while leaving the normal Docker Desktop configuration unchanged.\n\nValidated the one-line workflow change, runner and remote Bash syntax, and whitespace. The isolated configuration, Docker engine identity, Compose/Buildx access, and Alpine pull were previously verified over non-interactive SSH.",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml"
+      ]
+    },
+    {
+      "id": "commit-3d9012d81f5d764671d82756458e8514ef05b22c",
+      "title": "Merge pull request #7 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T11:01:13+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add notebooks, private accounts, and a refined learning workspace"
+      ],
+      "commits": [
+        {
+          "hash": "3d9012d81f5d764671d82756458e8514ef05b22c",
+          "date": "2026-09-15T11:01:13+05:30",
+          "authoredAt": "2026-09-15T11:01:13+05:30",
+          "subject": "Merge pull request #7 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e",
+            "7dcdcba7caba0acbba06d0a73ec55559d9163524"
+          ],
+          "body": "Add notebooks, private accounts, and a refined learning workspace",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/notebook-model.js",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/notebook-model.js",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "commit-7dcdcba7caba0acbba06d0a73ec55559d9163524",
+      "title": "Record the completed workspace release in the timeline",
+      "date": "2026-09-15T10:17:05+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Link the UI, account, settings, monitoring and local-runtime milestones to\nimplementation commit dcd13de and regenerate the standalone Git snapshot.\n\nKeep hosted promotion as explicit pending work and preserve the historical\ncontext for the resolved local image and API-only download decisions.\n\nValidation: six timeline tests, exact commit/stage assertions, standalone\nbrowser rendering and editor diagnostics pass. The snapshot intentionally\ncovers the implementation commit, not the commit that stores the snapshot."
+      ],
+      "commits": [
+        {
+          "hash": "7dcdcba7caba0acbba06d0a73ec55559d9163524",
+          "date": "2026-09-15T10:17:05+05:30",
+          "authoredAt": "2026-09-15T10:17:05+05:30",
+          "subject": "Record the completed workspace release in the timeline",
+          "parents": [
+            "dcd13de92cd2ce78deaf2521dc6e1aded576da6a"
+          ],
+          "body": "Link the UI, account, settings, monitoring and local-runtime milestones to\nimplementation commit dcd13de and regenerate the standalone Git snapshot.\n\nKeep hosted promotion as explicit pending work and preserve the historical\ncontext for the resolved local image and API-only download decisions.\n\nValidation: six timeline tests, exact commit/stage assertions, standalone\nbrowser rendering and editor diagnostics pass. The snapshot intentionally\ncovers the implementation commit, not the commit that stores the snapshot.",
+          "stage": "prod",
+          "files": [
+            "docs/timeline-notes.json",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "docs/timeline-notes.json",
+        "timeline.html"
+      ]
+    },
     {
       "id": "design-language",
       "title": "Refresh the library, player, navigation, and notes workspace",
@@ -170,7 +921,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -274,7 +1025,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "docker-refresh",
@@ -290,7 +1041,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -388,7 +1139,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "download-ui-review",
@@ -404,7 +1155,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -501,7 +1252,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "invite-only-accounts",
@@ -517,7 +1268,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -618,7 +1369,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "operational-monitoring",
@@ -634,7 +1385,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -734,7 +1485,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "settings-and-policies",
@@ -750,7 +1501,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",
@@ -850,7 +1601,7 @@
       ],
       "date": "2026-09-15T10:14:58+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "course-notebooks",
@@ -866,7 +1617,7 @@
             "4d0bc9ee66f9c03d57c6548d5405aadae5b080f4"
           ],
           "body": "",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -908,14 +1659,14 @@
       ],
       "date": "2026-09-10T23:15:19+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "commit-fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e",
       "title": "Merge pull request #6 from chakshusalgotra/feature/workspace-discovery-timeline",
       "date": "2026-09-10T18:25:41+05:30",
       "dateKind": "commit",
-      "stage": "dev",
+      "stage": "prod",
       "why": "Integrate branch history. This records a merge, not a verified deployment.",
       "changes": [
         "Feature/workspace discovery timeline"
@@ -931,7 +1682,7 @@
             "4d0bc9ee66f9c03d57c6548d5405aadae5b080f4"
           ],
           "body": "Feature/workspace discovery timeline",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -978,7 +1729,7 @@
       "title": "Record timeline implementation in the release snapshot",
       "date": "2026-09-10T17:31:34+05:30",
       "dateKind": "commit",
-      "stage": "dev",
+      "stage": "prod",
       "why": "No separate feature rationale recorded; see the commit for implementation context.",
       "changes": [
         "Record timeline implementation in the release snapshot"
@@ -993,7 +1744,7 @@
             "2f80577cbf584fc7d60cff39ce6dd24060e32dba"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "docs/timeline-notes.json",
             "timeline.html"
@@ -1019,7 +1770,7 @@
             "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
           ],
           "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "docs/timeline-notes.json",
@@ -1048,7 +1799,7 @@
       ],
       "date": "2026-09-10T17:31:04+05:30",
       "dateKind": "commit",
-      "stage": "dev"
+      "stage": "prod"
     },
     {
       "id": "workspace-discovery",
@@ -1064,7 +1815,7 @@
             "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
           ],
           "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -1089,7 +1840,7 @@
             "8caa854d543e610e2a46d4454d1115a8b3db194d"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -1127,7 +1878,7 @@
       ],
       "date": "2026-09-10T17:22:07+05:30",
       "dateKind": "commit",
-      "stage": "dev"
+      "stage": "prod"
     },
     {
       "id": "release-verification",
@@ -1162,7 +1913,7 @@
             "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
           ],
           "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -1187,7 +1938,7 @@
             "8caa854d543e610e2a46d4454d1115a8b3db194d"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -1207,7 +1958,7 @@
             "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
           ],
           "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "docs/timeline-notes.json",
@@ -1227,7 +1978,7 @@
             "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
           ],
           "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             ".env.example",
             ".gitignore",

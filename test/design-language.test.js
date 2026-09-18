@@ -265,12 +265,15 @@ test('theme changes recolor existing dashboard charts without replacing their da
   assert.doesNotThrow(onThemeChange);
 });
 
-test('the pause state uses a centered accessible icon and light dimming without cover bars', () => {
+test('paused playback offers one consistent resume indicator without cover bars', () => {
   const html = read('public/index.html');
   const css = read('public/styles.css');
   const source = read('public/app.js');
   assert.match(html, /<button id="pauseOverlay"[^>]*type="button"[^>]*aria-label="Resume playback"/);
-  assert.match(html, /class="pause-symbol"[^>]*aria-hidden="true"><span data-ui-icon="Pause"/);
+  assert.match(html, /class="pause-symbol"[^>]*aria-hidden="true"><span data-ui-icon="Play"/);
+  assert.doesNotMatch(html, /class="pause-symbol"[^>]*>[^]*?data-ui-icon="Pause"/);
+  const playerStyles = css.slice(css.indexOf('.pause-cover {'), css.indexOf('@container (max-width: 700px) {'));
+  assert.match(playerStyles, /#ytWrap:has\(#controls\.controls-visible\) \.pause-symbol \{ opacity: 0; \}/);
   assert.match(css, /\.pause-cover\s*\{[^}]*place-items: center;[^}]*background: rgba\(0, 0, 0, 0\.18\)/);
   assert.doesNotMatch(html + css + source, /cover-bar|pause-hint|peekBtn|peekRestore|peek-restore|pause-cover\.peek/);
   const classes = new Set(['hidden']);
@@ -294,20 +297,22 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
     ...properties,
   });
   const control = { matches: () => true };
+  const select = { tagName: 'SELECT', matches: () => false };
   const playerControls = target({
     offsetHeight: 92,
-    classList: { add: name => classes.add(name), remove: name => classes.delete(name) },
-    contains: element => element === control,
+    classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
+    contains: element => element === control || element === select,
     querySelector: () => menuOpen,
   });
   const playerPane = target({
-    contains: element => element === control,
+    contains: element => element === control || element === select,
     getBoundingClientRect: () => ({ left: 0, right: 640, top: 0, bottom: 360 }),
   });
   const document = target();
   const window = target();
+  const playBtn = { dataset: {}, setAttribute(name, value) { this[name] = value; } };
   const context = vm.createContext({
-    playerPane, playerControls, document, window, current: {},
+    playerPane, playerControls, playBtn, I: { play: 'play', pause: 'pause' }, document, window, current: {},
     courseView: { classList: { contains: () => false } },
     YT: { PlayerState: { PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5, ENDED: 0 } },
     safe: callback => callback(),
@@ -327,6 +332,7 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
 
   run('syncPlayerControls(1)');
   assert.equal(visible(), true);
+  assert.equal(playBtn.innerHTML, 'pause');
   advance(2000);
   run('syncPlayerControls(3); syncPlayerControls(1)');
   advance(500);
@@ -342,6 +348,8 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
   fire(playerPane, 'pointerleave');
   assert.equal(visible(), false);
   run('syncPlayerControls(2)');
+  assert.equal(playBtn.innerHTML, 'play', 'Polling must clear a stale pause icon even without a state callback');
+  assert.equal(playBtn['aria-label'], 'Resume playback');
   fire(playerPane, 'pointerenter');
   fire(playerPane, 'pointerleave');
   assert.equal(visible(), false, 'Pausing must not pin controls after pointer exit');
@@ -371,8 +379,33 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
 
   fire(playerPane, 'pointerdown', { target: control, pointerType: 'touch' });
   fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(playerPane, 'pointerleave', { pointerType: 'touch' });
+  assert.equal(visible(), true, 'Touch release must not hide the bar before click delivery');
   advance(2500);
   assert.equal(visible(), false, 'Touch use must not leave a permanent hover state');
+
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(playerPane, 'focusin', { target: select });
+  fire(document, 'pointerup', { target: select, pointerType: 'touch' });
+  fire(playerPane, 'pointerleave', { pointerType: 'touch' });
+  advance(10000);
+  assert.equal(visible(), true, 'A touched native select stays visible even without select:open support');
+  fire(playerControls, 'change', { target: select });
+  assert.equal(visible(), true, 'A completed touch selection retains the normal preview interval');
+  advance(2500);
+  assert.equal(visible(), false);
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(document, 'pointerdown', { target: {}, pointerType: 'touch' });
+  assert.equal(visible(), false, 'Tapping outside clears a cancelled select interaction');
+  fire(playerPane, 'pointerdown', { target: select, pointerType: 'touch' });
+  fire(document, 'pointerup', { pointerType: 'touch' });
+  fire(playerPane, 'focusout', { target: select, relatedTarget: null });
+  assert.equal(visible(), false, 'Leaving select focus clears its hold');
+  fire(playerPane, 'pointerdown', { target: { id: 'shield' }, pointerType: 'touch' });
+  assert.equal(run('controlsRevealOnly'), true, 'The first surface tap reveals hidden controls without toggling playback');
+  fire(playerPane, 'pointerdown', { target: { id: 'shield' }, pointerType: 'touch' });
+  assert.equal(run('controlsRevealOnly'), false, 'A later surface tap can toggle playback');
   run('showPlayerControls(); resetPlayerControls()');
   assert.equal(visible(), false);
   assert.equal(timers.size, 0, 'Navigation and lesson changes cancel pending timers');
@@ -383,6 +416,41 @@ test('player controls auto-hide without interrupting pointer, keyboard, or slide
   assert.equal(visible(), false);
   assert.match(source, /syncPlayerControls\(e\.data\)/);
   assert.match(source, /syncPlayerControls\(state\)/);
+});
+
+test('resuming through buffering removes the paused overlay immediately', () => {
+  const source = read('public/app.js');
+  const overlay = () => {
+    const classes = new Set(['hidden']);
+    return { classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) } };
+  };
+  const pauseOverlay = overlay();
+  const posterOverlay = overlay();
+  const playBtn = { dataset: {}, setAttribute() {} };
+  const context = vm.createContext({
+    pauseOverlay, posterOverlay, endedOverlay: overlay(), errorOverlay: overlay(),
+    playBtn, I: { play: 'play', pause: 'pause' }, current: {}, controlsPlaybackStarted: false,
+    YT: { PlayerState: { PLAYING: 1, PAUSED: 2, BUFFERING: 3, ENDED: 0, CUED: 5 } },
+    endedTimer: null, endedHandled: false, clearInterval() {}, showPlayerControls() {}, applyCaptions() {}, populateQuality() {}, applyQuality() {},
+  });
+  const controls = source.slice(source.indexOf('function syncPlayerControls('), source.indexOf('function trackPlayerPointer('));
+  const playback = source.slice(source.indexOf('function hideOverlays()'), source.indexOf('function onPlayerError()'));
+  vm.runInContext(controls + playback, context);
+  for (const state of [1, 2, 3, 1, 2, 1]) {
+    vm.runInContext(`onPlayerState({ data: ${state} });`, context);
+    assert.equal(pauseOverlay.classList.contains('hidden'), state !== 2);
+    assert.equal(posterOverlay.classList.contains('hidden'), true);
+    assert.equal(playBtn.innerHTML, state === 2 ? 'play' : 'pause');
+  }
+  let pauses = 0;
+  let plays = 0;
+  context.playerReady = true;
+  context.safe = callback => callback();
+  context.player = { getPlayerState: () => 3, pauseVideo: () => pauses++, playVideo: () => plays++ };
+  const toggle = source.slice(source.indexOf('function togglePlay()'), source.indexOf('function seekBy('));
+  vm.runInContext(toggle + '\ntogglePlay();', context);
+  assert.equal(pauses, 1, 'The Pause action must also pause a buffering player');
+  assert.equal(plays, 0);
 });
 
 test('full-frame start, end, and error actions stay above hidden media controls', () => {
@@ -460,19 +528,22 @@ test('course note body has a distinct themed surface in both read and edit modes
   assert.match(css, /\.course-notes \.note-editor \.ql-container\.ql-snow:focus-within\s*\{[^}]*outline: 2px solid var\(--teal\)/);
 });
 
-test('the course player replaces workspace navigation with exactly three course tools', () => {
+test('course controls leave no tool rail and keep one button for each action', () => {
   const html = read('public/index.html');
   const css = read('public/styles.css');
-  const navigation = html.match(/<nav id="courseNavigation"[\s\S]*?<\/nav>/)[0];
+  const actions = html.match(/<div class="lesson-actions"[\s\S]*?<\/div>/)[0];
   assert.match(html, /id="brand"[^>]*href="#"[^>]*aria-label="FocusTube library"/);
-  assert.deepEqual([...navigation.matchAll(/<button id="([^"]+)"/g)].map(match => match[1]), ['sideToggle', 'courseNotesToggle', 'videoChatBtn']);
-  assert.match(css, /:has\(> #courseView:not\(\.hidden\)\) :is\(\.workspace-identity, #workspaceNavigation, \.workspace-footer,[^}]+display: none/);
-  assert.match(css, /:has\(> #courseView:not\(\.hidden\)\) \.course-navigation\s*\{\s*display: grid/);
+  assert.deepEqual([...actions.matchAll(/<button id="([^"]+)"/g)].map(match => match[1]), ['npComplete', 'courseNotesToggle', 'videoChatBtn']);
+  for (const id of ['sideToggle', 'npComplete', 'courseNotesToggle', 'videoChatBtn']) assert.equal(html.split(`id="${id}"`).length, 2, id + ' must be unique');
+  assert.doesNotMatch(html + css, /courseNavigation|course-navigation/);
+  assert.match(css, /:has\(> #courseView:not\(\.hidden\)\) \{ grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /:has\(> #courseView:not\(\.hidden\)\) > #courseView \{ grid-column: 1 \/ -1;/);
+  assert.match(css, /:has\(> #courseView:not\(\.hidden\)\) :is\(#workspaceRail,[^}]+display: none/);
   assert.match(css, /body\.side-collapsed #sidebar\s*\{\s*display: none/);
   assert.doesNotMatch(css, /side-collapsed #sidebar\s*\{[^}]*width: 64px|margin-left: 64px/);
   assert.match(html, /<aside id="sidebar"[\s\S]*id="courseContentClose"[\s\S]*id="videoList"/);
-  assert.match(css, /--workspace-width: 220px/);
-  assert.match(css, /\.workspace-open\.workspace-collapsed\s*\{\s*--workspace-width: 64px/);
+  assert.match(css, /--workspace-width: 176px/);
+  assert.match(css, /\.workspace-open\.workspace-collapsed\s*\{\s*--workspace-width: 52px/);
   assert.match(html, /id="workspaceToggle"[^>]*aria-controls="workspaceNavigation"/);
   assert.match(html, /id="notesWidthHandle"[^>]*role="separator"[^>]*aria-orientation="vertical"/);
   assert.match(html, /id="notesHeightHandle"[^>]*role="separator"[^>]*aria-orientation="horizontal"/);
@@ -491,13 +562,14 @@ test('workspace sidebar state persists independently of player panels and handle
   const rail = { contains: () => false, setAttribute(name, value) { this[name] = value; } };
   const courseView = { hidden: true, classList: { contains() { return courseView.hidden; } } };
   const content = [{ inert: false }, { inert: false }];
+  const topbar = { inert: false };
   const saves = [];
   const context = vm.createContext({
-    workspaceCollapsePreference: null, courseToolsCollapsePreference: true, workspaceNarrowScreen: { matches: false }, authUser: { id: 1 },
+    workspaceCollapsePreference: null, workspaceNarrowScreen: { matches: false }, authUser: { id: 1 },
     $: selector => ({ '#workspaceToggle': button, '#workspaceBackdrop': backdrop, '#workspaceRail': rail, '#workspaceTooltip': tooltip, '#courseView': courseView })[selector], icon: name => name,
     syncCourseContent() {},
     DB: { save: (key, value) => saves.push({ key, value }) },
-    document: { body: { classList: { toggle(name, value) { if (value) classes.add(name); else classes.delete(name); } } }, querySelectorAll: () => content },
+    document: { body: { classList: { toggle(name, value) { if (value) classes.add(name); else classes.delete(name); } } }, querySelectorAll: selector => selector.includes('#topbar') ? [topbar, ...content] : content },
   });
   vm.runInContext(implementation + '\nsyncWorkspaceSidebar();', context);
   assert.equal(button['aria-expanded'], 'true');
@@ -509,17 +581,21 @@ test('workspace sidebar state persists independently of player panels and handle
   context.workspaceNarrowScreen.matches = true;
   vm.runInContext('setWorkspaceCollapsed(false);', context);
   assert.equal(content.every(element => element.inert), true);
+  assert.equal(topbar.inert, false, 'The taskbar toggle remains usable while the lower drawer is open');
   assert.equal(backdrop.classList.hidden, false);
   assert.equal(focusCount, 1);
   courseView.hidden = false;
   vm.runInContext('syncWorkspaceSidebar();', context);
-  assert.equal(button['aria-expanded'], 'false', 'Course tools default collapsed independently of the library');
+  assert.equal(button['aria-expanded'], 'false', 'Course entry suspends the workspace rail');
+  assert.equal(content.every(element => !element.inert), true, 'A hidden workspace drawer cannot block the course');
+  assert.equal(backdrop.classList.hidden, true);
+  assert.equal(classes.has('workspace-drawer-open'), false);
+  const savedCount = saves.length;
   vm.runInContext('setWorkspaceCollapsed(false);', context);
-  assert.equal(button['aria-controls'], 'courseNavigation');
-  assert.equal(button['aria-label'], 'Collapse course tools');
-  assert.equal(rail['aria-label'], 'Course tools');
-  assert.equal(backdrop.classList.hidden, false, 'Expanded mobile course rail uses the shared drawer');
-  assert.equal(content.every(element => element.inert), true);
+  assert.equal(saves.length, savedCount, 'Course controls must not write the workspace preference');
+  assert.equal(button['aria-controls'], 'workspaceNavigation');
+  assert.equal(backdrop.classList.hidden, true);
+  assert.equal(content.every(element => !element.inert), true);
   assert.equal(classes.has('side-collapsed'), true, 'Rail changes must not open course content');
   assert.equal(context.workspaceCollapsePreference, false, 'Keep the workspace preference for other views');
   courseView.hidden = true;
@@ -545,38 +621,76 @@ test('workspace sidebar state persists independently of player panels and handle
   assert.match(source, /window\.addEventListener\('resize', \(\) => \{ hideTooltip\(\); syncWorkspaceSidebar\(\); \}\)/);
 });
 
-test('the full brand shares a taskbar with profile and streak across all routes', () => {
+test('taskbar toggles precede the brand while the collapsed workspace keeps its icons', () => {
   const html = read('public/index.html');
   const css = read('public/styles.css');
+  assert.match(css, /padding: 0 var\(--taskbar-inset\)/);
+  assert.match(css, /\.taskbar-main > :is\(#workspaceToggle, #sideToggle\) \{ translate: calc\(26px - var\(--taskbar-inset\) - 50%\) 0; \}/);
   const header = html.match(/<header id="topbar"[\s\S]*?<\/header>/)[0];
   const rail = html.match(/<aside id="workspaceRail"[\s\S]*?<\/aside>/)[0];
   const main = header.split('id="headerNavActions"')[0];
   const navigation = header.split('id="headerNavActions"')[1];
   assert.match(main, /class="taskbar-main"[\s\S]*id="brand"[\s\S]*class="brand-wordmark"[\s\S]*id="streakChip"[\s\S]*id="profileBtn"/);
-  assert.doesNotMatch(rail, /id="brand"/);
+  assert.doesNotMatch(rail, /id="(?:brand|workspaceToggle)"/);
+  assert.equal(html.split('id="workspaceToggle"').length, 2);
+  assert.match(main, /id="workspaceToggle"[\s\S]*id="sideToggle"[\s\S]*id="brand"/);
   assert.doesNotMatch(html + css, /courseBrand|course-brand/);
-  assert.doesNotMatch(css, /brand-wordmark\s*\{[^}]*display:\s*none/);
+  assert.match(css, /@media \(max-width: 360px\) \{\s*#topbar \.brand-wordmark \{ display: none;/);
+  assert.equal([...css.matchAll(/brand-wordmark\s*\{/g)].length, 1, 'Only the narrow taskbar hides the wordmark');
+  assert.match(css, /\.workspace-backdrop \{[^}]*position: absolute;[^}]*grid-row: 2;/);
+  assert.match(css, /\.workspace-collapsed \.workspace-link \{[^}]*width: 44px;/);
+  assert.match(css, /\.workspace-collapsed \.workspace-rail :is\([^}]*\.nav-text[^}]*display: none;/);
+  assert.match(main, /id="sideToggle"[^>]*aria-controls="sidebar"[\s\S]*id="brand"/);
   assert.match(main, /id="brand"[\s\S]*id="courseHeading"[\s\S]*id="courseDuration"[\s\S]*id="streakChip"/);
   assert.match(navigation, /id="backBtn"[^>]*aria-label="Back to library"/);
   assert.doesNotMatch(navigation, /id="(?:sideToggle|courseHeading|courseNotesToggle|videoChatBtn)"/);
-  assert.match(rail, /id="sideToggle"[^>]*aria-controls="sidebar"/);
-  assert.match(rail, /id="courseNotesToggle"[^>]*aria-controls="courseNotesHost"[^>]*aria-expanded="false"/);
+  assert.doesNotMatch(rail, /id="(?:sideToggle|courseNotesToggle|videoChatBtn)"/);
+  assert.match(html, /id="courseNotesToggle"[^>]*aria-controls="courseNotesHost"[^>]*aria-expanded="false"/);
   assert.doesNotMatch(html, /<summary[^>]*id="courseNotesToggle"/);
   assert.match(css, /\.course-notes:not\(\[open\]\)\s*\{\s*display: none/);
   assert.match(css, /#topbar\s*\{[^}]*flex-direction: column/);
 });
 
-test('course Notes and future chat use the rail without enabling an AI workflow', () => {
+test('drawer keyboard navigation includes the relocated taskbar toggle', () => {
+  const source = read('public/app.js');
+  const implementation = source.slice(source.indexOf('function setupWorkspaceSidebar()'), source.indexOf('function updateWorkspaceNav()'));
+  const listeners = {};
+  let open = true;
+  const document = { activeElement: null, body: { classList: { contains: name => name === 'workspace-drawer-open' && open } }, addEventListener: (name, handler) => { listeners[name] = handler; } };
+  const control = () => ({ addEventListener() {}, getClientRects: () => [{}], focus() { document.activeElement = this; }, closest: () => null });
+  const toggle = control();
+  const first = control();
+  const last = control();
+  const rail = { addEventListener() {}, querySelectorAll: () => [first, last] };
+  const tooltip = { classList: { add() {} } };
+  const context = vm.createContext({
+    document, window: { addEventListener() {} }, workspaceNarrowScreen: { addEventListener() {} },
+    $: selector => ({ '#workspaceRail': rail, '#workspaceToggle': toggle, '#workspaceTooltip': tooltip, '#workspaceBackdrop': control() })[selector],
+    syncWorkspaceSidebar() {}, setWorkspaceCollapsed: collapsed => { open = !collapsed; },
+  });
+  vm.runInContext(implementation + '\nsetupWorkspaceSidebar();', context);
+  const press = (key, shiftKey = false) => listeners.keydown({ key, shiftKey, target: document.activeElement, preventDefault() {}, stopPropagation() {} });
+  toggle.focus(); press('Tab'); assert.equal(document.activeElement, first);
+  press('Tab'); assert.equal(document.activeElement, last);
+  press('Tab'); assert.equal(document.activeElement, toggle);
+  press('Tab', true); assert.equal(document.activeElement, last);
+  press('Escape'); assert.equal(open, false); assert.equal(document.activeElement, toggle);
+});
+
+test('Notes and Ask sit beside completion with accessible icons and no AI workflow', () => {
   const html = read('public/index.html');
   const css = read('public/styles.css');
   const source = read('public/app.js');
-  assert.doesNotMatch(html + css, /player-actions|video-chat-entry/);
-  assert.match(html, /id="videoChatBtn"[^>]*aria-disabled="true"[^>]*aria-label="Chat with video, coming soon"/);
+  assert.match(html, /class="lesson-actions"[^>]*aria-label="Lesson actions"/);
+  assert.match(html, /id="videoChatBtn"[^>]*aria-disabled="true"[^>]*aria-label="Ask about video, coming soon"/);
   assert.match(html, /id="videoChatBtn"[^>]*><span data-ui-icon="Sparkles"/);
   assert.match(html, /class="coming-soon">Coming soon/);
   assert.match(source, /\$\('#videoChatBtn'\)\.addEventListener\('click', event => \{ event\.preventDefault\(\); event\.stopPropagation\(\); \}\)/);
   assert.doesNotMatch(source, /fetch\([^\n]*(?:transcript|\/chat)/);
   assert.match(html, /id="workspaceTooltip"[^>]*role="tooltip"/);
+  assert.match(css, /\.lesson-actions \.icon-btn::after \{ content: attr\(title\);/);
+  assert.match(css, /\.lesson-actions #npComplete \{ width: 148px;/);
+  assert.match(css, /@container \(max-width: 600px\) \{\s*\.now-playing \{ flex-direction: column;/);
 });
 
 test('only the taskbar refresh is removed, without leaving startup handlers behind', () => {
@@ -593,7 +707,7 @@ test('playlist collapse state and accessible button labels stay in sync', () => 
   const classes = {};
   const button = { setAttribute(name, value) { this[name] = value; } };
   const context = vm.createContext({
-    sideToggle: button,
+    sideToggle: button, icon: name => name,
     $: () => ({ contains: () => false }), syncCourseContent() {}, saveCourseLayout() {},
     document: { body: { classList: { toggle(name, value) { classes[name] = value; } } } },
   });
@@ -604,8 +718,9 @@ test('playlist collapse state and accessible button labels stay in sync', () => 
     assert.equal(button['aria-expanded'], String(!collapsed));
     assert.equal(button['aria-label'], collapsed ? 'Show course content' : 'Hide course content');
     assert.equal(button.title, button['aria-label']);
+    assert.equal(button.innerHTML, collapsed ? 'PanelLeftOpen' : 'PanelLeftClose');
   }
-  assert.match(source, /sideToggle\.addEventListener\('click', \(\) => setPlaylistCollapsed/);
+  assert.match(source, /sideToggle\.addEventListener\('click', \(\) => \{[^]*?setPlaylistCollapsed\(collapsed\);[^]*?#courseContentClose/);
   assert.match(source, /else if \(k === '\['\) sideToggle\.click\(\)/);
 });
 
@@ -619,7 +734,7 @@ test('course content overlays only narrow players and releases focus when dismis
   const courseView = { hidden: false, classList: { contains() { return courseView.hidden; } } };
   let focusCount = 0;
   const context = vm.createContext({
-    courseView, window: { innerWidth: 900 }, authUser: null,
+    courseView, window: { innerWidth: 900 }, authUser: null, icon: name => name,
     sideToggle: { setAttribute() {}, focus() { focusCount++; } },
     $: selector => ({ '#courseContentBackdrop': backdrop, '#courseView .stage': content, '#sidebar': sidebar })[selector],
     document: { activeElement: sidebar, body: { classList: {
@@ -646,6 +761,31 @@ test('course content overlays only narrow players and releases focus when dismis
   vm.runInContext('syncCourseContent();', context);
   assert.equal(content.inert, false, 'Leaving the course must release the content overlay');
   assert.equal(backdrop.classList.hidden, true);
+});
+
+test('Notes owns mobile panel behavior after moving outside the workspace rail', () => {
+  const source = read('public/app.js');
+  const callback = source.match(/onPanelToggle: open => \{[^]*?\n  \},/)[0];
+  const saved = [];
+  const collapsed = [];
+  let scrolled = 0;
+  const layout = { clientWidth: 700 };
+  const context = vm.createContext({
+    saveCourseLayout: value => saved.push(value.notesOpen),
+    setPlaylistCollapsed: (value, options) => collapsed.push({ value, remember: options.remember }),
+    window: { innerWidth: 768 },
+    $: selector => selector === '#studyLayout' ? layout : { scrollIntoView: () => scrolled++ },
+  });
+  vm.runInContext(`const options = { ${callback} }; options.onPanelToggle(true); options.onPanelToggle(false);`, context);
+  assert.deepEqual(saved, [true, false]);
+  assert.deepEqual(collapsed, [{ value: true, remember: false }]);
+  assert.equal(scrolled, 1);
+  context.window.innerWidth = 1440;
+  layout.clientWidth = 1100;
+  vm.runInContext('options.onPanelToggle(true);', context);
+  assert.equal(collapsed.length, 1);
+  assert.equal(scrolled, 1);
+  assert.doesNotMatch(source.slice(source.indexOf('function setupWorkspaceSidebar()'), source.indexOf('function updateWorkspaceNav()')), /courseNotesToggle|#sideToggle/);
 });
 
 test('workspace navigation follows course, notebook, roadmap, task, and dashboard routes', () => {
@@ -775,6 +915,62 @@ test('shared refinement uses modest corners and motion with accessible fallbacks
   assert.match(css, /\.task-check \{ width: 44px; height: 44px; min-width: 44px/);
 });
 
+test('compact chrome reduces component footprint without shrinking text or touch targets', () => {
+  const css = read('public/styles.css');
+  assert.match(css, /:root\s*\{[^}]*--text-scale: 1;/);
+  assert.match(css, /#topbar \{[^}]*min-height: 50px;/);
+  assert.match(css, /\.taskbar-main \{[^}]*min-height: 50px;/);
+  assert.match(css, /#topbar :is\(#tasksPanelBtn, #mobileLogoutBtn\), #topbar #headerNavActions \{ display: none;/);
+  assert.match(read('public/index.html'), /href="#tasks"/);
+  assert.match(read('public/index.html'), /class="workspace-footer"/);
+  assert.match(css, /#sidebar \{\s*width: 224px; min-width: 224px;/);
+  assert.match(css, /\.workspace-collapsed \.workspace-rail \{ padding-inline: 3px;/);
+  assert.match(css, /min-resolution: 2dppx[^}]*--hairline: 0\.5px;/);
+  assert.match(css, /prefers-contrast: more[^}]*--hairline: 1px;/);
+  assert.match(css, /font: calc\(14px \* var\(--text-scale\)\)\/1\.5/);
+  assert.match(css, /h1 \{ font-size: calc\(30px \* var\(--text-scale\)\)/);
+  assert.match(css, /@media print\s*\{\s*:root \{ --text-scale: 1; \}/);
+  assert.doesNotMatch(css, /\bzoom\s*:|transform:\s*scale\(0\.8\)|text-size-adjust:\s*none/);
+  assert.match(css, /#controls \.icon-btn \{ width: 44px; height: 44px;/);
+  const fontDeclarations = [...css.matchAll(/\b(?:font-size|font)\s*:\s*([^;{}]+)(?=;|})/g)].map(match => match[1]);
+  assert.ok(fontDeclarations.every(value => !/\dpx\b/.test(value) || value.includes('--text-scale')), 'All fixed on-screen fonts use the shared text scale');
+  assert.match(read('public/app.js'), /Chart\.defaults\.font\.size = 12 \* .*getPropertyValue\('--text-scale'\)/);
+});
+
+test('narrow notes keep formatting in one scrollable row with a native heading selector', () => {
+  const css = read('public/styles.css');
+  const start = css.indexOf('@container (max-width: 600px) {');
+  const compact = css.slice(start, css.indexOf('@container (max-width: 760px) {', start));
+  assert.match(css, /\.note-editor \{ container-type: inline-size; \}/);
+  assert.match(compact, /\.ql-toolbar\.ql-snow \{ display: flex;[^}]*overflow-x: auto;/);
+  assert.match(compact, /\.ql-formats \{ display: flex;[^}]*flex-shrink: 0; margin: 0;/);
+  assert.match(compact, /select\.ql-header \{ display: block !important;/);
+  assert.match(compact, /\.ql-picker \{ display: none;/);
+  assert.match(compact, /:focus-visible \{ outline-offset: -2px;/);
+  assert.match(css, /\.ql-toolbar button \{ width: 44px; height: 44px;/);
+  assert.match(css, /\.ql-toolbar select\.ql-header \{ min-height: 44px;/);
+  assert.match(css, /\.ql-toolbar button \{ display: grid; place-items: center;/);
+  assert.match(css, /\.ql-toolbar button svg \{ width: 18px; height: 18px;/);
+});
+
+test('the native paragraph selector keeps a labeled value when editor focus leaves', () => {
+  const source = read('public/notebook-editor.js');
+  assert.match(source, /<option value="" selected>Normal<\/option>/);
+  assert.match(source, /<option value="2">Heading 2<\/option>/);
+  const start = source.indexOf('const headingSelect =');
+  const implementation = source.slice(start, source.indexOf("this.quill.root.setAttribute('aria-label'", start));
+  const heading = { value: '', selectedIndex: 0 };
+  let sync;
+  const quill = { on(event, handler) { assert.equal(event, 'editor-change'); sync = handler; } };
+  vm.runInNewContext(`(function () { ${implementation} }).call({ quill });`, { quill, toolbar: { querySelector: () => heading } });
+  heading.value = '3'; heading.selectedIndex = 2; sync();
+  heading.value = ''; heading.selectedIndex = -1; sync();
+  assert.equal(heading.value, '3');
+  heading.value = ''; heading.selectedIndex = 0; sync();
+  heading.selectedIndex = -1; sync();
+  assert.equal(heading.value, '');
+});
+
 test('compact player controls remain reachable without wrapping outside the video', () => {
   const css = read('public/styles.css');
   const start = css.indexOf('@container (max-width: 480px) {\n  #controls');
@@ -783,6 +979,12 @@ test('compact player controls remain reachable without wrapping outside the vide
   assert.match(compact, /#controls \.btn-row \.spacer \{ flex: 0 0 4px/);
   assert.match(compact, /flex-shrink: 0/);
   assert.doesNotMatch(compact, /display: none/);
+  const touch = css.slice(css.indexOf('@media (pointer: coarse), (hover: none), (any-pointer: coarse) {'), css.indexOf('@media (prefers-contrast: more),'));
+  assert.match(touch, /#controls \.icon-btn \{ width: 44px; height: 44px;/);
+  assert.match(touch, /#controls #speedSel \{ width: 82px;/);
+  assert.match(touch, /#controls #qualitySel \{ width: 96px;/);
+  assert.match(touch, /#controls \.icon-btn > \* \{ pointer-events: none;/);
+  assert.match(touch, /#controls \.btn-row \{ flex-wrap: nowrap; overflow-x: auto;/);
 });
 
 test('course layout defaults are closed and explicit choices persist per account and course', () => {

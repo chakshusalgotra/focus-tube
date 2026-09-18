@@ -91,3 +91,18 @@ test('the generated standalone timeline contains valid data and browser JavaScri
   }
   for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) new vm.Script(match[1]);
 });
+
+test('the generated timeline includes the current milestone notes and commit links', () => {
+  const notes = JSON.parse(fs.readFileSync(path.join(__dirname, '../docs/timeline-notes.json'), 'utf8'));
+  const html = fs.readFileSync(path.join(__dirname, '../timeline.html'), 'utf8');
+  const data = JSON.parse(html.match(/<script id="timeline-data" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+  for (const milestone of notes.milestones) {
+    const entry = data.entries.find(item => item.id === milestone.id);
+    assert.ok(entry, `Missing generated milestone: ${milestone.id}`);
+    assert.equal(entry.title, milestone.title);
+    assert.equal(entry.why, milestone.why);
+    assert.deepEqual(entry.changes, milestone.changes);
+    assert.equal(entry.commits.length, milestone.commits.length);
+    for (const prefix of milestone.commits) assert.equal(entry.commits.filter(commit => commit.hash.startsWith(prefix)).length, 1);
+  }
+});

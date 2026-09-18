@@ -20,7 +20,7 @@
   <a id="skipContent" class="skip-link" href="#homeView">Skip to content</a>
   <button id="workspaceBackdrop" class="workspace-backdrop hidden" type="button" tabindex="-1" aria-label="Close workspace navigation"></button>
   <aside id="workspaceRail" class="workspace-rail hidden" aria-label="Workspace" data-glass>
-    <div class="workspace-rail-heading"><span class="nav-label">Workspace</span><button id="workspaceToggle" class="icon-btn" type="button" title="Collapse workspace sidebar" aria-label="Collapse workspace sidebar" aria-controls="workspaceNavigation" aria-expanded="true"><span data-ui-icon="PanelLeftClose"></span></button></div>
+    <div class="workspace-rail-heading"><span class="nav-label">Workspace</span></div>
     <div class="workspace-identity"><span id="railAvatar" class="workspace-initial">G</span><div><strong id="railProfileName">My learning</strong><span id="railProfileType">Guest profile</span></div></div>
     <nav id="workspaceNavigation" class="workspace-nav" aria-label="Main navigation">
       <a class="workspace-link" href="#" data-section="library" title="Course library" aria-label="Course library"><span data-ui-icon="LibraryBig"></span><span class="nav-text">Library</span></a>
@@ -32,16 +32,13 @@
       <button id="monitoringBtn" class="workspace-link hidden" type="button" title="Site monitoring" aria-label="Site monitoring"><span data-ui-icon="Activity"></span><span class="nav-text">Monitoring</span></button>
       <a class="workspace-link" href="/feedback" target="_blank" rel="noopener noreferrer" title="Feedback (opens in a new tab)" aria-label="Feedback (opens in a new tab)"><span data-ui-icon="MessageSquare"></span><span class="nav-text">Feedback</span></a>
     </nav>
-    <nav id="courseNavigation" class="workspace-nav course-navigation" aria-label="Course tools">
-      <button id="sideToggle" class="workspace-link hidden" type="button" title="Show course content" aria-label="Show course content" aria-controls="sidebar" aria-expanded="false"><span data-ui-icon="ListVideo" aria-hidden="true"></span><span class="nav-text">Course content</span></button>
-      <button id="courseNotesToggle" class="workspace-link course-notes-toggle" type="button" title="Show notes" aria-label="Show notes" aria-controls="courseNotesHost" aria-expanded="false"><span data-ui-icon="NotebookPen" aria-hidden="true"></span><span class="nav-text">Notes</span></button>
-      <button id="videoChatBtn" class="workspace-link" type="button" aria-disabled="true" aria-label="Chat with video, coming soon" title="Chat with video, coming soon"><span data-ui-icon="Sparkles" aria-hidden="true"></span><span class="nav-text">Chat with video<span class="coming-soon">Coming soon</span></span></button>
-    </nav>
     <footer class="workspace-footer"><span class="workspace-private"><span data-ui-icon="LockKeyhole"></span>Personal workspace</span><button id="railLogoutBtn" class="workspace-link" type="button" title="Sign out" aria-label="Sign out"><span data-ui-icon="LogOut"></span><span class="nav-text">Sign out</span></button></footer>
   </aside>
   <div id="workspaceTooltip" class="workspace-tooltip hidden" role="tooltip"></div>
   <header id="topbar" class="hidden" data-glass>
     <div class="taskbar-main">
+      <button id="workspaceToggle" class="icon-btn" type="button" title="Collapse workspace sidebar" aria-label="Collapse workspace sidebar" aria-controls="workspaceNavigation" aria-expanded="true"><span data-ui-icon="PanelLeftClose"></span></button>
+      <button id="sideToggle" class="icon-btn hidden" type="button" title="Show course content" aria-label="Show course content" aria-controls="sidebar" aria-expanded="false"><span data-ui-icon="PanelLeftOpen" aria-hidden="true"></span></button>
       <a id="brand" class="brand" href="#" aria-label="FocusTube library" title="Back to library"><span class="brand-symbol" data-ui-icon="BookOpen"></span><span class="brand-wordmark">focustube<span class="brand-dot">.</span></span></a>
       <div class="workspace-context"><span>Learning workspace</span><strong id="workspaceContext">Library</strong></div>
       <div class="taskbar-course"><h1 id="courseHeading" class="course-heading"></h1><span class="course-duration" title="Total course duration"><span data-ui-icon="Clock" aria-hidden="true"></span><span id="courseDuration"></span></span></div>
@@ -204,7 +201,7 @@
             <div id="posterTitle" class="overlay-title"></div>
           </div>
           <button id="pauseOverlay" class="pause-cover hidden" type="button" aria-label="Resume playback" title="Resume playback">
-            <span class="pause-symbol" aria-hidden="true"><span data-ui-icon="Pause"></span></span>
+            <span class="pause-symbol" aria-hidden="true"><span data-ui-icon="Play"></span></span>
           </button>
           <div id="endedOverlay" class="overlay hidden">
             <div class="overlay-symbol" data-ui-icon="CircleCheck"></div>
@@ -258,7 +255,11 @@
 
       <div class="now-playing">
         <div class="np-text"><h2 id="npTitle"></h2><div id="npMeta" class="np-meta"></div><div id="npChapter" class="np-chapter"></div></div>
-        <button id="npComplete" class="btn ghost"><span data-ui-icon="Check"></span>Mark complete</button>
+        <div class="lesson-actions" role="group" aria-label="Lesson actions">
+          <button id="npComplete" class="btn ghost" type="button"><span data-ui-icon="Check"></span>Mark complete</button>
+          <button id="courseNotesToggle" class="icon-btn course-notes-toggle" type="button" title="Show notes" aria-label="Show notes" aria-controls="courseNotesHost" aria-expanded="false"><span data-ui-icon="NotebookPen" aria-hidden="true"></span></button>
+          <button id="videoChatBtn" class="icon-btn" type="button" aria-disabled="true" aria-label="Ask about video, coming soon" title="Ask about video, coming soon"><span data-ui-icon="Sparkles" aria-hidden="true"></span></button>
+        </div>
       </div>
       <div id="videoExtras" class="video-extras">
         <div id="chaptersSection" class="extras-section open hidden">
