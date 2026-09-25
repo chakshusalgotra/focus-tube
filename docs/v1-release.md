@@ -73,7 +73,7 @@ App browser acceptance verified actual sign-in/profile binding, provisional stre
 
 Installed-extension acceptance verified actual Chrome cookie reuse, additive save/duplicate receipt, real `chrome.identity.launchWebAuthFlow` consent and PKCE grant saving, and production/development isolation. **The two exact host permissions were pre-granted only in a disposable test manifest because headless Chrome did not complete the optional-permission prompt.** The shipping manifest remains optional-host-only. Missing extension cookies were simulated at the HTTPS test receiver to exercise the real connection fallback; this does not verify every Chrome third-party-cookie setting. The HTTPS names were mapped locally, not sent to the hosted applications. Native right-click/permission dialogs and hosted behavior still require manual acceptance.
 
-The existing local application on port 3002 and its accounts/data were not changed. The separate loopback preview at `http://127.0.0.1:3110` initially had extension integration disabled; the later Local testing activation below enables capture there while keeping AI and email off. It is not a substitute for hosted release testing. No real emails, provider calls, commits, pushes, or hosted deployments were performed.
+The existing local application on port 3002 and its accounts/data were not changed. The separate loopback preview at `http://127.0.0.1:3110` initially had extension integration disabled; the later Local testing activation below enables capture there while keeping AI and email off. It is not a substitute for hosted release testing. That implementation phase sent no real emails or provider requests and made no commits, pushes, or hosted deployments. The later authorized PR publication is recorded below.
 
 ### Popup Layout Correction
 
@@ -110,7 +110,19 @@ The integrated source passes **273 tests**, with no failures/skips/TODOs. New co
 
 Reload the unpacked extension, sign in to `http://127.0.0.1:3110`, choose **Local testing**, click Connect and approve access. Browser match patterns cannot restrict host permissions to a port, so the manifest requests optional `http://127.0.0.1/*` while CSP and code restrict actual requests to port 3110. Connections and pending requests remain separated by environment; removing local permission does not clear hosted connections.
 
-Before public distribution, disconnect Local, disable its server opt-in, remove the Local origin/selector entries and its manifest permission/CSP allowance, rebuild and reload. Keep the Production and Development entries. The retained Docker-image/test evidence above predates this native-only Local addition and must not be presented as a rebuilt Local-enabled image.
+Before public distribution, disconnect Local, disable its server opt-in, remove the Local origin/selector entries and its manifest permission/CSP allowance, rebuild and reload. Keep the Production and Development entries. The earlier Docker-image/test evidence above predates the Local addition; the fresh PR image below includes its guarded implementation without enabling it by default.
+
+### PR 17 Release Verification
+
+On **2026-09-25**, the user authorized publication of the latest features and continuation of the release plan. [PR #17](https://github.com/chakshusalgotra/focus-tube/pull/17) targets `dev` from `feature/v1-chat-capture-invitations`. Implementation commit `1eb3b3c4bdf7b36f86978938bdf83347da3a76c2` contains the integrated V1 and supporting sign-in improvements. The branch was pushed; no merge, hosted deployment, provider call, or live-data replacement occurred. A merge into `dev` triggers the existing Development deployment workflow.
+
+- Fresh host verification: **273 tests passed**, zero failures/skips/TODOs; the strict extension suite passed **36 tests**. JavaScript syntax, credential-signature scan, whitespace and all three Compose configuration checks passed. Feature flags and secret/identity examples retain their disabled/blank defaults.
+- Built only the committed Git export, excluding local credentials, runtime data, untracked files and the generated extension ZIP. The exact image is `focustube-v1-pr17:1eb3b3c`, SHA-256 `8120b52b25401bc3246163f66e3317bc2c346dded676353347006b081985bdc3`, labeled with the implementation commit above.
+- The exact exported image passed **273 tests**, zero failures/skips/TODOs, with `node --test --test-reporter=tap --test-concurrency=2`. Containers had no network, a read-only filesystem and test assets, disposable temporary data, no published ports, and no live volumes. Runtime modules and dependencies came from the built image, not source bind mounts.
+- Trivy 0.73.0 scanned that exported image: **0 high / 0 critical** findings. The editor's `FROM alpine:3.24.1` annotation describes the base, not the image after the existing OpenSSL package upgrades. The scanner's Alpine EOL-metadata caveat still applies.
+- Current `npm audit --omit=dev` reports **4 moderate / 0 high / 0 critical** findings in `express`, `body-parser`, `qs` and `dompurify`. The underlying advisories are `GHSA-x5fp-wj9c-mxmx`, `GHSA-4mjr-xmp4-gh2g` and `GHSA-55q2-fjhq-7xh7`. No unrelated dependency upgrade or risk waiver is implied.
+
+This completes the fresh source/image/security verification step, not the remaining hosted, live-provider or device acceptance gates. Documentation-only commits recording these results do not change the tested runtime. The reproducible ZIP remains available locally through `npm run extension:package` and is intentionally ignored by Git.
 
 ### Remaining Gates
 
