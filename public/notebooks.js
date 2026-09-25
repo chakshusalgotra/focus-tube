@@ -61,6 +61,8 @@
       const layout = find('#studyLayout');
       const pane = find('#courseNotesHost');
       const content = find('#courseNotesContent');
+      const studyPane = find('#studyPane') || pane;
+      const chatPane = find('#videoChatPanel');
       const toggle = find('#courseNotesToggle');
       const handles = { width: find('#notesWidthHandle'), height: find('#notesHeightHandle') };
       const sizes = {};
@@ -75,8 +77,8 @@
       } catch {}
       const bounds = axis => axis === 'width'
         ? { min: 300, max: Math.max(300, Math.min(900, layout.clientWidth - 436)) }
-        : { min: 240, max: 1600 };
-      const measure = axis => (axis === 'width' ? pane : content).getBoundingClientRect()[axis];
+        : { min: layout.classList.contains('chat-open') ? 420 : 240, max: 1600 };
+      const measure = axis => (axis === 'width' ? studyPane : layout.classList.contains('chat-open') ? chatPane : content).getBoundingClientRect()[axis];
       const update = () => {
         const label = pane.open ? 'Hide notes' : 'Show notes';
         toggle.setAttribute('aria-expanded', String(pane.open));
@@ -118,7 +120,7 @@
           persist();
         };
         handle.addEventListener('pointerdown', event => {
-          if (event.button !== 0 || !pane.open) return;
+          if (event.button !== 0 || (!pane.open && !layout.classList.contains('chat-open'))) return;
           event.preventDefault();
           this.finishPanelResize?.();
           drag = { pointerId: event.pointerId, position: axis === 'width' ? event.clientX : event.clientY, size: measure(axis) };
@@ -159,6 +161,7 @@
       this.paneResizeObserver = new ResizeObserver(update);
       this.paneResizeObserver.observe(layout);
       this.paneResizeObserver.observe(content);
+      if (chatPane) this.paneResizeObserver.observe(chatPane);
       update();
     }
 
@@ -174,13 +177,16 @@
 
     async request(url, options = {}) {
       const generation = this.generation;
+      const owner = this.options.getUser()?.id;
       const controller = new AbortController();
       this.requests.add(controller);
       const timer = setTimeout(() => controller.abort(), 15_000);
       try {
-        const response = await fetch(url, { ...options, signal: controller.signal, headers: { 'Content-Type': 'application/json', ...options.headers } });
+        const response = await fetch(url, { ...options, signal: controller.signal, headers: { 'Content-Type': 'application/json',
+          ...(owner ? { 'X-Notebook-Account': String(owner) } : {}), ...options.headers } });
         const body = await response.json();
-        if (generation !== this.generation) throw new DOMException('Session changed', 'AbortError');
+        if (generation !== this.generation || owner !== this.options.getUser()?.id) throw new DOMException('Session changed', 'AbortError');
+        if (response.status === 401 || body.code === 'SESSION_CHANGED') this.options.onSessionChanged?.();
         if (!response.ok) throw Object.assign(new Error(body.error || 'Could not load notes.'), { status: response.status, body });
         if (Number.isSafeInteger(body.notesRevision)) this.notesRevision = Math.max(this.notesRevision, body.notesRevision);
         return body;
@@ -267,6 +273,66 @@
       this.status();
     }
 
+    async appendGeneratedNote(proposal, { ownerId, sourceGeneration, isCurrent } = {}) {
+      const state = this.active;
+      const generation = this.generation;
+      const binding = this.binding;
+      const current = () => generation === this.generation && binding === this.binding && this.active === state &&
+        state?.owner === ownerId && this.options.getUser()?.id === ownerId && state.courseId === proposal.courseId && state.videoId === proposal.videoId &&
+        this.options.getCourses()[proposal.courseId]?.videos?.some(video => video.id === proposal.videoId) && isCurrent?.() === true;
+      const check = () => {
+        if (!current()) throw new Error('The account, video or source changed. Reopen the preview for its original video.');
+        if (this.editor.composing) throw new Error('Finish the current text composition, then append the preview.');
+        if (state.conflict) throw new Error('Resolve the Notes conflict before appending.');
+      };
+      check();
+      if (this.appendOperation) {
+        if (this.appendOperation.state === state && this.appendOperation.id === proposal.id) return this.appendOperation.promise;
+        throw new Error('Wait for the current note append to finish.');
+      }
+      const operation = { state, id: proposal.id };
+      this.appendOperation = operation;
+      operation.promise = (async () => {
+        if (state.inFlight) await state.inFlight;
+        check();
+        this.editor.quill.update();
+        const blocks = model.generatedBlocks(proposal);
+        const alreadyPresent = model.generatedStatus(state.document, proposal, blocks) === 'present';
+        if (!alreadyPresent) {
+          model.validate({ version: 1, ops: [...(state.document || model.empty()).ops, ...model.fromLines(blocks).ops] });
+          const sequence = state.sequence;
+          let validation;
+          try {
+            validation = await this.request(`/api/video-chat/${encodeURIComponent(state.courseId)}/videos/${state.videoId}/notes/validate`, {
+              method: 'POST', headers: { 'X-Video-Chat-Account': String(ownerId) }, body: JSON.stringify({ proposalId: proposal.id, texts: proposal.blocks.map(block => block.text),
+                sourceHash: proposal.sourceHash, generation: sourceGeneration, document: state.document, noteRevision: state.revision }),
+            });
+          } catch (error) {
+            if (current() && error.status === 409 && Object.hasOwn(error.body || {}, 'record')) {
+              state.conflict = error.body;
+              if (state.dirty) this.keepDraft(state);
+              this.status();
+            }
+            throw error;
+          }
+          check();
+          this.editor.quill.update();
+          if (sequence !== state.sequence) throw new Error('The note changed while preparing this append. Review the preview and append again.');
+          if (!validation.proposal || validation.proposal.id !== proposal.id || validation.proposal.sourceHash !== proposal.sourceHash ||
+              !same(model.generatedBlocks(validation.proposal), blocks) || !Number.isSafeInteger(validation.noteRevision)) {
+            throw new Error('The preview could not be verified. Reload chat before appending.');
+          }
+          state.revision = validation.noteRevision;
+          this.editor.appendValidatedBlocks(blocks);
+          this.setMode(this.mode);
+        }
+        check();
+        const saved = await this.save(state);
+        return { saved, alreadyPresent, error: saved ? '' : state.conflict ? 'Resolve the Notes conflict, then retry saving.' : state.error || 'Unsaved. Retry saving when connected.' };
+      })().finally(() => { if (this.appendOperation === operation) this.appendOperation = null; });
+      return operation.promise;
+    }
+
     async save(state) {
       clearTimeout(state.timer);
       if (state.inFlight) return state.inFlight;
@@ -288,7 +354,7 @@
                 method: 'PUT', body: JSON.stringify({ document, revision: state.revision }),
               });
             } catch (error) {
-              if (error.status !== 409) throw error;
+              if (error.status !== 409 || error.body?.code === 'SESSION_CHANGED') throw error;
               this.notesRevision = Math.max(this.notesRevision, error.body.notesRevision || 0);
               if (same(error.body.record?.document || null, document)) result = error.body;
               else { state.conflict = error.body; return false; }
@@ -578,6 +644,7 @@
       this.binding++;
       this.view++;
       this.notesRevision = 0;
+      this.appendOperation = null;
       this.pendingBinding = null;
       this.retryBinding = null;
       this.editor.load(null);

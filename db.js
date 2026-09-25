@@ -132,7 +132,8 @@ db.transaction(() => {
     CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
     CREATE TABLE IF NOT EXISTS auth_workspace (
       id INTEGER PRIMARY KEY CHECK(id = 1),
-      max_members INTEGER NOT NULL CHECK(max_members > 0)
+      max_members INTEGER NOT NULL CHECK(max_members > 0),
+      last_invitation_id INTEGER NOT NULL DEFAULT 0 CHECK(typeof(last_invitation_id) = 'integer' AND last_invitation_id >= 0)
     );
     CREATE TABLE IF NOT EXISTS invitations (
       id INTEGER PRIMARY KEY,
@@ -142,7 +143,9 @@ db.transaction(() => {
       use_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(use_count) = 'integer' AND use_count BETWEEN 0 AND max_uses),
       created_at TEXT NOT NULL,
       expires_at TEXT NOT NULL CHECK(expires_at > created_at),
-      consumed_at TEXT CHECK(consumed_at IS NULL OR (consumed_at >= created_at AND consumed_at < expires_at))
+      consumed_at TEXT CHECK(consumed_at IS NULL OR (consumed_at >= created_at AND consumed_at < expires_at)),
+      revoked_at TEXT,
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(typeof(revision) = 'integer' AND revision > 0)
     );
     CREATE INDEX IF NOT EXISTS invitations_expiry_idx ON invitations(expires_at);
     CREATE TABLE IF NOT EXISTS login_budgets (
@@ -262,7 +265,15 @@ db.transaction(() => {
     db.exec("ALTER TABLE invitations ADD COLUMN use_count INTEGER NOT NULL DEFAULT 0 CHECK(typeof(use_count) = 'integer' AND use_count BETWEEN 0 AND max_uses)");
     db.exec('UPDATE invitations SET use_count = 1 WHERE consumed_at IS NOT NULL');
   }
+  if (!invitationColumns.has('revoked_at')) db.exec('ALTER TABLE invitations ADD COLUMN revoked_at TEXT');
+  if (!invitationColumns.has('revision')) {
+    db.exec("ALTER TABLE invitations ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK(typeof(revision) = 'integer' AND revision > 0)");
+  }
+  if (!db.pragma('table_info(auth_workspace)').some(column => column.name === 'last_invitation_id')) {
+    db.exec("ALTER TABLE auth_workspace ADD COLUMN last_invitation_id INTEGER NOT NULL DEFAULT 0 CHECK(typeof(last_invitation_id) = 'integer' AND last_invitation_id >= 0)");
+  }
   if (firstSetup) db.prepare('INSERT INTO auth_workspace (id, max_members) VALUES (1, 100)').run();
+  db.exec('UPDATE auth_workspace SET last_invitation_id = MAX(last_invitation_id, COALESCE((SELECT MAX(id) FROM invitations), 0)) WHERE id = 1');
 }).immediate();
 
 const now = () => new Date().toISOString();
@@ -511,38 +522,122 @@ function setMemberLimit(limit) {
 const activeAdmin = db.prepare("SELECT 1 FROM users WHERE is_admin = 1 AND account_state = 'active' LIMIT 1");
 const inviteByHash = db.prepare('SELECT * FROM invitations WHERE token_hash = ?');
 
-const issueInvitationTx = db.transaction(({ tokenHash, actorSessionHash, bootstrap = false, maxUses = 1 }) => {
-  getAuthWorkspace();
+function invitationAdmin(actorSessionHash, timestamp) {
+  const actor = actorSessionHash && stmts.sessionUser.get(actorSessionHash, timestamp);
+  if (!actor) throw authFailure('UNAUTHENTICATED');
+  if (!actor.is_admin || actor.is_guest) throw authFailure('FORBIDDEN');
+}
+
+function invitationStatus(invitation, timestamp) {
+  if (invitation.revoked_at) return 'revoked';
+  if (invitation.consumed_at || invitation.use_count >= invitation.max_uses) return 'exhausted';
+  return invitation.expires_at <= timestamp ? 'expired' : 'active';
+}
+
+function invitationMetadata(invitation, timestamp) {
+  return { id: invitation.id, createdAt: invitation.created_at, expiresAt: invitation.expires_at,
+    maxUses: invitation.max_uses, useCount: invitation.use_count, remaining: invitation.max_uses - invitation.use_count,
+    status: invitationStatus(invitation, timestamp), revision: invitation.revision };
+}
+
+function invitationExpiry(expiresAt, timestamp) {
+  const expiry = typeof expiresAt === 'string' ? Date.parse(expiresAt) : NaN;
+  const current = Date.parse(timestamp);
+  if (!Number.isFinite(expiry) || new Date(expiry).toISOString() !== expiresAt || expiry <= current || expiry > current + 365 * 86400000) {
+    throw authFailure('INVALID_INVITATION_EXPIRY');
+  }
+  return expiresAt;
+}
+
+const issueInvitationTx = db.transaction(({ tokenHash, actorSessionHash, bootstrap = false, maxUses = 1, expiresAt: requestedExpiry }) => {
+  const workspace = getAuthWorkspace();
   if (!Number.isSafeInteger(maxUses) || maxUses < 1 || maxUses > 1000 || (bootstrap && maxUses !== 1)) throw authFailure('INVALID_REQUEST');
   const createdAt = now();
   if (bootstrap) {
     if (activeAdmin.get()) throw authFailure('ADMIN_EXISTS');
+    if (requestedExpiry !== undefined) throw authFailure('INVALID_INVITATION_EXPIRY');
   } else {
-    const actor = stmts.sessionUser.get(actorSessionHash, createdAt);
-    if (!actor) throw authFailure('UNAUTHENTICATED');
-    if (!actor.is_admin || actor.is_guest) throw authFailure('FORBIDDEN');
+    invitationAdmin(actorSessionHash, createdAt);
   }
-  const expiresAt = new Date(Date.parse(createdAt) + 86400000).toISOString();
+  const expiresAt = bootstrap ? new Date(Date.parse(createdAt) + 86400000).toISOString()
+    : invitationExpiry(requestedExpiry === undefined ? new Date(Date.parse(createdAt) + 7 * 86400000).toISOString() : requestedExpiry, createdAt);
+  const id = Math.max(workspace.last_invitation_id, db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM invitations').get().id) + 1;
+  if (!Number.isSafeInteger(id)) throw authFailure('AUTH_UNAVAILABLE');
   const result = db.prepare(`
-    INSERT INTO invitations (token_hash, is_admin, max_uses, created_at, expires_at) VALUES (?, ?, ?, ?, ?)
-  `).run(tokenHash, bootstrap ? 1 : 0, maxUses, createdAt, expiresAt);
-  return { id: Number(result.lastInsertRowid), expiresAt, maxUses, useCount: 0 };
+    INSERT INTO invitations (id, token_hash, is_admin, max_uses, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(id, tokenHash, bootstrap ? 1 : 0, maxUses, createdAt, expiresAt);
+  db.prepare('UPDATE auth_workspace SET last_invitation_id = ? WHERE id = 1').run(id);
+  return bootstrap ? { id: Number(result.lastInsertRowid), expiresAt, maxUses, useCount: 0 }
+    : invitationMetadata(inviteByHash.get(tokenHash), createdAt);
 });
 
 function issueInvitation(values) {
   return issueInvitationTx.immediate(values);
 }
 
-function invitationAvailable(inviteHash) {
+function listInvitations({ actorSessionHash, beforeId = null, limit = 50 }) {
+  return db.transaction(() => {
+    const timestamp = now();
+    invitationAdmin(actorSessionHash, timestamp);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
+        (beforeId !== null && (!Number.isSafeInteger(beforeId) || beforeId < 1))) throw authFailure('INVALID_REQUEST');
+    const rows = db.prepare(`SELECT id, created_at, expires_at, max_uses, use_count, consumed_at, revoked_at, revision
+      FROM invitations WHERE is_admin = 0 AND id <= ? ORDER BY id DESC LIMIT ?`)
+      .all(beforeId === null ? Number.MAX_SAFE_INTEGER : beforeId - 1, limit + 1);
+    return { invitations: rows.slice(0, limit).map(row => invitationMetadata(row, timestamp)),
+      nextCursor: rows.length > limit ? rows[limit - 1].id : null };
+  }).deferred();
+}
+
+function mutableInvitation({ actorSessionHash, id, revision }, timestamp) {
+  invitationAdmin(actorSessionHash, timestamp);
+  if (!Number.isSafeInteger(id) || id < 1 || !Number.isSafeInteger(revision) || revision < 1) throw authFailure('INVALID_REQUEST');
+  const invitation = db.prepare('SELECT * FROM invitations WHERE id = ? AND is_admin = 0').get(id);
+  if (!invitation) throw authFailure('INVITATION_NOT_FOUND');
+  if (invitation.revision !== revision) throw authFailure('INVITATION_CHANGED');
+  const status = invitationStatus(invitation, timestamp);
+  if (status === 'revoked') throw authFailure('INVITATION_REVOKED');
+  if (status === 'exhausted') throw authFailure('INVITATION_EXHAUSTED');
+  return invitation;
+}
+
+const updateInvitationTx = db.transaction(values => {
+  const timestamp = now();
+  const invitation = mutableInvitation(values, timestamp);
+  if (values.reactivate !== undefined && typeof values.reactivate !== 'boolean') throw authFailure('INVALID_REQUEST');
+  const expiresAt = invitationExpiry(values.expiresAt, timestamp);
+  if (expiresAt <= invitation.created_at) throw authFailure('INVALID_INVITATION_EXPIRY');
+  if (invitationStatus(invitation, timestamp) === 'expired' && values.reactivate !== true) throw authFailure('INVITATION_REACTIVATION_REQUIRED');
+  db.prepare('UPDATE invitations SET expires_at = ?, revision = revision + 1 WHERE id = ?').run(expiresAt, invitation.id);
+  return invitationMetadata({ ...invitation, expires_at: expiresAt, revision: invitation.revision + 1 }, timestamp);
+});
+
+function updateInvitation(values) {
+  return updateInvitationTx.immediate(values);
+}
+
+const revokeInvitationTx = db.transaction(values => {
+  const timestamp = now();
+  const invitation = mutableInvitation(values, timestamp);
+  db.prepare('UPDATE invitations SET revoked_at = ?, revision = revision + 1 WHERE id = ?').run(timestamp, invitation.id);
+  db.prepare('DELETE FROM email_verifications WHERE invite_hash = ? AND consumed_at IS NULL').run(invitation.token_hash);
+  return invitationMetadata({ ...invitation, revoked_at: timestamp, revision: invitation.revision + 1 }, timestamp);
+});
+
+function revokeInvitation(values) {
+  return revokeInvitationTx.immediate(values);
+}
+
+function invitationAvailable(inviteHash, timestamp = now()) {
   const invitation = inviteByHash.get(inviteHash);
-  return !!invitation && !invitation.consumed_at && invitation.use_count < invitation.max_uses && invitation.expires_at > now();
+  return !!invitation && invitationStatus(invitation, timestamp) === 'active';
 }
 
 const issueEmailVerificationTx = db.transaction(values => {
   const createdAt = now();
   db.prepare('DELETE FROM email_verifications WHERE expires_at <= ?').run(createdAt);
   if (db.prepare('SELECT count(*) AS count FROM email_verifications').get().count >= 5000) throw authFailure('AUTH_UNAVAILABLE');
-  if (values.purpose !== 'email' && !invitationAvailable(values.inviteHash)) throw authFailure('INVALID_INVITATION');
+  if (values.purpose !== 'email' && !invitationAvailable(values.inviteHash, createdAt)) throw authFailure('INVALID_INVITATION');
   if (values.purpose !== 'registration') {
     const user = stmts.sessionUser.get(values.currentSessionHash, createdAt);
     if (!user || user.id !== values.userId) throw authFailure('UNAUTHENTICATED');
@@ -612,13 +707,14 @@ const redeemInvitationTx = db.transaction(values => {
   const workspace = getAuthWorkspace();
   const createdAt = now();
   const invitation = inviteByHash.get(values.inviteHash);
-  if (!invitation || invitation.consumed_at || invitation.use_count >= invitation.max_uses || invitation.expires_at <= createdAt) throw authFailure('INVALID_INVITATION');
+  if (!invitation || invitationStatus(invitation, createdAt) !== 'active') throw authFailure('INVALID_INVITATION');
   const guest = values.guestSessionHash ? stmts.sessionUser.get(values.guestSessionHash, createdAt) : null;
   if (values.guestSessionHash && !guest) throw authFailure('UNAUTHENTICATED');
   if (guest && (!guest.is_guest || invitation.is_admin)) throw authFailure('REGISTRATION_CONFLICT');
   if (invitation.is_admin && activeAdmin.get()) throw authFailure('REGISTRATION_CONFLICT');
   const members = db.prepare("SELECT count(*) AS count FROM users WHERE is_guest = 0 AND account_state != 'deleted'").get().count;
-  if (members >= workspace.max_members || stmts.userByEmail.get(values.email) || (values.username && stmts.userByName.get(values.username))) throw authFailure('REGISTRATION_CONFLICT');
+  if (members >= workspace.max_members || stmts.userByEmail.get(values.email)) throw authFailure('REGISTRATION_CONFLICT');
+  if (values.username && stmts.userByName.get(values.username)) throw authFailure('USERNAME_TAKEN');
   consumeEmailVerification({ ...values, purpose: guest ? 'upgrade' : 'registration', userId: guest?.id || null,
     currentSessionHash: guest ? values.guestSessionHash : null }, createdAt);
   let userId;
@@ -633,9 +729,9 @@ const redeemInvitationTx = db.transaction(values => {
     userId = Number(result.lastInsertRowid);
     stmts.createData.run(userId, createdAt);
   }
-  const consumed = db.prepare(`UPDATE invitations SET use_count = use_count + 1,
+  const consumed = db.prepare(`UPDATE invitations SET use_count = use_count + 1, revision = revision + 1,
     consumed_at = CASE WHEN use_count + 1 = max_uses THEN ? ELSE NULL END
-    WHERE token_hash = ? AND consumed_at IS NULL AND use_count < max_uses AND expires_at > ?`).run(createdAt, values.inviteHash, createdAt);
+    WHERE token_hash = ? AND revoked_at IS NULL AND consumed_at IS NULL AND use_count < max_uses AND expires_at > ?`).run(createdAt, values.inviteHash, createdAt);
   if (consumed.changes !== 1) throw authFailure('INVALID_INVITATION');
   db.prepare('UPDATE users SET email_verified_at = ? WHERE id = ?').run(createdAt, userId);
   const expiresAt = new Date(Date.parse(createdAt) + values.sessionMs).toISOString();
@@ -653,7 +749,7 @@ function redeemInvitation(values) {
   }
 }
 
-const passwordSessionTx = db.transaction(({ user, sessionHash, sessionMs, email, currentSessionHash, verificationHash, verificationCodeHash, passwordHash, salt }) => {
+const passwordSessionTx = db.transaction(({ user, sessionHash, sessionMs, email, currentSessionHash, verificationHash, verificationCodeHash, passwordHash, salt, onSessionReplaced }) => {
   if (passwordHash !== undefined && (!currentSessionHash || email !== undefined)) throw authFailure('INVALID_REQUEST');
   const createdAt = now();
   const current = currentSessionHash ? stmts.sessionUser.get(currentSessionHash, createdAt) : stmts.userById.get(user.id);
@@ -677,6 +773,7 @@ const passwordSessionTx = db.transaction(({ user, sessionHash, sessionMs, email,
   stmts.createSession.run(sessionHash, user.id, createdAt, expiresAt);
   stmts.touchUser.run(createdAt, user.id);
   if (passwordHash === undefined) recordAuthEvent(user.id, email === undefined ? 'login' : 'email', createdAt);
+  onSessionReplaced?.();
   return { user: stmts.userById.get(user.id), expiresAt };
 });
 
@@ -804,6 +901,8 @@ function getAdminUsage(page = 1, timestamp = Date.now()) {
   return { ...counts, totalUsers, page, pages: Math.max(1, Math.ceil(totalUsers / 25)), users, daily, events, generatedAt: current };
 }
 
+const chat = require(path.join(__dirname, 'video-chat-store')).createChatStore(db);
+
 function getUserData(userId) {
   stmts.createData.run(userId, now());
   const row = stmts.dataByUser.get(userId);
@@ -819,6 +918,7 @@ function getUserData(userId) {
     workspace: parseJson(row.workspace_json, {}),
     revision: Number(row.revision || 0),
     notesRevision: Number(row.notes_revision || 0),
+    chatRevision: Number(row.chat_revision || 0),
     updatedAt: row.updated_at,
   };
 }
@@ -937,10 +1037,12 @@ function saveUserData(userId, data, expectedRevision, importLegacy = false) {
   return saveUserDataTx(userId, data, expectedRevision, importLegacy);
 }
 
-const importUserDataTx = db.transaction((userId, data, expectedRevision, expectedNotesRevision) => {
+const importUserDataTx = db.transaction((userId, data, expectedRevision, expectedNotesRevision, expectedChatRevision) => {
   const importedAt = now();
   stmts.createData.run(userId, importedAt);
-  if (getUserData(userId).notesRevision !== expectedNotesRevision) return null;
+  const currentData = getUserData(userId);
+  if (currentData.notesRevision !== expectedNotesRevision || currentData.chatRevision !== expectedChatRevision || chat.hasPending(userId)) return null;
+  const videoChats = require(path.join(__dirname, 'video-chat-store')).validateChatBackup(data.videoChats || []);
   const notebooks = noteModel.validateRecords(data.notebooks || []);
   const existingKeys = new Set(stmts.notesByUser.all(userId).map(row => row.course_id + '/' + row.video_id));
   for (const record of notebooks) existingKeys.add(record.courseId + '/' + record.videoId);
@@ -956,6 +1058,7 @@ const importUserDataTx = db.transaction((userId, data, expectedRevision, expecte
   });
   if (!result.changes) return null;
 
+  chat.restore(userId, videoChats);
   stmts.clearNotes.run(importedAt, userId);
   for (const record of notebooks) {
     if (!record.document) continue;
@@ -986,8 +1089,8 @@ const importUserDataTx = db.transaction((userId, data, expectedRevision, expecte
   return Number(stmts.dataByUser.get(userId).revision);
 });
 
-function importUserData(userId, data, expectedRevision, expectedNotesRevision = 0) {
-  return importUserDataTx(userId, data, expectedRevision, expectedNotesRevision);
+function importUserData(userId, data, expectedRevision, expectedNotesRevision = 0, expectedChatRevision = 0) {
+  return importUserDataTx(userId, data, expectedRevision, expectedNotesRevision, expectedChatRevision);
 }
 
 const trackTx = db.transaction((userId, payload) => {
@@ -1147,7 +1250,7 @@ const getExportData = db.transaction(userId => {
   }));
   return {
     schema: 'focustube-user-export',
-    schemaVersion: 2,
+    schemaVersion: 3,
     exportedAt: now(),
     profile: publicUser(user),
     courses: data.courses,
@@ -1155,6 +1258,7 @@ const getExportData = db.transaction(userId => {
     settings: data.settings,
     workspace: data.workspace,
     notebooks: stmts.notesByUser.all(userId).filter(row => row.document_json).map(noteRecord),
+    videoChats: chat.exportRecords(userId),
     dashboard: {
       summary: getStatsSummary(userId),
       dailyActivity: activity,
@@ -1164,6 +1268,7 @@ const getExportData = db.transaction(userId => {
       app: 'FocusTube',
       profileRevision: data.revision,
       notesRevision: data.notesRevision,
+      chatRevision: data.chatRevision,
       profileUpdatedAt: data.updatedAt,
     },
   };
@@ -1424,6 +1529,7 @@ function importLegacyData(userId, courses, stats) {
 cleanup();
 
 module.exports = {
+  chat,
   db,
   dataDir,
   publicUser,
@@ -1441,6 +1547,9 @@ module.exports = {
   getAuthWorkspace,
   setMemberLimit,
   issueInvitation,
+  listInvitations,
+  updateInvitation,
+  revokeInvitation,
   invitationAvailable,
   issueEmailVerification,
   markEmailVerificationSent,

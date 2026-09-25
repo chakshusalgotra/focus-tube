@@ -22,11 +22,11 @@
     has: () => invitation !== null,
     clear,
     submit(endpoint, options) {
-      if (!invitation || !['/api/auth/register', '/api/auth/upgrade', '/api/auth/verification/request'].includes(endpoint)) {
+      if (!invitation || !['/api/auth/register', '/api/auth/upgrade', '/api/auth/verification/request', '/api/auth/username/check'].includes(endpoint)) {
         return Promise.reject(new Error('An invitation is required.'));
       }
       const body = { ...JSON.parse(options.body), inviteToken: invitation };
-      return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin' });
+      return fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), credentials: 'same-origin', signal: options.signal });
     },
   });
   window.addEventListener('hashchange', () => {

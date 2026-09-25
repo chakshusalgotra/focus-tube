@@ -7,3 +7,4 @@ data/
 npm-debug.log*
 .ssh
 /test/test-api-nvidia.py
+/extension/focustube-*.zip

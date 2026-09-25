@@ -1,5 +1,25 @@
 'use strict';
 
+require('node:test').test('chat and notes share one study pane with explicit context and accessible streamed states', () => {
+  const assert = require('node:assert/strict');
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const markup = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(__dirname, '../public/styles.css'), 'utf8');
+  const chat = fs.readFileSync(path.join(__dirname, '../public/video-chat.js'), 'utf8');
+  assert.match(markup, /id="studyTabs"[^>]*role="tablist"/);
+  assert.match(markup, /id="studyChatTab"[^>]*role="tab"[^>]*aria-controls="videoChatPanel"/);
+  assert.match(markup, /id="studyNotesTab"[^>]*role="tab"[^>]*aria-controls="courseNotesHost"/);
+  assert.match(markup, /id="chatMessages"[^>]*aria-live="off"/);
+  assert.match(markup, /id="chatStatus"[^>]*aria-live="polite"/);
+  assert.match(markup, /id="chatScope"/);
+  assert.match(markup, /aria-label="Stop answer"/);
+  assert.match(styles, /\.study-tabs button \{[^}]*min-height: 44px/);
+  assert.match(styles, /\.study-pane \{ grid-column: 1;/);
+  assert.match(chat, /this\.options\.appendGeneratedNote\(preview\.proposal/);
+  assert.doesNotMatch(chat, /pauseVideo\(|setContents\(|\.load\(.*document/);
+});
+
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -677,15 +697,17 @@ test('drawer keyboard navigation includes the relocated taskbar toggle', () => {
   press('Escape'); assert.equal(open, false); assert.equal(document.activeElement, toggle);
 });
 
-test('Notes and Ask sit beside completion with accessible icons and no AI workflow', () => {
+test('Notes and opt-in Ask sit beside completion with accessible icons', () => {
   const html = read('public/index.html');
   const css = read('public/styles.css');
   const source = read('public/app.js');
   assert.match(html, /class="lesson-actions"[^>]*aria-label="Lesson actions"/);
-  assert.match(html, /id="videoChatBtn"[^>]*aria-disabled="true"[^>]*aria-label="Ask about video, coming soon"/);
+  assert.match(html, /id="videoChatBtn"[^>]*aria-disabled="true"[^>]*aria-label="Video chat is not configured"/);
   assert.match(html, /id="videoChatBtn"[^>]*><span data-ui-icon="Sparkles"/);
   assert.match(html, /class="coming-soon">Coming soon/);
-  assert.match(source, /\$\('#videoChatBtn'\)\.addEventListener\('click', event => \{ event\.preventDefault\(\); event\.stopPropagation\(\); \}\)/);
+  assert.match(source, /videoChat = new VideoChat\(/);
+  assert.match(html, /id="videoChatPanel"[^>]*role="tabpanel"[^>]*aria-labelledby="studyChatTab"/);
+  assert.match(html, /id="chatConsent"[^>]*type="checkbox"/);
   assert.doesNotMatch(source, /fetch\([^\n]*(?:transcript|\/chat)/);
   assert.match(html, /id="workspaceTooltip"[^>]*role="tooltip"/);
   assert.match(css, /\.lesson-actions \.icon-btn::after \{ content: attr\(title\);/);
@@ -771,6 +793,7 @@ test('Notes owns mobile panel behavior after moving outside the workspace rail',
   let scrolled = 0;
   const layout = { clientWidth: 700 };
   const context = vm.createContext({
+    videoChat: { hide(restoreNotes) { assert.equal(restoreNotes, false); } },
     saveCourseLayout: value => saved.push(value.notesOpen),
     setPlaylistCollapsed: (value, options) => collapsed.push({ value, remember: options.remember }),
     window: { innerWidth: 768 },
@@ -1042,7 +1065,10 @@ test('settings account drafts survive section changes and block accidental dismi
 test('public policies have separate terms and privacy sections without loading workspace or video scripts', () => {
   const html = read('public/policies.html');
   for (const section of ['terms', 'privacy', 'contact']) assert.match(html, new RegExp(`<section id="${section}"`));
-  assert.match(html, /datetime="2026-09-15"/);
+  assert.match(html, /datetime="2026-09-25"/);
+  assert.match(html, /send Google Gemini your question/);
+  assert.match(html, /Existing notebook contents, account credentials, and other videos are not automatically included/);
+  assert.match(html, /it contains no transcript or conversation text/);
   assert.match(html, /salted scrypt hashes/);
   assert.match(html, /Changing your password revokes old sessions/);
   assert.doesNotMatch(html, /Pending publication|<iframe|src="(?:app|\/app|https:)/);
@@ -1081,13 +1107,17 @@ test('password settings validate confirmation and clear secrets without resettin
   assert.equal(inputs.every(input => input.value === '' && input.message === ''), true);
   assert.equal(vm.runInContext('passwordDirty()', context), false);
   context.dialog = {};
+  let invitationCloses = 0;
+  context.window = { invitationSettings: { close: () => { invitationCloses++; } } };
   context.confirmAccountDiscard = () => false;
   current.value = 'unsaved-password';
   vm.runInContext(source.match(/dialog\.confirmClose = \(\) => \{[^]*?\n  \};/)[0], context);
   assert.equal(context.dialog.confirmClose(), false);
+  assert.equal(invitationCloses, 0);
   assert.equal(current.value, 'unsaved-password');
   context.confirmAccountDiscard = () => true;
   assert.equal(context.dialog.confirmClose(), true);
+  assert.equal(invitationCloses, 1);
   assert.equal(current.value, '', 'Approved close clears secrets before the deferred dialog close event');
   const implementation = source.slice(source.indexOf('function setupPasswordSettings('), source.indexOf('function setupGlassReflection('));
   assert.match(implementation, /api\('\/api\/auth\/password'/);

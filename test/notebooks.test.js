@@ -103,6 +103,97 @@ test('first input captures time; later edits and splits retain the source time',
   assert.doesNotThrow(() => model.validate(appended));
 });
 
+const proposal = () => ({ id: 'p_11111111-1111-4111-8111-111111111111', courseId: 'course1', videoId: 'aqz-KE-bpKQ', sourceHash: 'a'.repeat(64), blocks: [
+  { kind: 'heading', text: 'Summary', seconds: null, segmentIds: [], messageIds: [] },
+  { kind: 'paragraph', text: 'Start of the lesson', seconds: 0, segmentIds: ['s1'], messageIds: [] },
+  { kind: 'paragraph', text: 'A later example', seconds: 45, segmentIds: ['s2'], messageIds: [] },
+] });
+
+test('generated blocks retain validated zero times and stable identities, with partial-duplicate rejection', () => {
+  const draft = proposal();
+  const blocks = model.generatedBlocks(draft);
+  const document = model.fromLines(blocks);
+  assert.deepEqual(blocks.map(block => block.attributes.anchorSeconds), [undefined, 0, 45]);
+  assert.deepEqual(model.generatedBlocks(draft), blocks);
+  assert.equal(model.generatedStatus(note(), draft), 'absent');
+  assert.equal(model.generatedStatus(document, draft), 'present');
+  assert.throws(() => model.generatedStatus(model.fromLines(blocks.slice(1)), draft), /Part of/);
+  assert.throws(() => model.generatedStatus(document, { ...draft, blocks: draft.blocks.map(block => ({ ...block, text: 'Changed' })) }), /edited/);
+  assert.throws(() => model.generatedBlocks({ ...draft, blocks: [{ ...draft.blocks[1], seconds: -1 }] }), /invalid/);
+  assert.throws(() => model.generatedBlocks({ ...draft, blocks: [{ ...draft.blocks[1], segmentIds: [] }] }), /invalid/);
+  assert.match(model.markdown(document, draft.videoId), /t=0/);
+  assert.match(model.markdown(document, draft.videoId), /t=45/);
+});
+
+test('validated editor append bypasses recapture, preserves selection and history, and emits one change', () => {
+  const Delta = require('quill-delta');
+  const registered = {};
+  class History {
+    constructor(quill) { this.quill = quill; this.stack = { undo: [], redo: [] }; this.cutoffs = 0; }
+    cutoff() { this.cutoffs++; }
+    undo() {
+      const change = this.stack.undo.pop();
+      this.stack.redo.push(change.invert(this.quill.delta));
+      this.quill.updateContents(change, 'user');
+    }
+    redo() {
+      const change = this.stack.redo.pop();
+      this.stack.undo.push(change.invert(this.quill.delta));
+      this.quill.updateContents(change, 'user');
+    }
+  }
+  class Quill {
+    static import(name) { return name === 'delta' ? Delta : name === 'modules/history' ? History : { Attributor: class {}, Scope: {} }; }
+    static register(name, value) { if (typeof name === 'string') registered[name] = value; }
+    constructor() {
+      this.delta = new Delta(note('Manual draft', 17).ops);
+      this.root = { setAttribute() {}, addEventListener() {} };
+      this.clipboard = { addMatcher() {} };
+      this.listeners = {};
+      this.history = new registered['modules/history'](this);
+      this.selection = { index: 3, length: 2 };
+    }
+    on(name, handler) { this.listeners[name] = handler; }
+    update() {}
+    getContents() { return this.delta; }
+    getLength() { return this.delta.length(); }
+    getSelection() { return this.selection; }
+    setSelection(index, length) { this.selection = { index, length }; }
+    updateContents(change, source) {
+      const old = this.delta;
+      if (!this.history.restoring) this.history.stack.undo.push(change.invert(old));
+      this.delta = old.compose(change);
+      this.listeners['text-change'](change, old, source);
+    }
+  }
+  const window = { NotebookModel: model, Quill };
+  const selection = { value: '', selectedIndex: 0 };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../public/notebook-editor.js'), 'utf8'), {
+    window, document: { createElement: () => ({ querySelector: () => selection }) }, crypto: require('node:crypto'), Node: { ELEMENT_NODE: 1 }, queueMicrotask,
+  });
+  let changes = 0;
+  const editor = new window.NotebookEditor.Editor({ replaceChildren() {} }, { getTime: () => 900, onChange: () => changes++ });
+  const before = JSON.stringify(editor.snapshot());
+  editor.appendValidatedBlocks(model.generatedBlocks(proposal()));
+  assert.equal(changes, 1);
+  assert.equal(editor.changing, false);
+  assert.deepEqual(model.lines(editor.snapshot()).map(block => block.attributes.anchorSeconds), [17, undefined, 0, 45]);
+  assert.deepEqual(editor.quill.selection, { index: 3, length: 2 });
+  assert.equal(editor.quill.history.cutoffs, 2);
+  assert.equal(editor.quill.history.stack.undo.length, 1);
+  const appended = JSON.stringify(editor.snapshot());
+  editor.quill.history.undo();
+  assert.equal(JSON.stringify(editor.snapshot()), before);
+  editor.quill.history.redo();
+  assert.equal(JSON.stringify(editor.snapshot()), appended);
+  editor.composing = true;
+  assert.throws(() => editor.appendValidatedBlocks(model.generatedBlocks(proposal())), /composition/);
+  editor.composing = false;
+  editor.quill.updateContents = () => { throw new Error('Controlled editor error'); };
+  assert.throws(() => editor.appendValidatedBlocks(model.generatedBlocks({ ...proposal(), id: 'p_22222222-2222-4222-8222-222222222222' })), /Controlled/);
+  assert.equal(editor.changing, false);
+});
+
 test('player note jumps bypass resume heuristics and queue stable video identities', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   const implementation = source.slice(source.indexOf('function playVideo('), source.indexOf('function nextIndex('));
@@ -119,7 +210,7 @@ test('player note jumps bypass resume heuristics and queue stable video identiti
     },
     safe: callback => callback(), saveCourses() {}, hideOverlays() {}, updateNowPlaying() {}, loadVideoExtras() {}, syncCourseUI() {},
     resetPlayerControls() { controlsResets++; },
-    notebooks: { showVideo() {} }, speedSel: {}, rowEls: [], posterTitle: {}, posterOverlay: { classList: { remove() {} } },
+    notebooks: { showVideo() {} }, videoChat: null, speedSel: {}, rowEls: [], posterTitle: {}, posterOverlay: { classList: { remove() {} } },
   });
   vm.runInContext('let pendingLoad = null;\n' + implementation + '\nplayVideo(0, {startSeconds: 0});', context);
   assert.equal(requests[0].startSeconds, 0);
@@ -325,6 +416,79 @@ test('conflicting autosaves keep the draft and require explicit resolution', asy
   assert.equal(storage.size, 1);
 });
 
+test('confirmed append preserves the latest draft and mode, and retries a lost save without duplicate blocks', async () => {
+  const { controller, storage } = controllerFixture();
+  const draft = proposal();
+  controller.options.getCourses = () => ({ course1: { videos: [{ id: draft.videoId }] } });
+  const state = controller.stateFor('course1', draft.videoId, { document: note('Latest manual draft', 90), revision: 1 });
+  controller.active = state;
+  let appends = 0;
+  let puts = 0;
+  let renders = 0;
+  controller.setMode = mode => { assert.equal(mode, 'read'); renders++; };
+  controller.editor.quill = { update() {} };
+  controller.editor.appendValidatedBlocks = blocks => {
+    appends++;
+    controller.change(model.validate({ version: 1, ops: [...state.document.ops, ...model.fromLines(blocks).ops] }));
+  };
+  controller.request = async (url, options) => {
+    if (url.endsWith('/validate')) return { proposal: draft, noteRevision: 1 };
+    puts++;
+    if (puts === 1) throw new Error('Offline after submission');
+    throw Object.assign(new Error('Lost receipt'), { status: 409, body: { record: { document: JSON.parse(options.body).document, revision: 2 } } });
+  };
+  const binding = { ownerId: 1, sourceGeneration: 'source', isCurrent: () => true };
+  assert.equal((await controller.appendGeneratedNote(draft, binding)).saved, false);
+  assert.equal(state.dirty, true);
+  assert.equal(storage.size, 1);
+  const [first, second] = await Promise.all([controller.appendGeneratedNote(draft, binding), controller.appendGeneratedNote(draft, binding)]);
+  assert.equal(first.saved, true);
+  assert.equal(second.saved, true);
+  assert.equal(appends, 1);
+  assert.equal(renders, 1);
+  assert.equal(state.dirty, false);
+  assert.equal(state.document.ops[0].insert, 'Latest manual draft');
+  assert.equal(storage.size, 0);
+  assert.equal(model.generatedStatus(state.document, draft), 'present');
+  assert.equal((await controller.appendGeneratedNote(draft, binding)).saved, true);
+  assert.equal(appends, 1);
+});
+
+test('an account mismatch is never accepted as an identical-document notebook conflict receipt', async () => {
+  const { controller } = controllerFixture();
+  const state = controller.stateFor('course1', 'aqz-KE-bpKQ', { document: null, revision: 1 });
+  state.dirty = true;
+  controller.request = async () => { throw Object.assign(new Error('Account changed'), { status: 409, body: { code: 'SESSION_CHANGED' } }); };
+  assert.equal(await controller.save(state), false);
+  assert.equal(state.dirty, true);
+  assert.equal(state.revision, 1);
+  assert.equal(state.conflict, null);
+});
+
+test('append blocks IME, conflict, quota, late source changes and manual edits made during preflight', async () => {
+  for (const scenario of ['ime', 'conflict', 'quota', 'source', 'typing']) {
+    const { controller } = controllerFixture();
+    const draft = proposal();
+    controller.options.getCourses = () => ({ course1: { videos: [{ id: draft.videoId }] } });
+    const state = controller.stateFor('course1', draft.videoId, { document: note('Keep manual'), revision: 1 });
+    controller.active = state;
+    controller.editor.quill = { update() {} };
+    controller.editor.appendValidatedBlocks = () => assert.fail('No insertion is permitted');
+    controller.editor.composing = scenario === 'ime';
+    if (scenario === 'conflict') state.conflict = {};
+    let current = true;
+    controller.request = async () => {
+      if (scenario === 'quota') throw Object.assign(new Error('Notebook storage is full'), { status: 413 });
+      if (scenario === 'source') current = false;
+      if (scenario === 'typing') { state.sequence++; state.document = note('Newer manual'); }
+      return { proposal: draft, noteRevision: 1 };
+    };
+    await assert.rejects(controller.appendGeneratedNote(draft, { ownerId: 1, sourceGeneration: 'source', isCurrent: () => current }));
+    assert.equal(state.document.ops[0].insert, scenario === 'typing' ? 'Newer manual' : 'Keep manual');
+    assert.equal(controller.mode, 'read');
+  }
+});
+
 test('draft recovery compares server revisions and keeps zero-second anchors', () => {
   const { controller, storage } = controllerFixture();
   storage.set('ft_note_draft:1:course1:aqz-KE-bpKQ:test-tab', JSON.stringify({ document: note('Recovered', 0), revision: 1 }));
@@ -371,7 +535,7 @@ test('full backups round-trip notebooks and reject stale restores without overwr
   const user = profile(store);
   store.saveNote(user.id, 'course1', 'aqz-KE-bpKQ', note('Original', 760), 0);
   const exported = store.getExportData(user.id);
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(exported.schemaVersion, 3);
   const imported = { ...exported, dailyActivity: [], watchHistory: [] };
   store.saveNote(user.id, 'course1', 'aqz-KE-bpKQ', note('Newer', 800), 1);
   assert.equal(store.importUserData(user.id, imported, 1, 1), null);
@@ -426,7 +590,7 @@ test('notebook HTTP endpoints enforce authentication, validation, ownership, and
   assert.equal((await request(endpoint, { method: 'PUT', body: { document: note('Invalid', -10), revision: 1 } })).status, 400);
   assert.equal((await request(endpoint, { method: 'PUT', body: { document: note('x'.repeat(310 * 1024)), revision: 1 } })).status, 413);
   const exported = await (await request('/api/export')).json();
-  assert.equal(exported.schemaVersion, 2);
+  assert.equal(exported.schemaVersion, 3);
   assert.equal((await request('/api/import?revision=1&notesRevision=0', { method: 'POST', body: exported })).status, 409);
   assert.equal((await request('/api/import?revision=1&notesRevision=1', { method: 'POST', body: exported })).status, 200);
   assert.equal((await request('/api/notebooks/course1?notesRevision=1', { method: 'DELETE' })).status, 409);

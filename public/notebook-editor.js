@@ -189,6 +189,28 @@
       return model.fromLines(model.lines(this.quill.getContents()));
     }
 
+    appendValidatedBlocks(blocks) {
+      if (this.composing || this.changing) throw new Error('Finish the current text composition before adding notes.');
+      this.quill.update();
+      const addition = model.validate(model.fromLines(blocks));
+      if (!addition) throw new Error('The note preview is empty.');
+      model.validate({ version: 1, ops: [...this.snapshot().ops, ...addition.ops] });
+      const selection = this.quill.getSelection();
+      const change = new Delta().retain(this.quill.getLength()).concat(editorDelta(addition));
+      this.quill.history.cutoff();
+      this.changing = true;
+      try {
+        this.quill.updateContents(change, 'api');
+        if (selection) this.quill.setSelection(selection.index, selection.length, 'silent');
+      } finally {
+        this.changing = false;
+        this.quill.history.cutoff();
+      }
+      const document = this.snapshot();
+      this.onChange(document);
+      return document;
+    }
+
     load(value) {
       this.changing = true;
       try {

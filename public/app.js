@@ -101,6 +101,7 @@ let remoteSaveTimer = null;
 let remoteSaveInFlight = null;
 let remoteSaveQueued = false;
 let profileRevision = 0;
+let libraryRefreshRequest = null;
 let pendingLegacyImport = false;
 let sessionGeneration = 0;
 let appBooted = false;
@@ -116,6 +117,7 @@ const pendingCourseImports = new Set();
 let workspace = defaultWorkspace(); // board columns, tasks, checklists, sprints
 let homeMode = 'grid';
 let notebooks = null;
+let videoChat = null;
 const workspaceNarrowScreen = window.matchMedia('(max-width: 900px)');
 let workspaceCollapsePreference = DB.load('ft_workspace_collapsed', null);
 let courseLayouts = {};
@@ -143,14 +145,14 @@ function mergeRemoteState(remote) {
     }
     const videos = new Map((server.videos || []).map((video) => [video.id, video]));
     for (const video of local.videos || []) videos.set(video.id, video);
-    mergedCourses[id] = {
+    mergedCourses[id] = Object.assign(local, {
       ...server,
       ...local,
       videos: [...videos.values()],
       completed: { ...(server.completed || {}), ...(local.completed || {}) },
       positions: { ...(server.positions || {}), ...(local.positions || {}) },
       completedAt: local.completedAt || server.completedAt || null,
-    };
+    });
   }
   const remoteStats = remote.stats || { seconds: {} };
   const mergedSeconds = { ...(remoteStats.seconds || {}) };
@@ -167,6 +169,52 @@ function mergeRemoteState(remote) {
   mergeWorkspaceState(remote.workspace);
 }
 
+function isLibraryHome() {
+  return !!authUser && !authUser.isGuest && appBooted && !document.hidden && !current &&
+    !homeView.classList.contains('hidden') && (!location.hash || location.hash === '#');
+}
+
+function refreshLibraryFromServer({ entering = false } = {}) {
+  if (!isLibraryHome()) {
+    libraryRefreshRequest = null;
+    return Promise.resolve(false);
+  }
+  const userId = authUser.id;
+  const generation = sessionGeneration;
+  const previous = libraryRefreshRequest;
+  if (!entering && previous?.userId === userId && previous.generation === generation && previous.revision === profileRevision) {
+    if (previous.promise) return previous.promise;
+    if (Date.now() - previous.at < 1000) return Promise.resolve(false);
+  }
+  const request = { userId, generation, revision: profileRevision, at: Date.now(), promise: null };
+  libraryRefreshRequest = request;
+  request.promise = (async () => {
+    try {
+      const remote = await api('/api/data', { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+      if (libraryRefreshRequest !== request || authUser?.id !== userId || generation !== sessionGeneration ||
+          !isLibraryHome() || profileRevision !== request.revision ||
+          !Number.isSafeInteger(remote?.revision) || remote.revision < profileRevision) return false;
+      if (remote.revision > profileRevision) {
+        mergeRemoteState(remote);
+        profileRevision = remote.revision;
+        renderHome();
+        renderStreakChip();
+      }
+      request.revision = profileRevision;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      request.promise = null;
+    }
+  })();
+  return request.promise;
+}
+
+window.addEventListener('focus', refreshLibraryFromServer);
+window.addEventListener('blur', () => { libraryRefreshRequest = null; });
+document.addEventListener('visibilitychange', refreshLibraryFromServer);
+
 async function persistRemoteData({ importLegacy = false } = {}) {
   if (!authUser || authUser.isGuest) return true;
   pendingLegacyImport ||= importLegacy;
@@ -176,7 +224,9 @@ async function persistRemoteData({ importLegacy = false } = {}) {
     return remoteSaveInFlight;
   }
   const generation = sessionGeneration;
-  remoteSaveInFlight = (async () => {
+  const userId = authUser.id;
+  const sameSession = () => generation === sessionGeneration && authUser?.id === userId;
+  const save = (async () => {
     let conflictRetries = 0;
     do {
       remoteSaveQueued = false;
@@ -194,33 +244,39 @@ async function persistRemoteData({ importLegacy = false } = {}) {
             importLegacy: useLegacyImport,
           }),
         });
-        if (generation !== sessionGeneration) return;
-        profileRevision = result.revision;
+        if (!sameSession()) return false;
+        profileRevision = Math.max(profileRevision, result.revision);
         if (useLegacyImport) pendingLegacyImport = false;
       } catch (err) {
-        if (err.status === 409 && conflictRetries++ < 2) {
+        if (!sameSession()) return false;
+        if (err.status === 409 && err.data?.code !== 'SESSION_CHANGED' && conflictRetries++ < 2) {
           try {
+            const revision = profileRevision;
             const remote = await api('/api/data');
-            if (generation !== sessionGeneration) return false;
-            mergeRemoteState(remote);
-            profileRevision = remote.revision;
+            if (!sameSession()) return false;
+            if (profileRevision === revision && remote.revision >= profileRevision) {
+              mergeRemoteState(remote);
+              profileRevision = remote.revision;
+            }
             remoteSaveQueued = true;
             continue;
           } catch (reloadError) {
             err = reloadError;
           }
         }
-        if (err.status === 401) showAuth();
+        if (!sameSession()) return false;
+        if (err.status === 401 || err.data?.code === 'SESSION_CHANGED') showAuth();
         else toast(err.message, { error: true });
         remoteSaveQueued = false;
         return false;
       }
-    } while (remoteSaveQueued && generation === sessionGeneration);
-    return generation === sessionGeneration;
+    } while (remoteSaveQueued && sameSession());
+    return sameSession();
   })().finally(() => {
-    remoteSaveInFlight = null;
+    if (remoteSaveInFlight === save) remoteSaveInFlight = null;
   });
-  return remoteSaveInFlight;
+  remoteSaveInFlight = save;
+  return save;
 }
 
 const pendingActivity = new Map();
@@ -442,10 +498,20 @@ const taskPanel = $('#taskPanel');
 
 async function api(url, options = {}) {
   const { invitation, ...request } = options;
+  const userId = authUser?.id;
+  const generation = sessionGeneration;
+  if ((url === '/api/data' || url.startsWith('/api/data?')) && userId != null) {
+    request.headers = new Headers(request.headers);
+    request.headers.set('X-Profile-Account', String(userId));
+  }
   const res = invitation ? await window.FocusTubeInvite.submit(url, request) : await fetch(url, request);
   const data = res.status === 204 ? null : await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (res.status === 401 && authUser && data?.code !== 'INVALID_CREDENTIALS') queueMicrotask(showAuth);
+    if (userId != null && ((res.status === 401 && data?.code !== 'INVALID_CREDENTIALS') || data?.code === 'SESSION_CHANGED')) {
+      queueMicrotask(() => {
+        if (authUser?.id === userId && generation === sessionGeneration) showAuth();
+      });
+    }
     const err = new Error(data?.error || 'Request failed.');
     err.status = res.status;
     err.data = data;
@@ -514,6 +580,119 @@ const captchaWidgets = { auth: null, enrollment: null };
 const emailChallenges = { auth: null, enrollment: null };
 const emailChallengeVersions = { auth: 0, enrollment: 0 };
 const emailResendTimers = { auth: null, enrollment: null };
+let authHandleVersion = 0;
+let authHandleRequest = null;
+let authHandleResult = null;
+let authHandleRetryUntil = 0;
+
+function setAuthHandleFeedback(state, message) {
+  const input = $('#authHandle');
+  const status = $('#authHandleStatus');
+  status.textContent = message;
+  status.dataset.state = state;
+  const invalid = state === 'invalid' || state === 'taken';
+  input.setCustomValidity(invalid ? message : '');
+  input.setAttribute('aria-invalid', String(invalid));
+  input.setAttribute('aria-busy', String(state === 'checking'));
+}
+
+function resetAuthHandleCheck() {
+  authHandleVersion++;
+  authHandleRequest?.controller.abort();
+  authHandleRequest = null;
+  authHandleResult = null;
+  setAuthHandleFeedback('idle', '3-32 letters, numbers, dots, dashes, or underscores.');
+}
+
+function checkAuthHandle() {
+  const input = $('#authHandle');
+  const username = input.value.trim().toLowerCase();
+  if (authMode === 'login' || !window.FocusTubeInvite.has()) { resetAuthHandleCheck(); return Promise.resolve(false); }
+  const valid = /^[a-zA-Z0-9_.-]{3,32}$/.test(input.value);
+  if (valid && authHandleRequest?.username === username) return authHandleRequest.promise;
+  if (valid && authHandleResult?.username === username) return Promise.resolve(authHandleResult.available);
+  authHandleRequest?.controller.abort();
+  authHandleRequest = null;
+  authHandleResult = null;
+  const version = ++authHandleVersion;
+  if (!valid) {
+    setAuthHandleFeedback('invalid', username ? 'Use 3-32 letters, numbers, dots, dashes, or underscores.' : 'Username is required.');
+    return Promise.resolve(false);
+  }
+  if (Date.now() < authHandleRetryUntil) {
+    setAuthHandleFeedback('error', `Username checks are limited. Try again in ${Math.ceil((authHandleRetryUntil - Date.now()) / 1000)} seconds.`);
+    return Promise.resolve(false);
+  }
+  setAuthHandleFeedback('checking', 'Checking username availability...');
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = setTimeout(() => { timedOut = true; controller.abort(); }, 6000);
+  const promise = api('/api/auth/username/check', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username }), invitation: true, signal: controller.signal }).then(result => {
+    if (version !== authHandleVersion || authMode === 'login' || input.value.trim().toLowerCase() !== username) return false;
+    if (result.username !== username || typeof result.available !== 'boolean') throw new Error('Could not check username availability. Try again.');
+    authHandleResult = { username, available: result.available };
+    setAuthHandleFeedback(result.available ? 'available' : 'taken', result.available ? 'Username is available.' : 'This username is already taken. Pick another.');
+    return result.available;
+  }).catch(error => {
+    if (version !== authHandleVersion || (controller.signal.aborted && !timedOut)) return false;
+    if (error.retryAfter) authHandleRetryUntil = Date.now() + Math.min(error.retryAfter, 3600) * 1000;
+    setAuthHandleFeedback('error', error.retryAfter ? 'Too many username checks. Please try again shortly.' : 'Could not check username availability. Try again.');
+    return false;
+  }).finally(() => {
+    clearTimeout(timeout);
+    if (version === authHandleVersion) authHandleRequest = null;
+  });
+  authHandleRequest = { username, controller, promise };
+  return promise;
+}
+
+function setPasswordVisibility(button, visible) {
+  const input = $('#' + button.dataset.passwordFor);
+  input.type = visible ? 'text' : 'password';
+  const label = `${visible ? 'Hide' : 'Show'} ${button.dataset.passwordLabel}`;
+  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-pressed', String(visible));
+  button.title = label;
+  button.innerHTML = icon(visible ? 'EyeOff' : 'Eye');
+}
+
+function resetAuthPasswordVisibility() {
+  document.querySelectorAll('[data-password-for]').forEach(button => setPasswordVisibility(button, false));
+}
+
+function passwordFeedback(password, confirmation, personal = []) {
+  const length = password.length;
+  const validLength = length >= 8 && length <= 128;
+  const estimate = length && typeof window.zxcvbn === 'function' ? window.zxcvbn(password, personal) : null;
+  return {
+    validLength,
+    length: length < 8 ? `Length: ${length}/8 minimum characters.` : length > 128 ? `Length: ${length}/128 maximum characters.` : `Length: ${length} characters. Minimum met.`,
+    score: estimate?.score || 0,
+    strength: !length ? 'Strength: not entered' : estimate ? `Strength estimate: ${['Very weak', 'Weak', 'Fair', 'Good', 'Strong'][estimate.score]}` : 'Strength estimate unavailable',
+    advice: estimate?.feedback.warning || estimate?.feedback.suggestions[0] || 'Use a unique password or a long passphrase.',
+    match: !confirmation ? '' : confirmation === password ? 'Passwords match.' : 'Passwords do not match.',
+    mismatch: !!confirmation && confirmation !== password,
+  };
+}
+
+function syncAuthPasswordFeedback() {
+  const joining = authMode !== 'login';
+  $('#authPasswordFeedback').classList.toggle('hidden', !joining);
+  const confirmation = $('#authPasswordConfirmation');
+  if (!joining) { confirmation.setCustomValidity(''); return; }
+  const feedback = passwordFeedback($('#authPassword').value, confirmation.value,
+    [$('#authHandle').value, $('#authDisplayName').value, $('#authUsername').value].filter(Boolean));
+  $('#authPasswordLength').textContent = feedback.length;
+  $('#authPasswordLength').dataset.state = feedback.validLength ? 'valid' : 'invalid';
+  $('#authPasswordMeter').value = feedback.score;
+  $('#authPasswordStrength').textContent = feedback.strength;
+  $('#authPasswordAdvice').textContent = feedback.advice;
+  $('#authPasswordMatch').textContent = feedback.match;
+  $('#authPasswordMatch').dataset.state = !confirmation.value ? 'idle' : feedback.mismatch ? 'invalid' : 'available';
+  confirmation.setCustomValidity(feedback.mismatch ? feedback.match : '');
+  confirmation.setAttribute('aria-invalid', String(feedback.mismatch));
+}
 
 function loadCaptcha() {
   if (window.turnstile) return Promise.resolve();
@@ -670,6 +849,7 @@ function clearEmailCode(kind) {
 async function requestEmailCode(kind) {
   const input = $(kind === 'auth' ? '#authUsername' : '#enrollmentEmail');
   if (!input.reportValidity()) return;
+  if (kind === 'auth' && !await checkAuthHandle()) { $('#authHandle').focus(); return; }
   const email = input.value.trim().toLowerCase();
   const version = ++emailChallengeVersions[kind];
   const result = await api('/api/auth/verification/request', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -692,6 +872,7 @@ function emailCodeBody(kind) {
 
 function setAuthBusy(busy) {
   authBusy = busy;
+  for (const id of ['authUsername', 'authDisplayName', 'authHandle', 'authPassword', 'authPasswordConfirmation']) $('#' + id).readOnly = busy;
   $('#authSubmit').disabled = busy || Date.now() < authRetryUntil || (authMode !== 'login' && authConfiguration?.emailVerification?.configured === false);
   $('#loginTab').disabled = busy;
   $('#registerTab').disabled = busy;
@@ -700,6 +881,8 @@ function setAuthBusy(busy) {
 }
 
 function setAuthMode(mode) {
+  resetAuthHandleCheck();
+  resetAuthPasswordVisibility();
   authMode = mode;
   const joining = mode !== 'login';
   const hasInvite = window.FocusTubeInvite.has();
@@ -715,6 +898,7 @@ function setAuthMode(mode) {
   $('#authDisplayName').required = joining;
   $('#authDisplayName').disabled = !joining;
   $('#authHandleField').classList.toggle('hidden', !joining);
+  $('#authHandle').required = joining;
   $('#authHandle').disabled = !joining;
   $('#authConfirmField').classList.toggle('hidden', !joining);
   $('#authPasswordConfirmation').required = joining;
@@ -731,9 +915,11 @@ function setAuthMode(mode) {
   $('#authHeading').textContent = authUser?.isGuest ? 'Your guest profile.' : joining ? 'Join FocusTube.' : 'Your learning workspace.';
   $('#authWelcome').textContent = authUser?.isGuest ? 'Export available. An invitation is required to continue learning.' : joining ? 'Invitation-only registration.' : 'Welcome back.';
   $('#authError').classList.add('hidden');
+  syncAuthPasswordFeedback();
 }
 
 function clearIssuedInvite() {
+  window.invitationSettings?.close();
   $('#issuedInviteLink').value = '';
   $('#inviteExpiry').textContent = '';
   $('#inviteResult').classList.add('hidden');
@@ -743,6 +929,11 @@ function clearIssuedInvite() {
 function showAccountError(error, target, button) {
   target.textContent = error.message;
   target.classList.remove('hidden');
+  if (error.data?.code === 'USERNAME_TAKEN' && target.id === 'authError') {
+    authHandleResult = { username: $('#authHandle').value.trim().toLowerCase(), available: false };
+    setAuthHandleFeedback('taken', 'This username is already taken. Pick another.');
+    $('#authHandle').focus();
+  }
   if (error.data?.code === 'INVALID_VERIFICATION') {
     const input = $(target.id === 'authError' ? '#authCode' : '#enrollmentCode');
     input.setAttribute('aria-invalid', 'true');
@@ -781,6 +972,7 @@ function resetSessionState() {
   clearMonitoring();
   sessionGeneration++;
   notebooks?.reset();
+  videoChat?.reset();
   resetPlayerControls();
   pendingLoad = null;
   resetDiscovery();
@@ -810,6 +1002,9 @@ function resetSessionState() {
   $('#authPasswordConfirmation').value = '';
   $('#authPasswordConfirmation').setCustomValidity('');
   $('#authHandle').value = '';
+  resetAuthHandleCheck();
+  resetAuthPasswordVisibility();
+  syncAuthPasswordFeedback();
   $('#enrollmentEmail').value = '';
   $('#enrollmentError').classList.add('hidden');
   $('#inviteError').classList.add('hidden');
@@ -847,6 +1042,7 @@ function showAuth({ preserveInvite = false } = {}) {
 }
 
 function updateProfileUI() {
+  window.invitationSettings?.syncAccount();
   if (!authUser) return;
   const name = authUser.displayName || authUser.username || 'Guest';
   const initial = name.charAt(0).toUpperCase();
@@ -931,7 +1127,9 @@ async function finishAuth(user, transition = ++authTransition) {
   updateProfileUI();
   try {
     if (!(await loadProfileData(transition, user.id))) return false;
+    if (window.FocusTubeExtensionConnect?.resumeAfterSignIn()) return true;
     appBooted = true;
+    videoChat?.configure();
     updatePresence();
     renderStreakChip();
     route();
@@ -2832,6 +3030,7 @@ function playVideo(i, { cue = false, startSeconds } = {}) {
 
   updateNowPlaying();
   notebooks?.showVideo(c.id, v.id);
+  videoChat?.showVideo(c.id, v.id, v.title);
   loadVideoExtras(v.id);
   syncCourseUI();
   rowEls[i]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
@@ -3339,9 +3538,11 @@ function showHome() {
   document.title = 'FocusTube — distraction-free courses';
   renderHome();
   renderStreakChip();
+  refreshLibraryFromServer({ entering: true });
 }
 
 function setCourseViewVisible(visible) {
+  if (!visible) videoChat?.leave();
   courseView.classList.toggle('hidden', !visible);
   syncWorkspaceSidebar();
 }
@@ -3431,6 +3632,7 @@ function jumpToNote(courseId, videoId, seconds) {
 }
 
 function showNotebooks(courseId, videoId) {
+  videoChat?.leave();
   notebooks.leave();
   current = null;
   pendingLoad = null;
@@ -4226,6 +4428,7 @@ function selectSettingsSection(section, focus = false) {
     if (selected && focus) tab.focus();
   }
   syncCaptcha('enrollment', section === 'account' && !$('#emailEnrollment').classList.contains('hidden') ? 'email' : null);
+  window.invitationSettings?.activate(section === 'admin');
 }
 
 async function openProfile() {
@@ -4236,6 +4439,7 @@ async function openProfile() {
   updateProfileUI();
   fillAccountForm();
   showModal('profileModal');
+  window.invitationSettings?.open();
   selectSettingsSection(settingsSection);
   const generation = sessionGeneration;
   const version = ++accountLoadVersion;
@@ -4258,6 +4462,7 @@ function setupAccountSettings() {
   dialog.confirmClose = () => {
     if (!confirmAccountDiscard()) return false;
     clearPasswordFields();
+    window.invitationSettings?.close();
     return true;
   };
   dialog.addEventListener('cancel', event => { event.preventDefault(); hideModal('profileModal'); });
@@ -4651,8 +4856,8 @@ async function importProfileData(file) {
     } catch {
       throw new Error('That file is not valid JSON.');
     }
-    if (imported?.schema !== 'focustube-user-export' || ![1, 2].includes(imported?.schemaVersion)) {
-      throw new Error('Choose a FocusTube user export (schema version 1 or 2).');
+    if (imported?.schema !== 'focustube-user-export' || ![1, 2, 3].includes(imported?.schemaVersion)) {
+      throw new Error('Choose a FocusTube user export (schema version 1, 2 or 3).');
     }
     const courseCount =
       imported.courses && typeof imported.courses === 'object' && !Array.isArray(imported.courses)
@@ -4664,7 +4869,8 @@ async function importProfileData(file) {
     if (
       !confirm(
         `Import ${courseCount} course(s), ${historyCount} watch-history record(s), and ${imported.notebooks?.length || 0} video note(s) from "${file.name}"?\n\n` +
-          'This replaces all progress and notebooks in your current profile. Your username and password will not change.' +
+          'This replaces all progress, notebooks and video chats in your current profile. Your username and password will not change.' +
+          (imported.schemaVersion < 3 ? '\nThis older export has no video chats; your current chats and transcripts will be cleared.' : '') +
           (imported.schemaVersion === 1 ? '\nThis older export has no notebooks; your current notes will be cleared.' : '')
       )
     ) {
@@ -4681,7 +4887,8 @@ async function importProfileData(file) {
       throw new Error('Could not sync the latest progress. Check your connection and try again.');
     }
     await notebooks.request('/api/notebooks');
-    const result = await api(`/api/import?revision=${profileRevision}&notesRevision=${notebooks.notesRevision}`, {
+    const chatRevision = (await api('/api/data')).chatRevision || 0;
+    const result = await api(`/api/import?revision=${profileRevision}&notesRevision=${notebooks.notesRevision}&chatRevision=${chatRevision}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(imported),
@@ -4702,12 +4909,22 @@ async function importProfileData(file) {
 /* ================= event wiring ================= */
 $('#loginTab').addEventListener('click', () => { window.FocusTubeInvite.clear(); clearEmailCode('auth'); setAuthMode('login'); });
 $('#registerTab').addEventListener('click', () => setAuthMode('register'));
-$('#authUsername').addEventListener('input', () => clearEmailCode('auth'));
+$('#authUsername').addEventListener('input', () => { clearEmailCode('auth'); syncAuthPasswordFeedback(); });
 $('#enrollmentEmail').addEventListener('input', () => clearEmailCode('enrollment'));
-for (const selector of ['#authPassword', '#authPasswordConfirmation']) $(selector).addEventListener('input', () => {
-  const confirmation = $('#authPasswordConfirmation');
-  confirmation.setCustomValidity(confirmation.value && confirmation.value !== $('#authPassword').value ? 'Passwords do not match.' : '');
-});
+for (const selector of ['#authPassword', '#authPasswordConfirmation', '#authDisplayName']) {
+  $(selector).addEventListener('input', syncAuthPasswordFeedback);
+  $(selector).addEventListener('change', syncAuthPasswordFeedback);
+}
+for (const event of ['input', 'change']) $('#authHandle').addEventListener(event, () => { checkAuthHandle(); syncAuthPasswordFeedback(); });
+document.querySelectorAll('[data-password-for]').forEach(button => button.addEventListener('click', event => {
+  const input = $('#' + button.dataset.passwordFor);
+  const { selectionStart, selectionEnd } = input;
+  setPasswordVisibility(button, input.type === 'password');
+  if (event.detail > 0) input.focus({ preventScroll: true });
+  if (selectionStart !== null) input.setSelectionRange(selectionStart, selectionEnd);
+}));
+window.addEventListener('pagehide', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); });
+$('#authForm').addEventListener('reset', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); queueMicrotask(syncAuthPasswordFeedback); });
 document.querySelectorAll('.auth-provider').forEach(button => button.addEventListener('click', event => event.preventDefault()));
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -4715,9 +4932,12 @@ $('#authForm').addEventListener('submit', async (e) => {
   const transition = ++authTransition;
   const error = $('#authError');
   setAuthBusy(true);
+  resetAuthPasswordVisibility();
   error.classList.add('hidden');
   try {
     const joining = authMode !== 'login';
+    if (joining && !await checkAuthHandle()) { $('#authHandle').focus(); return; }
+    if (transition !== authTransition) return;
     const identity = joining ? 'email' : 'identifier';
     const body = { [identity]: $('#authUsername').value.trim(), password: $('#authPassword').value };
     if (joining) {
@@ -4760,6 +4980,7 @@ $('#authForm').addEventListener('submit', async (e) => {
     $('#authPassword').value = '';
     $('#authPasswordConfirmation').value = '';
     $('#authPasswordConfirmation').setCustomValidity('');
+    syncAuthPasswordFeedback();
     showAccountError(err, error, $('#authSubmit'));
   } finally {
     if (transition === authTransition) {
@@ -4819,39 +5040,19 @@ for (const kind of ['auth', 'enrollment']) $('#' + kind + 'Resend').addEventList
     button.disabled = Number(button.dataset.retryUntil || 0) > Date.now() || Date.now() < (emailChallenges[kind]?.resendAt || 0);
   }
 });
-$('#inviteForm').addEventListener('submit', async event => {
-  event.preventDefault();
-  const button = $('#createInvite');
-  const limit = $('#inviteMaxUses');
-  if (button.disabled || !event.currentTarget.reportValidity()) return;
-  const maxUses = limit.valueAsNumber;
-  const generation = sessionGeneration;
-  button.disabled = true;
-  limit.disabled = true;
-  clearIssuedInvite();
-  $('#inviteError').classList.add('hidden');
-  try {
-    const result = await api('/api/invites', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxUses }) });
-    if (generation !== sessionGeneration || !$('#profileModal').open) return;
-    $('#issuedInviteLink').value = result.inviteUrl;
-    $('#inviteExpiry').textContent = `Limit: ${result.maxUses} signup${result.maxUses === 1 ? '' : 's'}. Expires ${new Date(result.expiresAt).toLocaleString()}`;
-    $('#inviteResult').classList.remove('hidden');
-  } catch (err) {
-    if (generation === sessionGeneration) showAccountError(err, $('#inviteError'), button);
-  } finally {
-    button.disabled = Number(button.dataset.retryUntil || 0) > Date.now();
-    limit.disabled = false;
-  }
+window.invitationSettings = new window.InvitationSettings({
+  getAccount: () => ({ id: authUser?.id, isAdmin: !!authUser?.isAdmin, isGuest: !!authUser?.isGuest, generation: sessionGeneration }),
+  el, icon,
 });
-$('#copyInvite').addEventListener('click', async () => {
-  const value = $('#issuedInviteLink').value;
-  if (!value) return;
-  try { await navigator.clipboard.writeText(value); toast('Invitation copied.'); }
-  catch { $('#issuedInviteLink').focus(); $('#issuedInviteLink').select(); toast('Clipboard access is unavailable.', { error: true }); }
-});
-$('#profileModal').addEventListener('close', clearIssuedInvite);
+$('#profileModal').addEventListener('close', () => { if (!$('#profileModal').open) clearIssuedInvite(); });
 $('#profileModal').addEventListener('close', () => { clearEmailCode('enrollment'); syncCaptcha('enrollment', null); });
 window.addEventListener('pagehide', clearIssuedInvite);
+window.addEventListener('pageshow', event => {
+  if (event.persisted && $('#profileModal').open) {
+    window.invitationSettings.open();
+    window.invitationSettings.activate(settingsSection === 'admin');
+  }
+});
 window.addEventListener('pagehide', () => { clearEmailCode('auth'); clearEmailCode('enrollment'); });
 window.addEventListener('invitationchange', () => bootAuth());
 $('#inviteContinue').addEventListener('click', async () => {
@@ -4923,7 +5124,6 @@ retrySearchBtn.addEventListener('click', () => {
 
 $('#brand').addEventListener('click', () => (location.hash = ''));
 setupWorkspaceSidebar();
-$('#videoChatBtn').addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); });
 $('#workspaceBoardBtn').addEventListener('click', event => { event.preventDefault(); event.stopPropagation(); });
 $('#railLogoutBtn').addEventListener('click', () => $('#logoutBtn').click());
 $('#mobileLogoutBtn').addEventListener('click', () => $('#logoutBtn').click());
@@ -5212,7 +5412,7 @@ document.querySelectorAll('.modal-backdrop').forEach((m) => {
 
 /* keyboard shortcuts */
 document.addEventListener('keydown', (e) => {
-  if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable || e.target.closest('button, a, summary, .note-toolbar, .ql-toolbar, .ql-tooltip, .course-notes-toggle, .note-resize-handle, dialog')) return;
+  if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable || e.target.closest('button, a, summary, .note-toolbar, .ql-toolbar, .ql-tooltip, .course-notes-toggle, .note-resize-handle, .video-chat-panel, .study-tabs, dialog')) return;
   if (!current) return;
   const k = e.key;
   if (k === ' ' || k.toLowerCase() === 'k') {
@@ -5254,7 +5454,9 @@ setupGlassReflection();
 notebooks = new Notebooks({
   getUser: () => authUser,
   getCourses: () => courses,
+  onSessionChanged: () => queueMicrotask(showAuth),
   onPanelToggle: open => {
+    if (open) videoChat?.hide(false);
     saveCourseLayout({ notesOpen: open });
     if (!open) return;
     if (window.innerWidth <= 1200) setPlaylistCollapsed(true, { remember: false });
@@ -5267,6 +5469,24 @@ notebooks = new Notebooks({
   },
   onJump: jumpToNote,
   ensureCourseSaved: () => persistRemoteData(),
+  showError: message => toast(message, { error: true, ms: 5000 }),
+});
+videoChat = new VideoChat({
+  getUser: () => authUser,
+  getCourseTitle: courseId => courses[courseId]?.title || courseId,
+  appendGeneratedNote: (proposal, binding) => notebooks.appendGeneratedNote(proposal, binding),
+  onSessionChanged: () => queueMicrotask(showAuth),
+  notesOpen: () => $('#courseNotesHost').open,
+  setNotesOpen: open => notebooks.setPanelOpen(open),
+  onNotesOpen: () => notebooks.options.onPanelToggle(true),
+  getTime: (courseId, videoId) => notebooks.options.getTime(courseId, videoId),
+  ensureCourseSaved: () => persistRemoteData(),
+  onJump: jumpToNote,
+  formatTime: fmtDuration,
+  onOpen: () => {
+    if (window.innerWidth <= 1200) setPlaylistCollapsed(true, { remember: false });
+    if ($('#studyLayout').clientWidth <= 760) $('#videoChatPanel').scrollIntoView({ block: 'start' });
+  },
   showError: message => toast(message, { error: true, ms: 5000 }),
 });
 for (const event of ['pointerdown', 'keydown', 'scroll']) {

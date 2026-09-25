@@ -3,6 +3,22 @@
   "repository": "https://github.com/chakshusalgotra/focus-tube",
   "milestones": [
     {
+      "id": "auth-input-feedback",
+      "title": "Make passwords visible on demand and validate signup fields during input",
+      "recordedDate": "2026-09-19",
+      "commits": [],
+      "why": "Make mobile and tablet sign-in usable and show username and password feedback immediately, without waiting for blur or a completed signup attempt.",
+      "changes": [
+        "Add independent, labeled reveal/hide buttons with 44px targets for sign-in/signup passwords and signup confirmation; preserve values and mask them again on mode changes, submission, reset, and page exit.",
+        "Require a unique username for new registrations and guest conversions while preserving existing username-less accounts and learning data.",
+        "Check username format and availability as input changes through an invitation/member-protected, no-store endpoint with its own persistent rate budget. Cancel old lookups, ignore stale responses, and keep error or rate-limit states distinct from availability.",
+        "Recheck username uniqueness inside the existing registration transaction. Report a final conflict without consuming the invitation or verified email proof so another name can be chosen.",
+        "Update password length, advisory strength, and confirmation matching on every input, including the first character. Use pinned, self-hosted zxcvbn locally without password-check requests or new complexity rules.",
+        "Verify actual native Chromium typing and touch input, signup conflict/retry, masking, and both themes at 320-1440 CSS pixels with isolated fixtures. Physical iOS/Safari, real email delivery, live CAPTCHA, and hosted deployment are not implied. This milestone is not yet linked to a commit."
+      ],
+      "files": ["auth.js", "db.js", "server.js", "public/auth-entry.js", "public/app.js", "public/index.html", "public/styles.css", "public/policies.html", "package.json", "package-lock.json", "test/auth.test.js", "README.md", "docs/invite-only-auth-spec.md"]
+    },
+    {
       "id": "compact-workspace-controls",
       "title": "Compact the workspace and align navigation and playback controls",
       "recordedDate": "2026-09-18",

@@ -72,9 +72,11 @@
       <form id="authForm" class="auth-form">
         <label><span id="authIdentityLabel">Email or username</span><input id="authUsername" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" required /></label>
         <label id="authDisplayNameField" class="hidden">Display name<input id="authDisplayName" type="text" autocomplete="name" maxlength="80" /></label>
-        <label id="authHandleField" class="hidden">Username <span class="muted">(optional)</span><input id="authHandle" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" title="3-32 letters, numbers, dots, dashes, or underscores" /></label>
-        <label>Password<input id="authPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
-        <label id="authConfirmField" class="hidden">Confirm password<input id="authPasswordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" /></label>
+        <div id="authHandleField" class="hidden"><label for="authHandle">Username</label><input id="authHandle" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" title="3-32 letters, numbers, dots, dashes, or underscores" aria-describedby="authHandleStatus" /><p id="authHandleStatus" class="field-feedback" role="status" aria-live="polite" aria-atomic="true">3-32 letters, numbers, dots, dashes, or underscores.</p></div>
+        <div><label for="authPassword">Password</label><div class="password-control"><input id="authPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required aria-describedby="authPasswordFeedback authError" /><button type="button" class="icon-btn password-toggle" data-password-for="authPassword" data-password-label="password" aria-controls="authPassword" aria-label="Show password" aria-pressed="false" title="Show password"><span data-ui-icon="Eye" aria-hidden="true"></span></button></div>
+          <div id="authPasswordFeedback" class="password-feedback hidden" role="status" aria-live="polite" aria-atomic="true"><span id="authPasswordLength"></span><div class="password-strength"><meter id="authPasswordMeter" min="0" max="4" low="2" high="3" optimum="4" value="0" aria-label="Estimated password strength"></meter><span id="authPasswordStrength"></span></div><span id="authPasswordAdvice"></span></div>
+        </div>
+        <div id="authConfirmField" class="hidden"><label for="authPasswordConfirmation">Confirm password</label><div class="password-control"><input id="authPasswordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" aria-describedby="authPasswordMatch" /><button type="button" class="icon-btn password-toggle" data-password-for="authPasswordConfirmation" data-password-label="password confirmation" aria-controls="authPasswordConfirmation" aria-label="Show password confirmation" aria-pressed="false" title="Show password confirmation"><span data-ui-icon="Eye" aria-hidden="true"></span></button></div><p id="authPasswordMatch" class="field-feedback" role="status" aria-live="polite" aria-atomic="true"></p></div>
         <div id="authCodeBlock" class="verification-fields hidden">
           <p id="authCodeSent" class="muted" role="status"></p>
           <label for="authCode">6-digit email code</label>
@@ -258,7 +260,7 @@
         <div class="lesson-actions" role="group" aria-label="Lesson actions">
           <button id="npComplete" class="btn ghost" type="button"><span data-ui-icon="Check"></span>Mark complete</button>
           <button id="courseNotesToggle" class="icon-btn course-notes-toggle" type="button" title="Show notes" aria-label="Show notes" aria-controls="courseNotesHost" aria-expanded="false"><span data-ui-icon="NotebookPen" aria-hidden="true"></span></button>
-          <button id="videoChatBtn" class="icon-btn" type="button" aria-disabled="true" aria-label="Ask about video, coming soon" title="Ask about video, coming soon"><span data-ui-icon="Sparkles" aria-hidden="true"></span></button>
+          <button id="videoChatBtn" class="icon-btn" type="button" aria-disabled="true" aria-label="Video chat is not configured" title="Video chat is not configured" aria-controls="videoChatPanel" aria-expanded="false"><span data-ui-icon="Sparkles" aria-hidden="true"></span></button>
         </div>
       </div>
       <div id="videoExtras" class="video-extras">
@@ -273,7 +275,12 @@
       </div>
       </div>
       <div id="notesWidthHandle" class="note-resize-handle notes-width-handle" role="separator" tabindex="0" aria-label="Notes width" aria-orientation="vertical" aria-controls="courseNotesHost" aria-valuemin="300" aria-valuemax="900" aria-valuenow="380" title="Resize notes width. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripVertical" aria-hidden="true"></span></div>
-      <details id="courseNotesHost" class="course-notes" aria-label="Current video notes">
+      <div id="studyPane" class="study-pane">
+      <div id="studyTabs" class="study-tabs" role="tablist" aria-label="Study pane">
+        <button id="studyChatTab" type="button" role="tab" aria-controls="videoChatPanel" aria-selected="false" tabindex="-1"><span data-ui-icon="MessageSquare" aria-hidden="true"></span>Chat</button>
+        <button id="studyNotesTab" type="button" role="tab" aria-controls="courseNotesHost" aria-selected="true"><span data-ui-icon="NotebookPen" aria-hidden="true"></span>Notes</button>
+      </div>
+      <details id="courseNotesHost" class="course-notes" role="tabpanel" aria-labelledby="studyNotesTab">
         <summary class="hidden">Notes</summary>
         <div class="course-notes-heading"><strong><span data-ui-icon="NotebookPen" aria-hidden="true"></span>Notes</strong><a id="courseNotebookLink" class="notebook-open-link" href="#notebooks">Course notebook</a></div>
         <div id="courseNotesContent" class="course-notes-content">
@@ -297,8 +304,30 @@
           <p id="noteEmpty" class="empty-state note-reader hidden">No written notes yet.</p>
         </section>
         </div>
-        <div id="notesHeightHandle" class="note-resize-handle notes-height-handle" role="separator" tabindex="0" aria-label="Notes height" aria-orientation="horizontal" aria-controls="courseNotesContent" aria-valuemin="240" aria-valuemax="1600" aria-valuenow="600" title="Resize notes height. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripHorizontal" aria-hidden="true"></span></div>
       </details>
+      <section id="videoChatPanel" class="video-chat-panel hidden" role="tabpanel" aria-labelledby="studyChatTab">
+        <div class="chat-heading"><h3 id="chatVideoTitle">Video chat</h3><button id="chatClose" class="icon-btn" type="button" title="Close video chat" aria-label="Close video chat"><span data-ui-icon="X"></span></button></div>
+        <div class="chat-status-row"><span id="chatStatus" role="status" aria-live="polite"></span><span class="muted">Transcript only</span><button id="chatReload" class="icon-btn" type="button" title="Reload chat" aria-label="Reload chat"><span data-ui-icon="RefreshCw"></span></button><button id="chatClear" class="icon-btn" type="button" title="Clear chat" aria-label="Clear chat"><span data-ui-icon="Trash2"></span></button></div>
+        <p id="chatError" class="chat-error" role="alert"></p>
+        <p id="chatSourceInfo" class="chat-source-info muted">No transcript loaded</p>
+        <details id="chatSource" class="chat-source" open>
+          <summary>Transcript</summary>
+          <label class="chat-language">Language<input id="chatLanguage" value="und" maxlength="35" placeholder="en, hi, or und" aria-label="Caption language code" /></label>
+          <label class="chat-consent"><input id="chatRights" type="checkbox" />I have permission to use these captions.</label>
+          <div class="chat-source-actions"><button id="chatLoadCaptions" class="btn ghost slim" type="button">Load captions</button><label class="chat-file-label" for="chatUpload">Upload SRT/VTT</label><input id="chatUpload" type="file" accept=".srt,.vtt" aria-label="Upload SRT or VTT transcript" /><button id="chatRemoveTranscript" class="btn ghost slim" type="button">Remove transcript</button></div>
+        </details>
+        <div id="chatMessages" class="chat-messages" role="region" aria-label="Conversation" aria-live="off" tabindex="0"></div>
+        <button id="chatLatest" class="icon-btn chat-latest hidden" type="button" title="Latest message" aria-label="Latest message"><span data-ui-icon="ArrowDown" aria-hidden="true"></span></button>
+        <form id="chatForm" class="chat-form">
+          <div class="chat-context-controls"><label for="chatScope">Context<select id="chatScope"><option value="moment">Current moment</option><option value="video">Whole video</option><option value="discussion">Discussion</option></select></label><button id="chatSummarize" class="btn ghost slim" type="button" title="Summarize selected context"><span data-ui-icon="NotebookPen" aria-hidden="true"></span>Summarize</button></div>
+          <p id="chatContextTime" class="chat-context-label"></p>
+          <label for="chatQuestion">Question</label><textarea id="chatQuestion" rows="3" maxlength="2000" placeholder="Ask about this video" required></textarea>
+          <label class="chat-consent"><input id="chatConsent" type="checkbox" />Send this transcript and my questions to Google.</label>
+          <div class="chat-compose-actions"><button id="chatCancel" class="icon-btn hidden" type="button" title="Stop answer" aria-label="Stop answer"><span data-ui-icon="Square" aria-hidden="true"></span></button><button id="chatSend" class="icon-btn" type="submit" title="Send question" aria-label="Send question" disabled><span data-ui-icon="Send" aria-hidden="true"></span></button></div>
+        </form>
+      </section>
+      <div id="notesHeightHandle" class="note-resize-handle notes-height-handle" role="separator" tabindex="0" aria-label="Study pane height" aria-orientation="horizontal" aria-controls="courseNotesContent videoChatPanel" aria-valuemin="240" aria-valuemax="1600" aria-valuenow="600" title="Resize study pane height. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripHorizontal" aria-hidden="true"></span></div>
+      </div>
       </div>
     </section>
   </main>
@@ -550,7 +579,7 @@
       </section>
       <section id="settingsPolicies" class="hidden" role="tabpanel" aria-labelledby="settingsPoliciesTab" tabindex="0">
         <h3>Terms &amp; Privacy</h3>
-        <p class="muted">Effective 15 September 2026</p>
+        <p class="muted">Effective 25 September 2026</p>
         <a class="policy-status" href="/policies.html#terms" target="_blank" rel="noopener noreferrer" aria-label="Terms and conditions (opens in a new tab)"><strong>Terms and conditions</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
         <a class="policy-status" href="/policies.html#privacy" target="_blank" rel="noopener noreferrer" aria-label="Privacy policy (opens in a new tab)"><strong>Privacy policy</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
       </section>
@@ -559,6 +588,14 @@
         <h3>Member invitations</h3>
         <form id="inviteForm" class="auth-form compact">
           <label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required /></label>
+          <label>Expires after<select id="inviteLifetime" aria-describedby="inviteTimezone">
+            <option value="1">1 day</option>
+            <option value="7" selected>7 days</option>
+            <option value="30">30 days</option>
+            <option value="custom">Custom date and time</option>
+          </select></label>
+          <label id="inviteCustomField" class="hidden">Expiry date and time<input id="inviteCustomExpiry" type="datetime-local" step="1" aria-describedby="inviteTimezone inviteError" disabled /></label>
+          <p id="inviteTimezone" class="field-hint"></p>
           <div class="auth-actions">
             <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Site monitoring</button>
             <button id="createInvite" class="btn ghost" type="submit"><span data-ui-icon="UserPlus"></span>Create invitation</button>
@@ -568,7 +605,36 @@
           <label>Invitation link<input id="issuedInviteLink" type="text" readonly autocomplete="off" spellcheck="false" /></label>
           <div class="invite-result-actions"><span id="inviteExpiry" class="muted"></span><button id="copyInvite" class="icon-btn" type="button" title="Copy invitation link" aria-label="Copy invitation link"><span data-ui-icon="Copy"></span></button></div>
         </div>
-        <div id="inviteError" class="add-error hidden" role="alert"></div>
+        <p id="inviteStatus" class="muted hidden" role="status"></p>
+        <div id="inviteError" class="add-error hidden" role="alert" tabindex="-1"></div>
+        <div class="invitation-list-heading">
+          <h4 id="inviteListHeading">Issued invitations</h4>
+          <button id="inviteRefresh" class="icon-btn" type="button" title="Refresh invitations" aria-label="Refresh invitations"><span data-ui-icon="RefreshCw"></span></button>
+        </div>
+        <p id="inviteListStatus" class="muted" role="status"></p>
+        <div id="inviteListError" class="add-error hidden" role="alert" tabindex="-1"></div>
+        <form id="inviteEditForm" class="auth-form compact invitation-edit hidden" aria-labelledby="inviteEditHeading">
+          <h4 id="inviteEditHeading"></h4>
+          <p id="inviteEditSummary" class="muted"></p>
+          <p id="inviteEditWarning" class="muted hidden"></p>
+          <label id="inviteEditExpiryField">New expiry date and time<input id="inviteEditExpiry" type="datetime-local" step="1" aria-describedby="inviteTimezone inviteEditError" required /></label>
+          <label id="inviteReactivateField" class="auth-checkbox hidden"><input id="inviteReactivate" type="checkbox" />Reactivate this expired invitation with its unused signup slots</label>
+          <div id="inviteEditError" class="add-error hidden" role="alert" tabindex="-1"></div>
+          <p id="inviteEditStatus" class="muted hidden" role="status"></p>
+          <div class="invitation-edit-actions">
+            <button id="inviteEditRefresh" class="icon-btn" type="button" title="Refresh invitation details" aria-label="Refresh invitation details"><span data-ui-icon="RefreshCw"></span></button>
+            <button id="inviteEditCancel" class="btn ghost" type="button">Cancel</button>
+            <button id="inviteEditSubmit" class="btn" type="submit"><span data-ui-icon="Check"></span>Save expiry</button>
+          </div>
+        </form>
+        <ul id="inviteList" class="invitation-list" aria-labelledby="inviteListHeading"></ul>
+        <div class="invitation-paging">
+          <span id="invitePage" class="muted" role="status"></span>
+          <div class="invitation-page-actions">
+            <button id="invitePrevious" class="icon-btn" type="button" title="Previous invitation page" aria-label="Previous invitation page" disabled><span data-ui-icon="ChevronLeft"></span></button>
+            <button id="inviteNext" class="icon-btn" type="button" title="Next invitation page" aria-label="Next invitation page" disabled><span data-ui-icon="ChevronRight"></span></button>
+          </div>
+        </div>
       </div>
       </section>
       </div>
@@ -663,9 +729,13 @@
   <script src="/vendor/chart.js" defer></script>
   <script src="/vendor/quill.js" defer></script>
   <script src="/vendor/lucide.js" defer></script>
+  <script src="/vendor/zxcvbn.js" defer></script>
   <script src="notebook-model.js" defer></script>
   <script src="notebook-editor.js" defer></script>
   <script src="notebooks.js" defer></script>
+  <script src="video-chat.js" defer></script>
+  <script src="invitations.js" defer></script>
+  <script src="extension-connect.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
