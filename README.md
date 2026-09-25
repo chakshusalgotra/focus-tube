@@ -31,14 +31,19 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 | Watch with fewer distractions | Use a focused player with saved progress, chapters, captions, playback controls, and a collapsible lesson list. |
 | Take notes beside the video | Write formatted notes in a resizable, softly tinted area. In Read mode, select a paragraph to return to the video moment it came from. |
 | Keep a course notebook | Review notes from every lesson together, recover unsaved drafts, and export Markdown or print to PDF. |
+| Ask about a video | When enabled, stream transcript-grounded text answers and preview summaries before explicitly appending them to notes. |
+| Capture from Chrome | When enabled, save a selected YouTube video from the extension to one chosen FocusTube environment without opening the app for every save. |
 | Plan your learning | Create tasks, course checklists, and ordered roadmaps, then track progress, watch time, and streaks. |
 | Manage a private account | Join with an invitation and email code, sign in with email or username, and update your profile or password in Settings. |
+| Manage member invitations | Administrators create, list, edit expiry, and revoke member links; new links default to seven days. |
 | Choose your workspace | Switch between light and dark themes. The browser remembers your navigation, course-panel, and appearance choices. |
 | Keep ownership of your data | Export or restore courses, notes, planning data, and learning history without exporting passwords or session tokens. |
 | Monitor your own installation | Administrators can view usage and health. Optional private metrics and logs can connect to an operator-configured monitoring service. |
 | Report bugs and ideas | Use public/private forum threads, follow up with replies, and see administrator status updates. |
 
-**Not included yet:** video chat, Google/GitHub sign-in, the replacement Board view, forgotten-password recovery, and account deletion. Coming-soon controls do not call an AI or sign-in provider. Course downloads remain an optional backend API, not a website button.
+Video chat and extension capture are disabled by default. Their implementation is not a claim of hosted or real-provider verification; see the [V1 release contract and gates](docs/v1-release.md).
+
+**Not included yet:** Google/GitHub sign-in, the replacement Board view, forgotten-password recovery, and self-service account deletion. Coming-soon controls do not call a sign-in provider. Course downloads remain an optional backend API, not a website button.
 
 ## Documentation
 
@@ -47,6 +52,7 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 - [Quick start](#quick-start): local installation, Docker, and the first-run workflow.
 - [docs/youtube-search.md](docs/youtube-search.md): keyword search, filters, course creation, API examples, troubleshooting, and contributor verification.
 - [docs/invite-only-auth-spec.md](docs/invite-only-auth-spec.md): account rules, invitations, email verification, migration, and acceptance checks.
+- [docs/v1-release.md](docs/v1-release.md): canonical chat, confirmed-note, capture, and invitation contract; reported verification, pending gates, demo, and rollback.
 - [docs/monitoring.md](docs/monitoring.md): private admin usage dashboard, structured logs, private metrics, opt-in Grafana collection, external uptime and alert setup.
 - [public/policies.html](public/policies.html): public Terms and Privacy; [docs/policies-draft.md](docs/policies-draft.md) retains the operator review checklist.
 - [Configuration](#configuration): ports, host validation, and hosted deployments.
@@ -107,7 +113,7 @@ The interface supports light and dark themes, with teal actions and restrained c
 ### Distraction-free player
 
 - The navigation toggle sits immediately before the FocusTube logo in the taskbar on every signed-in screen. During playback it controls Course content, and the taskbar shows the course title, total duration, streak, and profile. The logo returns to the library. Notes and Ask sit beside the completion button below the video; no course-tools rail remains. Playlist refresh stays inside Course content. Very narrow screens keep the app symbol without its wordmark.
-- **Ask** is a coming-soon entry point only. It does not fetch transcripts, generate summaries, open a chat form, or call an AI provider. Transcript availability, sourced answers, privacy, and provider configuration will be addressed in a separate feature.
+- **Ask** opens private, transcript-grounded video chat when the administrator enables the pilot. It shares the study area with Notes without discarding the note editor or drafts. Chat is disabled by default; see [Video chat](#video-chat) for setup, permission requirements, costs, and limitations.
 - Custom play/pause, previous/next, seek, +/-10 seconds, volume, mute, and fullscreen controls.
 - Playback speed menu from `0.25x` to `4x`.
 - Quality selector populated from the levels available to the embedded player.
@@ -123,7 +129,7 @@ The interface supports light and dark themes, with teal actions and restrained c
 ### Learning workflow
 
 - **Course content**, immediately before the app logo in the taskbar, opens the current course's lesson list, including numbered lessons, durations, watched status, progress, remaining time, checklist, and certificate. Desktop places it beside the player; at 1200px and below it overlays the player and closes with its close button, Escape, the backdrop, or lesson selection. Keyboard focus returns to the taskbar toggle when the panel closes. Collapsing it leaves no icon rail or reserved left column.
-- Below the video, **Mark complete / Completed**, **Notes**, and **Ask** share one action group. Notes toggles the existing writing pane; Ask is an inactive coming-soon control. Narrow player panes put this group below the lesson title without shrinking touch targets.
+- Below the video, **Mark complete / Completed**, **Notes**, and **Ask** share one action group. Notes toggles the existing writing pane; Ask opens video chat for approved accounts when configured. Narrow player panes put this group below the lesson title without shrinking touch targets.
 - Manual and automatic completion tracking.
 - Per-course progress, time remaining, and completion timestamps.
 - Automatic next-video countdown.
@@ -131,6 +137,75 @@ The interface supports light and dark themes, with teal actions and restrained c
 - YouTube chapters and description timestamps as clickable seek targets.
 - Chapter markers on the seek bar and live current-chapter display.
 - Confetti rewards and a downloadable PDF completion certificate.
+
+### Video chat
+
+V1 is streamed text chat using the official Google Gen AI SDK with `gemini-3.1-flash-lite`, minimal thinking, no tools, and no automatic generation retries. It answers from permitted spoken captions, not unseen slides, code, diagrams, audio, or video frames. Citation validation checks that referenced segments exist, not that every claim is correct. This is not voice chat, live-stream ingestion, or chat with other viewers.
+
+Configure these server environment variables only after approving provider billing and transcript processing:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `VIDEO_CHAT_ENABLED` | `0` | Set to `1` to enable the pilot. |
+| `GEMINI_API_KEY` | Unset | Server-side Google API key; never sent to the browser or included in exports. |
+| `VIDEO_CHAT_MODEL` | `gemini-3.1-flash-lite` | Only this model is accepted because the spending policy uses its rates. |
+| `VIDEO_CHAT_MONTHLY_BUDGET_USD` | Native/local `5`; production Compose `4`; development Compose `1` | UTC-month generation budget shared by accounts in one database; `0` disables generation. |
+| `VIDEO_CHAT_ALLOWED_USER_IDS` | Empty | Comma-separated registered account IDs. Administrators are allowed; guests are not. |
+| `VIDEO_CHAT_AUTO_CAPTIONS` | `0` | Opt in to best-effort public YouTube caption retrieval only when permitted. |
+
+The app does not load `.env` automatically; native runs need an explicitly supplied environment or Node's `--env-file` option. All three Compose files now pass these variables into the container. Keep secrets out of tracked files. Hosted features are not enabled automatically.
+
+Production and development use separate SQLite ledgers. The `$4 + $1` defaults are an allocation, **not a globally enforced $5 cap** across environments or a shared API key. A common `.env` or shell value for `VIDEO_CHAT_MONTHLY_BUDGET_USD` overrides both defaults; the example's `5` would give each deployment its own $5 limit. Use separate environment settings, account for any local $5 instance too, and configure provider-side limits. Recheck the effective nonsecret settings before enabling billing.
+
+- Confirm source permission before loading captions or uploading timed `.srt`/`.vtt` text. Sources are limited to four hours, 1 MiB, and 10,000 ordered segments. Each account can retain 50 active transcripts and 10 MiB of transcript/conversation data. Subtitle parsing uses the `subtitle` package's SRT/partial-WebVTT support.
+- Automatic caption access uses `youtube-transcript-plus`, an unofficial interface. Missing tracks, content restrictions, and network/IP blocking can prevent retrieval. There is no private-video credential, cookie/proxy bypass, audio download, or background transcription fallback; upload permitted subtitles instead. Prior local caption probes do not verify this release's hosted coverage.
+- After explicit provider consent, the server sends the question, video title, available captured playhead, selected caption context, and conversation context to Google Gemini. Existing notebook content, account credentials, and other videos are not automatically included. Text you put in the question is sent, so do not paste secrets. Google's account-specific data-use and retention terms apply; this is not a locally running model.
+- **Current moment** selects caption segments overlapping the window from 120 seconds before to 60 seconds after the playhead captured at Send. A later seek does not retarget the request, and a missing playhead is not treated as zero. **Whole video** uses the full permitted transcript. Normal follow-ups include the last four completed exchanges; older saved turns are not implicit model memory.
+- **Discussion** snapshots all completed exchanges in the current UI discussion and their referenced caption segments. The API can bind an explicit set of completed message IDs. It does not silently summarize only the last four or discard earlier selected messages to fit the limit.
+- Input counting allows at most 100,000 tokens including a conservative instruction/format allowance; output is capped at 1,024 tokens. Oversized context is rejected with a smaller-scope action, not silently truncated. Questions are limited to 2,000 characters and threads to 100 completed answers.
+- Streamed text is **provisional** until the complete JSON, answer, references, and any note proposal pass validation. Only a validated final response is persisted and gets actionable citations or **Add to notes**. Interrupted, blocked, malformed, or unsupported output cannot become an insertable preview. The client negotiates NDJSON; the existing final-JSON response remains available.
+- At the rates used by this pilot ($0.25/million input and $1.50/million output tokens, including thinking), 50,000 input tokens plus 500 total output tokens cost about $0.01325. Provider prices can change; verify the [current pricing](https://ai.google.dev/gemini-api/docs/pricing) before enabling the feature. The application cap does not cover other applications using the key, hosting, taxes, or independently enabled services.
+- SQLite reserves the maximum generation cost before a call and reconciles usage when available. Failed or canceled calls with unknown provider usage conservatively retain their reservation. Clearing chat, restoring a backup, restarting, or removing an account does not reset spending. The ledger stores identifiers and cost metadata, not transcript or conversation text.
+- One answer may be pending per thread, with five requests per account per minute and **20 per account per UTC day**, including administrators. Newly reserved attempts count even if they later fail. The daily cap is hardcoded, not an environment setting. Reusing a request ID never starts a second generation; Stop, disconnect, timeout, source/video changes, and stale sessions are guarded.
+- Timestamp buttons use stored segment times rather than model-supplied URLs or seconds, including time zero. If evidence is missing, the UI displays an insufficient-evidence answer. Model output is rendered as text, never raw HTML.
+- **Summarize** requests a note proposal for the selected context. **Add to notes** on an existing supported answer opens a preview without another generation. The editable preview names its course/video and sources; only **Append to notes** authorizes insertion. Asking the model to save, or canceling the preview, never writes notes automatically.
+- Confirmation appends to the latest note for that exact account/course/video. It preserves existing text, source anchors, Read/Edit mode, and editor history; an immediate Undo removes only the appended group. Source-backed paragraphs use validated source times, including zero; discussion-only text need not have a timestamp. Conflicts, text composition, changed sources, and quotas block unsafe insertion. Stable proposal/block IDs prevent duplicate confirmation or save retries from appending twice.
+- **Saved to notes** means the normal notebook write was acknowledged. A failed save keeps the existing local recovery draft and offers retry without regenerating. Cancel before append writes nothing; closing an already appended preview does not undo its note content. Chat and Notes share the study pane without destroying the editor; fullscreen stays video-only.
+- Chat is private to an authenticated account/course/video. **Clear chat** removes messages but retains captions; **Remove transcript** removes both. Replacing a source requires confirmation and clears its old conversation. Removing a course preserves its stored chat for backup; archived chats are not listed in a separate UI in this pilot.
+- Schema-version-3 backups include transcripts, completed conversations, context, and validated optional proposals, not provider keys or the spending ledger. Older messages without proposals remain accepted. Import checks chat revisions and rejects pending requests. Versions 1 and 2 remain accepted with an explicit chat-clearing warning.
+
+Automated checks use fake providers and intercepted SDK requests, not paid inference. Real structured streaming, HTTPS proxy delivery, answer quality, hosted caption coverage, and provider latency remain release gates in [docs/v1-release.md](docs/v1-release.md).
+
+### Chrome capture
+
+The Manifest V3 extension supports **Chrome 127 or newer in a regular browser profile**. Right-click **Add to FocusTube** on a supported YouTube link/page, or use the toolbar popup and **Save**. Each action targets Production (`https://focustube.neuralnest.co.in`), Development (`https://dev-ft.neuralnest.co.in`), or the temporary **Local testing** preview (`http://127.0.0.1:3110`), never multiple environments. Accounts, databases, connections, and pending operations are separate by environment; each Chrome profile has its own extension storage and sign-in. Use a separate test browser profile for acceptance checks. Incognito, Firefox, mobile extensions, and whole-playlist capture are outside V1.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `EXTENSION_ENABLED` | `0` | Enable capture only after the selected HTTPS environment and installed ID are configured. |
+| `EXTENSION_ALLOWED_IDS` | Empty | Comma-separated exact 32-character Chrome IDs (`a` through `p`); no wildcard. |
+| `EXTENSION_PUBLIC_ORIGIN` | Empty for native/local Compose | Production Compose fixes the production HTTPS origin; development Compose fixes the development HTTPS origin above. |
+| `EXTENSION_ALLOW_LOOPBACK_HTTP` | `0` | Native local testing only: opt in to `http://127.0.0.1:3110` with `HOST=127.0.0.1`, `AUTH_ALLOW_LOOPBACK_HTTP=1`, and no trusted proxy. |
+
+Hosted extension use requires one of the two HTTPS environments. Local testing is an explicit exception for the native loopback-only preview, not arbitrary HTTP hosts or ports; other origins, LAN listeners and trusted proxies are rejected. Enabling capture without a supported origin/ID fails startup. Do not add `chrome-extension://` origins to `AUTH_PUBLIC_ORIGINS` or broaden ordinary API CORS. The configured ID permits only enumerated extension endpoints; it is not authentication.
+
+For the running local preview, reload the extension at `edge://extensions` (or `chrome://extensions`), sign in at `http://127.0.0.1:3110`, select **Local testing**, and choose **Connect FocusTube**. Approve access to `127.0.0.1`. Use the local preview account, not the hosted account. Browser host permissions cover that host across ports, but extension code and CSP send requests only to port 3110, and the server additionally requires the loopback opt-in. AI and email remain disabled in this preview.
+
+To retire Local testing, disconnect it first, disable `EXTENSION_ALLOW_LOOPBACK_HTTP` and local capture, remove the `local` entries from the worker/popup/consent/backend origin lists and the popup option, remove `http://127.0.0.1/*` from optional permissions and port 3110 from CSP, then rebuild/reload the package. Production and Development stay intact; do not remove their connections or learning data.
+
+- Permissions are `contextMenus`, `activeTab`, `storage`, and `identity`, plus optional access requested for the selected exact FocusTube host. There is no cookies, history, tabs, scripting, or all-sites permission, content script, or background browsing-history capture. Only the chosen video is captured; title/thumbnail preview is not a copy of the FocusTube profile or browser history.
+- Session reuse is tried first through credentialed requests in the same Chrome profile; JavaScript never reads the HttpOnly cookie. If browser cookie policy prevents reuse, **Connect FocusTube** opens first-party sign-in/consent once and uses PKCE S256, state, and the exact Chrome callback. This is a scoped FocusTube connection, not Google sign-in. Per-save app windows are unnecessary; **Open in FocusTube** is optional after a receipt.
+- Authorization codes are hashed server-side, single-use, and expire within five minutes. The opaque grant is hashed server-side and permits only minimal identity, capture, and its own disconnect. It expires no later than its parent session and at most 30 days, with no refresh token. Logout, password/email session rotation, browser account/session replacement, disabled/deleted accounts, parent expiry, and successful **Disconnect** invalidate the affected connection. Cookie/grant account or session mismatches require reconnection.
+- The grant lives in `chrome.storage.local` with trusted-context access, not sync storage or an encrypted secret vault. PKCE state/verifier live in `chrome.storage.session`. An offline Disconnect pauses saves but cannot promise server revocation until retried successfully; signing out the parent session also invalidates its grant. Removing the extension alone does not confirm server revocation.
+- Captures add one unstarted single-video course, preserving progress, settings, notes, chat, and workspace data. Existing matches anywhere in the library return **Already in library**, preferring a standalone match. A receipt and profile-revision increment commit atomically; repeated identical request IDs do not add another course or fetch metadata again. A retained receipt for a subsequently removed course reports that it is no longer present instead of resurrecting it.
+- Up to **20 pending operations across environments/accounts** are retained for **24 hours**, bound to their original account/environment before dispatch. Popup closure or worker suspension does not authorize another account's retry. Reopen to Retry or Discard; there is no unlimited background queue. Success requires a server receipt, not merely a local queued item. Server receipts become eligible for bounded cleanup after **30 days**, capped at **10,000 per account / 100,000 per database**; capacity refuses new receipts instead of evicting recent ones. Pending expiry or Discard does not undo a save that may already have committed.
+
+#### Package and install
+
+1. With the existing locked dependencies available, run `npm run extension:package`. [scripts/package-extension.js](scripts/package-extension.js) generates local fonts, Lucide assets, PNG icons and licenses under `extension/assets/`, and writes **`extension/focustube-1.0.0.zip`** for the current manifest. It prints the path, version, SHA-256, and file inventory. The ZIP contains an explicit extension-file allowlist, not server files, secrets, or user data.
+2. In a separate regular Chrome test profile, open `chrome://extensions`, enable Developer mode, and **Load unpacked** from the `extension/` directory after packaging (or a fixed directory containing the extracted ZIP). Record the actual installed ID and configure the corresponding server allowlist before enabling capture.
+3. Keep that unpacked directory stable between reloads. The current manifest has no public `key`, so the archive does not establish a universal stable Chrome ID across paths/machines. Before wider distribution, establish a stable public manifest key/store identity and allowlist that exact ID; never distribute a private signing key. Store submission/publication is a later gate, not delivered by a ZIP.
+4. Permit the selected host from the popup, verify the displayed environment/account, connect if needed, and save a permitted public video. Repeat acceptance separately for both hosted domains and with third-party cookies blocked. Local testing does not verify a hosted deployment. Recorded packaging, browser and runtime coverage is in [docs/v1-release.md](docs/v1-release.md).
 
 ### Learning workspace
 
@@ -156,7 +231,7 @@ The interface supports light and dark themes, with teal actions and restrained c
 - Playlist changes and course removal do not delete notes. Removed courses remain as archived notebooks. **Delete notebook** explicitly clears their documents. Guest notes follow the existing 90-day inactive-profile retention policy.
 - **Export Markdown** creates one portable course document with video source links. **Print / Save PDF** opens the browser print dialog with a clean notebook layout. Code blocks and paragraphs containing authored links use separate Source links where necessary. Link destinations include playback seconds even though displayed text has no time labels.
 
-Limits are 256 KiB, 2,000 paragraphs, and 10,000 document operations per video; 5 MiB of active note content and 20,000 distinct video-note keys per profile. Cleared records keep small revision markers to prevent stale tabs from resurrecting deleted notes. Notes are stored separately from board/task data and have independent save revisions. No AI service, transcript service, or external editor CDN is used.
+Limits are 256 KiB, 2,000 paragraphs, and 10,000 document operations per video; 5 MiB of active note content and 20,000 distinct video-note keys per profile. Cleared records keep small revision markers to prevent stale tabs from resurrecting deleted notes. Notes are stored separately from board/task data and have independent save revisions. Manual note-taking uses no AI/transcript service or external editor CDN. Optional chat proposals use the explicit preview-and-append flow above; existing notebooks are not sent to the model by default.
 
 ### Profiles and persistence
 
@@ -164,7 +239,8 @@ Limits are 256 KiB, 2,000 paragraphs, and 10,000 document operations per video; 
 - **Account > Change password** requires the current password, a different new password of 8-128 characters, and matching confirmation. Credentials and sessions rotate in one transaction: all old sessions are revoked, the current browser receives a replacement cookie, and pending account email challenges are cleared. Learning data and email verification stay intact. Five attempts per account per 15 minutes are allowed; password values are never saved to browser storage. Forgotten-password recovery is not included.
 - Course content and notes start closed unless an explicit choice was saved for that account and course. Their choices remain independent of the workspace rail preference; old course-tools rail preferences are no longer used. Browser layout/appearance preferences are not synchronized to other devices or included in server data exports. The notes surface is tinted in both themes; existing editor mode, resizing and autosave behavior remain.
 - A restrained glass effect and soft cursor sheen are limited to the topbar, workspace rail and settings navigation. Main views, course/roadmap cards, video, notes and dialog content have no cursor reflection. The navigation sheen stops when idle and is disabled for touch, reduced motion, increased contrast or reduced transparency. Appearance switches are saved per account/browser. Unsupported browsers use ordinary opaque navigation surfaces.
-- Invitation-only registration with an emailed code, matching password confirmation, and an optional unique username, using the existing scrypt password hashing.
+- Invitation-only registration with an emailed code, matching password confirmation, and a required unique username, using the existing scrypt password hashing. Username format and availability are checked as you type; existing accounts without usernames keep their access.
+- Sign-in, signup, and signup confirmation include labeled password reveal buttons with 44px touch targets. Signup updates length, advisory strength, and confirmation feedback on every input, including the first character. Strength estimation runs locally using self-hosted zxcvbn; the server's 8-128-character password policy is unchanged.
 - Email or username/password sign-in without another invitation. Existing usernames remain valid after email verification.
 - Legacy guest export and invitation-backed conversion without losing courses or history. Anonymous guest creation is disabled.
 - HttpOnly, SameSite=Strict session cookies backed by hashed 256-bit session tokens.
@@ -203,13 +279,14 @@ The profile menu can export a pretty-printed, versioned JSON file containing:
 - Daily site activity
 - Complete watch history
 - Course notebooks, including formatting, hidden playback anchors, and archived notes
+- Video-chat transcripts, conversations, source citations, and validated optional note proposals
 - Export schema and source metadata
 
-Password hashes, salts, session cookies, and session tokens are never included.
+Password hashes, salts, session cookies/tokens, provider keys, extension codes/grants/verifiers, and spending ledgers are never included. Extension connection state and receipts are not learning-export data.
 
-The same menu accepts FocusTube schema-version-1 and schema-version-2 JSON exports. Importing atomically replaces the current profile's courses, progress, settings, daily activity, watch history, and notebooks while preserving its username, password, and sessions. A confirmation shows the course, history, and video-note counts before anything changes. Unsaved notes must be resolved before a full export, import, or sign-out.
+The same menu accepts FocusTube schema-version-1, schema-version-2, and schema-version-3 JSON exports. Importing atomically replaces the current profile's courses, progress, settings, daily activity, watch history, notebooks, and video chats while preserving its username, password, sessions, and chat-spending ledger. A confirmation shows the course, history, and video-note counts before anything changes. Unsaved notes must be resolved, and pending chat requests must finish before export or import.
 
-Workspace boards, tasks, checklists, sprints, and roadmaps are included in exports and restored on import. Older exports without workspace data restore an empty workspace. Version-1 exports have no notebooks and clear existing notes during a full restore, with an explicit warning. New version-2 exports require an updated FocusTube installation to restore. Imports check both profile and notebook revisions so a concurrent edit cannot be silently overwritten.
+Workspace boards, tasks, checklists, sprints, and roadmaps are included in exports and restored on import. Older exports without workspace data restore an empty workspace. Version-1 exports have no notebooks and clear existing notes during a full restore, with an explicit warning. Versions 1 and 2 have no video chats and clear them with a warning. New version-3 exports require an updated FocusTube installation to restore. Imports check profile, notebook, and chat revisions so concurrent changes cannot be silently overwritten.
 
 ### Backend download API
 
@@ -234,8 +311,11 @@ The API supports permission confirmation, live Server-Sent Events progress, canc
 | Server | Node.js, Express |
 | Database | SQLite via `better-sqlite3` |
 | Authentication | Node `crypto.scrypt`, HttpOnly session cookies |
+| Password guidance | Self-hosted zxcvbn, advisory browser-only estimation |
 | Email verification | Nodemailer with authenticated TLS/STARTTLS delivery |
 | Rich-text notebooks | Quill with validated text documents and hidden video anchors |
+| Optional video chat | Google Gen AI SDK, bounded streaming JSON parser, and permission-gated timed captions |
+| Optional browser capture | Plain Chrome Manifest V3 popup/service worker and scoped FocusTube connection |
 | Operational monitoring | Pino, rotating JSON logs, and private Prometheus metrics |
 | Playback | YouTube IFrame API |
 | Charts | Chart.js |
@@ -369,11 +449,11 @@ docker compose exec app node scripts/auth-admin.js bootstrap --data-dir /app/dat
 
 The command prints a one-time administrator invitation link and its expiry. Open it privately and register. It refuses to issue an administrator invitation when an active administrator already exists, and redemption checks that condition again. There is no browser-accessible bootstrap endpoint and existing accounts are never automatically promoted. Use the actual origin/port and data directory of the intended instance; the command refuses a nonexistent database.
 
-In **Settings > Administration > Member invitations**, set **Allowed signups** (1-1,000, default 1), then choose **Create invitation**. Share the same link with up to the selected number of people, such as 10 or 20. Each successful verified registration or guest conversion uses one place; visits, verification-code requests, failed attempts, and rolled-back transactions do not. The link stops accepting registrations at its limit or after the existing 24-hour expiry, whichever comes first. The workspace member cap still applies, and invitations do not reserve or increase capacity. Existing links and first-administrator bootstrap links remain single-use.
+In **Settings > Administration > Member invitations**, set **Allowed signups** (1-1,000, default 1) and **Expires after** (1, 7, 30 days, or a custom date/time; default 7 days), then choose **Create invitation**. Custom input uses the displayed local timezone and is sent as canonical UTC. Expiry must be in the future and within 365 days of creation/edit. Share the link with up to the selected number of people. Each successful verified registration or guest conversion uses one place; visits, code requests, failed attempts, and rolled-back transactions do not. Expiry, revocation, exhausted signups, and the workspace member cap all remain authoritative. Existing stored dates and use limits do not change automatically. Bootstrap links remain one-use/24-hour and outside browser management.
 
-`POST /api/invites` accepts `{ "maxUses": 10 }` from an active administrator; `{}` keeps the single-use default. The response includes `id`, `inviteUrl`, `expiresAt`, `maxUses`, and the initial `useCount` of 0. The generated-link view shows its limit and expiry, not a live usage monitor. Create links on the configured public HTTPS instance for external recipients; a localhost link is not publicly reachable.
+`POST /api/invites` accepts optional `maxUses` and `expiresAt`; `{}` means one signup and server-now plus seven days. The response includes the copy-once `inviteUrl` and safe metadata. **Issued invitations** lists status, expiry, used/remaining signups, and supports refresh/pagination, expiry editing, and confirmed revocation. Edits/revocation use the displayed revision; stale edits must reload. Expired links with unused slots need explicit **Reactivate** confirmation. Revoked or exhausted links cannot be revived; create a new link. Changing expiry never resets counts or adds slots, and revoking prevents remaining signups without deleting accounts already created. Create public invitations on the intended HTTPS instance, not localhost.
 
-Each invitation contains 32 random bytes. Links are displayed once for manual sharing. The fragment is removed from the visible URL immediately and kept only in page memory; after reloading or cancelling, reopen the original link. Invitations are bearer credentials, not themselves proof of email ownership: anyone holding a reusable link can claim an available place after verifying their email. Invitations cannot be revoked through the UI.
+Each invitation contains 32 random bytes and only its hash is stored. Copy the link at creation: listing/editing cannot reconstruct it or reveal the hash. The join fragment is removed from the visible URL and kept only in page memory; after reloading or canceling, reopen the privately shared link. Invitations are bearer credentials, not proof of email ownership. Records expired for at least 30 days are eligible for cleanup; a pruned link cannot be restored. See the [current lifecycle contract](docs/invite-only-auth-spec.md#17-member-invitation-lifecycle-v1).
 
 ### Email verification and optional CAPTCHA
 
@@ -383,7 +463,7 @@ Set `SMTP_HOST`, `SMTP_FROM` (a single sender email address), and your provider'
 
 Without SMTP configuration, existing users can still sign in, but new registration and email verification are unavailable. There is no console-code, auto-verification, local-inbox, or CAPTCHA bypass in the running application.
 
-The signup flow collects email, display name, optional username, password and confirmation, sends a six-digit code, then verifies it before creating the account. Codes expire after ten minutes, allow at most five wrong guesses, and are replaced when resent. Resending has a 60-second cooldown, plus limits of three code requests per recipient and five per source per 15 minutes. Only hashes of the code and random challenge token are stored; codes are never returned by the API or written to logs. Failed delivery leaves no usable challenge. Final registration consumes the email proof and invitation in the same transaction.
+The signup flow collects email, display name, required username, password and confirmation, sends a six-digit code, then verifies it before creating the account. Usernames use 3-32 letters, numbers, dots, dashes, or underscores and are unique without regard to case. Availability checks do not reserve a name; final registration checks again, and a username conflict leaves the invitation and verification proof usable for another attempt. Codes expire after ten minutes, allow at most five wrong guesses, and are replaced when resent. Resending has a 60-second cooldown, plus limits of three code requests per recipient and five per source per 15 minutes. Only hashes of the code and random challenge token are stored; codes are never returned by the API or written to logs. Failed delivery leaves no usable challenge. Final registration consumes the email proof and invitation in the same transaction.
 
 Existing users are **not** retroactively marked email-verified or locked out. Their profile shows the actual verification status and offers verification. Arbitrary account email changes and forgotten-password recovery are not part of this flow. Verifying or initially setting an email requires the current password and rotates all old sessions. Signed-in users can change a known password from Account settings without sending an email.
 
@@ -491,7 +571,7 @@ Do not expose the default HTTP service directly to the public internet.
 
 Feature branches are reviewed into `dev`. Production promotion is a separate `dev` to `main` pull request; the merge guard rejects other branches targeting `main`.
 
-Pushing a feature branch does not deploy it. The existing deployment workflows run on pushes to `dev` and `main`, so merging those branches can deploy automatically. Before merging this account update, configure the target runtime's exact HTTPS origin, trusted proxy, persistent storage, and SMTP delivery. Development Compose approves `https://dev-ft.neuralnest.co.in` and uses one trusted proxy hop; production still needs its own approved origin. Both hosted deployments still need SMTP variables passed into the container. The local Compose configuration is not a hosted-deployment template. Keep an external database backup and review the [authentication migration notes](docs/invite-only-auth-spec.md) before promotion.
+Pushing a feature branch does not deploy it. The existing workflows run on pushes to `dev` and `main`, so merging those branches can deploy automatically. Before promotion, verify the target runtime's exact HTTPS origin, trusted proxy, persistent storage, and SMTP delivery. Development Compose specifies `https://dev-ft.neuralnest.co.in` on loopback port 3002; production specifies `https://focustube.neuralnest.co.in` on loopback port 3003. Both retain one trusted proxy hop, isolated project volumes, and SMTP passthrough. Source configuration is not evidence that either running environment uses it. Chat/capture stay off until explicitly enabled; do not reuse the example's local budget as a shared hosted cap. Keep a SQLite-aware backup and follow [V1 verification, rollout, kill switches, and rollback](docs/v1-release.md) plus the [authentication migration notes](docs/invite-only-auth-spec.md).
 
 ## Data storage
 
@@ -508,6 +588,8 @@ The database uses SQLite WAL mode and contains:
 - Invitations, email-verification challenges, and bounded authentication-rate records
 - Revisioned profile snapshots
 - Independently revisioned video notes, including archived notebooks
+- Private video chats/transcripts, chat revisions, and the separate generation-cost ledger
+- Extension receipt metadata, hashed single-use codes and grants, and parent-session revocations
 - Daily active-time rows
 - Per-video watch history
 - Idempotency records for activity batches
@@ -522,14 +604,15 @@ Exports use the versioned schema:
 ```json
 {
   "schema": "focustube-user-export",
-  "schemaVersion": 2,
-  "exportedAt": "2026-09-10T00:00:00.000Z",
+  "schemaVersion": 3,
+  "exportedAt": "2026-09-25T00:00:00.000Z",
   "profile": {},
   "courses": {},
   "stats": {},
   "settings": {},
   "workspace": {},
   "notebooks": [],
+  "videoChats": [],
   "dashboard": {
     "summary": {},
     "dailyActivity": [],
@@ -539,7 +622,7 @@ Exports use the versioned schema:
 }
 ```
 
-Both schema versions can be restored from the profile menu. Version 2 includes `notebooks` records with course/video IDs, titles, and versioned Delta documents. Paragraph attributes carry `blockId` and optional numeric `anchorSeconds`. Exported revisions are informational; restoring advances the destination's live revisions rather than reusing old ones. The existing 25 MB full-import limit still applies.
+Versions 1, 2, and 3 can be restored from Settings. Version 2 added `notebooks`; version 3 adds `videoChats` with transcripts, completed messages, and validated optional proposals. Notebook paragraphs carry `blockId` and optional numeric `anchorSeconds`. Exported revisions are informational; restoring advances live revisions rather than reusing old ones. Older versions warn before clearing data they cannot represent. The 25 MB full-import limit still applies. Learning exports are not a substitute for an operator database backup, which also preserves security records and cost accounting.
 
 ## Security model
 
@@ -559,11 +642,11 @@ Coarse user-activity metadata is available only to administrators. Add the docum
 - Raw passwords are never stored.
 - Session tokens are random 256-bit values and are hashed before database storage.
 - Cookies are HttpOnly and SameSite=Strict, with Secure required over approved HTTPS. HTTP is limited to the approved loopback runtime.
-- New accounts and guest conversions require an unused, unexpired invitation on the backend. User creation, invitation consumption, and session creation share an immediate SQLite transaction.
+- New accounts and guest conversions require an unexpired, unrevoked invitation with remaining signups. Email-proof consumption, invitation-use increment, account/profile creation or conversion, and session issuance share an immediate SQLite transaction.
 - Administrator invitations come only from the trusted local operator; active administrators can issue member invitations only.
 - Authentication rate budgets are persisted in SQLite. Identifier keys are HMAC-hashed using a separate automatically generated 32-byte `data/.auth-rate-key` file created with mode 0600. Preserve this private file with the database across restarts and restores; do not commit or publish it.
-- Fifteen-minute budgets: 5 login attempts per source/identity, 100 auth mutations per source, 10 registrations/conversions per source, 20 invite creations per administrator, and 5 email-enrollment attempts per user. Successful attempts count. Full active-key capacity fails closed; 429 includes Retry-After.
-- Every API mutation requires the exact approved Origin, including scheme and port. Missing and null origins are rejected; non-browser clients must explicitly supply the origin as well as valid credentials.
+- Fifteen-minute budgets: 5 login attempts per source/identity, 100 auth mutations per source, 10 registrations/conversions per source, 20 invite creation/edit/revoke attempts per administrator, and 5 email-enrollment attempts per user. Successful attempts count. Full active-key capacity fails closed; 429 includes Retry-After.
+- Ordinary API mutations require the exact approved web Origin, including scheme and port; missing/null origins are rejected. Only the enabled extension's enumerated POST/preflight routes admit exact allowlisted Chrome origins, and still require a valid member session or scoped grant. Extension IDs never grant access to data, notebooks, exports, or administration. Non-browser clients still need valid origin and credentials.
 - Login uses generic credential failures and equal-cost dummy password verification for unknown/inactive accounts. Password hashing is bounded to four concurrent operations, and auth JSON bodies to 8 KiB.
 - Host headers are allowlisted to reduce DNS rebinding exposure.
 - Content Security Policy, frame restrictions, MIME sniffing protection, and restrictive browser permissions are enabled.
@@ -590,6 +673,8 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 
 ## API overview
 
+`GET` and `PUT /api/data` require `X-Profile-Account` with the current authenticated member ID. Missing or mismatched bindings return `409 SESSION_CHANGED`; ordinary revision conflicts remain separate. Reload old tabs after an upgrade. Invitation responses echo the verified `X-Invite-Account`, and notebook/chat requests reject mismatched account bindings.
+
 ### Public metadata
 
 | Method | Endpoint | Purpose |
@@ -604,8 +689,9 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 | --- | --- | --- |
 | `GET` | `/api/auth/status` | Public invite-only/authenticated status, email-verification availability, and optional public CAPTCHA site key; no secrets or administrator inventory. |
 | `GET` | `/api/auth/me` | Return the current safe user profile; 401 without a valid active-account session. |
+| `POST` | `/api/auth/username/check` | Check `{username,inviteToken}` for anonymous/guest signup, or `{username}` for a current member. Returns `{username,available}` only; requires a usable invitation or member session and has a separate 180-request/source/15-minute budget. It neither reserves names nor consumes invitation uses. |
 | `POST` | `/api/auth/verification/request` | Send a code with `{email,inviteToken}` for signup/guest conversion, or `{email}` for the current member. 202 returns `{verificationToken,expiresAt,resendAfter}`, never the code. |
-| `POST` | `/api/auth/register` | Register with `{inviteToken,email,username?,displayName,password,passwordConfirmation,verificationToken,verificationCode}`; 201 with verified user and session cookie. |
+| `POST` | `/api/auth/register` | Register with `{inviteToken,email,username,displayName,password,passwordConfirmation,verificationToken,verificationCode}`; 201 with verified user and session cookie. Username is required for registration and guest conversion. |
 | `POST` | `/api/auth/login` | Sign in with `{identifier,password}` using email or username. Explicit `{email,password}` and `{username,password}` remain accepted; exactly one identifier. No invitation. |
 | `POST` | `/api/auth/guest` | Disabled; returns 403 without creating a user or session. |
 | `POST` | `/api/auth/upgrade` | Convert the authenticated legacy guest using a member invitation and the registration payload. |
@@ -613,11 +699,14 @@ Completed ZIPs remain available for a limited retry window and are streamed inst
 | `POST` | `/api/auth/profile` | Update `{displayName,username,password?}`; adding or changing the username requires the current password. |
 | `POST` | `/api/auth/password` | Active member only; `{currentPassword,newPassword,passwordConfirmation}` changes the password, revokes old sessions and returns `{user}` with a new session cookie. |
 | `POST` | `/api/auth/logout` | Revoke the current session. |
-| `POST` | `/api/invites` | Active administrators only; `{}` returns `{id,inviteUrl,expiresAt}` once. Browser-supplied role/identity fields are rejected. |
+| `POST` | `/api/invites` | Active administrators only; `{maxUses?,expiresAt?}` defaults to one signup/seven days; returns copy-once `inviteUrl` plus safe metadata. |
+| `GET` | `/api/invites?before=...&limit=50` | Admin-only member invitation metadata, newest first, up to 50 per page with `nextCursor`; no link/token/hash. |
+| `PATCH` | `/api/invites/:id` | Admin-only `{expiresAt,revision,reactivate?}`; expired links require `reactivate:true`, revoked/exhausted links cannot be revived. |
+| `DELETE` | `/api/invites/:id` | Admin-only `{revision}` revokes an active/expired member link and invalidates unused invitation-bound email proofs. |
 
 When Turnstile is enabled, `/verification/request`, `/register`, `/upgrade`, `/login`, and `/email` additionally require a fresh `captchaToken`. Code requests and registration/conversion use the `registration` action, member email verification uses `email`, and sign-in uses `login`. The client cannot select a trusted action or skip CAPTCHA. Missing/mismatched password confirmation, invalid email codes, and invalid CAPTCHA responses return 400; delivery/configuration failures return sanitized 503 errors without consuming invitations.
 
-Invalid/expired/reused invitations share a 400 error. Duplicate-email, capacity, and bootstrap conflicts return a generic 409 without consuming the invitation. Unknown/inactive/wrong-password login returns the same 401. Errors use `{error,code}` on auth routes; request-parser failures may use the existing `{error}` shape. Origin failures return 403, media-type failures 415, oversized bodies 413, exhausted budgets 429, and temporary auth storage/KDF failures 503. Auth responses are not cached. The sample `/api/v1` paths are not aliases.
+Invalid, expired, revoked, or exhausted signup invitations share a 400 error; reuse with remaining signups is allowed. Invalid or missing signup usernames return `INVALID_USERNAME` (400); a final username collision returns `USERNAME_TAKEN` (409). Duplicate-email, capacity, and bootstrap conflicts return a generic 409 without consuming the invitation. Unknown/inactive/wrong-password login returns the same 401. Errors use `{error,code}` on auth routes; request-parser failures may use the existing `{error}` shape. Origin failures return 403, media-type failures 415, oversized bodies 413, exhausted budgets 429, and temporary auth storage/KDF failures 503. Auth responses are not cached. The sample `/api/v1` paths are not aliases.
 
 Password changes use the existing session, exact-Origin and bounded-scrypt protections, plus a persistent five-attempt account budget. A wrong current password, mismatched confirmation or unchanged password returns 400 without altering sessions. The transaction rechecks the credential/session snapshot so a concurrent password change or revocation cannot succeed with stale credentials. A database failure rolls back the new hash, session revocations and verification-challenge cleanup together. Operational outcomes use the allowlisted `password` metric; rotating credentials is not recorded as a new sign-in in account activity history.
 
@@ -638,7 +727,7 @@ Invalid input returns `400`, missing authentication returns `401`, and upstream 
 | `GET` | `/api/data` | Load the current revisioned profile snapshot. |
 | `PUT` | `/api/data` | Save courses, statistics, and settings with revision checking. |
 | `GET` | `/api/export` | Download the complete safe user-data JSON export. |
-| `POST` | `/api/import?revision=...&notesRevision=...` | Atomically restore a version-1 or version-2 export while preserving account identity. |
+| `POST` | `/api/import?revision=...&notesRevision=...&chatRevision=...` | Atomically restore a version-1/2/3 export while preserving account identity and cost accounting. |
 | `POST` | `/api/track` | Store an idempotent active/watch-time batch. |
 | `GET` | `/api/stats/summary` | Return aggregate dashboard totals and streaks. |
 | `GET` | `/api/stats/daily` | Return day-level active and watch time. |
@@ -736,6 +825,8 @@ focus-tube/
 
 ## Validation
 
+On **2026-09-25**, the integrated V1 passed **266 tests on the host and 266 against the built Docker image**, with no failures, skips, or TODOs. All three Compose configurations and extension packaging passed. Real Chromium verified chat/Quill/invitation workflows, responsive layouts, and installed-extension cookie/PKCE saves against isolated HTTPS fixtures. The extension fixture pre-granted only the two exact hosts; ordinary Chrome permission prompts and native right-click remain manual checks. Controlled player/provider fixtures do not verify live playback, Google inference, or hosted deployments. A current Trivy image scan reports **zero high/critical findings** after updating the two affected OpenSSL packages; four existing moderate npm advisories remain. Artifact hashes, precise coverage and remaining release gates are recorded in [docs/v1-release.md](docs/v1-release.md).
+
 Run the deterministic suite and syntax checks before pushing:
 
 ```bash
@@ -746,7 +837,7 @@ docker compose config --quiet
 npm audit --omit=dev
 ```
 
-`npm test` covers authentication, design behavior, notebooks, monitoring, workspace persistence, the release timeline, and YouTube parsing. It uses isolated temporary or in-memory databases and loopback HTTP servers. SMTP, CAPTCHA, and upstream services are controlled fixtures; the suite does not send real email or call an AI provider.
+`npm test` covers authentication/invitations, chat and confirmed notes, extension capture, design behavior, notebooks, monitoring, workspace persistence, the release timeline, and YouTube parsing. It uses isolated temporary or in-memory databases and loopback HTTP servers. SMTP, CAPTCHA, and upstream services are controlled fixtures; the suite does not send real email or call an AI provider.
 
 Release checks on **2026-09-15** passed all **119 tests**, JavaScript syntax checks, documentation links, Compose syntax validation, and whitespace checks. Compose validation checks configuration syntax, not readiness of the hosted authentication or mail setup.
 
@@ -824,6 +915,7 @@ The YouTube IFrame API retains final control over playback levels. FocusTube rep
 - Private, deleted, age-restricted, region-restricted, or embedding-disabled videos may be unavailable.
 - Quality selection and speeds above `2x` are best-effort constraints imposed by the YouTube embed.
 - Password recovery, OAuth, and account deletion are not implemented. Email verification requires configured SMTP; optional CAPTCHA requires Turnstile keys.
+- Chat requires an approved account, source permission, provider consent, current pricing review, and budget; caption-only grounding cannot establish unseen visual facts. Extension capture requires Chrome 127+, an exact allowed ID, and a supported HTTPS origin or the explicitly opted-in native loopback preview. Real provider/proxy behavior and both hosted integrations remain unverified for V1.
 - The current server is designed for local-first use; internet deployment requires additional operational configuration.
 
 ## Roadmap

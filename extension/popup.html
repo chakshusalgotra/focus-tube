@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>FocusTube</title>
+  <link rel="stylesheet" href="popup.css">
+  <script src="assets/icons.js" defer></script>
+  <script src="popup.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="assets/icon-32.png" alt="" width="28" height="28"><strong>focustube<span>.</span></strong></div>
+    <label class="environment">Site<select id="environment" aria-label="FocusTube environment"><option value="production">Production</option><option value="development">Development</option><option value="local">Local testing</option></select></label>
+  </header>
+  <main>
+    <section class="account-row" aria-label="FocusTube account">
+      <span class="account-symbol" data-icon="UserRound" aria-hidden="true"></span>
+      <div class="account-copy"><strong id="account">Not connected</strong><span id="accountStatus">Current Chrome profile</span></div>
+      <button id="disconnect" class="icon-button" type="button" title="Disconnect FocusTube" aria-label="Disconnect FocusTube" hidden><span data-icon="LogOut" aria-hidden="true"></span></button>
+    </section>
+    <section class="video" aria-labelledby="videoTitle">
+      <div class="thumbnail"><span data-icon="Video" aria-hidden="true"></span><img id="thumbnail" alt="" width="112" height="63" referrerpolicy="no-referrer" hidden></div>
+      <div class="video-copy"><p id="source">YouTube</p><h1 id="videoTitle">No video selected</h1></div>
+    </section>
+    <section class="feedback" aria-live="polite" aria-atomic="true">
+      <span id="statusIcon" data-icon="Link" aria-hidden="true"></span>
+      <div><strong id="statusTitle">Checking connection</strong><p id="statusMessage"></p></div>
+    </section>
+    <details id="pendingSection" hidden>
+      <summary id="pendingLabel">Pending saves</summary>
+      <ul id="pending" aria-label="Pending video saves"></ul>
+    </details>
+    <p id="expired" class="notice" hidden>Expired requests were cleared after 24 hours. Their videos may already be in your library.</p>
+  </main>
+  <div class="commands">
+    <button id="connect" class="primary" type="button"><span data-icon="LogIn" aria-hidden="true"></span><span>Connect FocusTube</span></button>
+    <button id="save" class="primary" type="button" hidden><span id="saveIcon" data-icon="Plus" aria-hidden="true"></span><span id="saveLabel">Save video</span></button>
+    <a id="open" class="primary" target="_blank" rel="noopener noreferrer" hidden><span data-icon="ExternalLink" aria-hidden="true"></span><span>Open in FocusTube</span></a>
+  </div>
+  <footer><span data-icon="LockKeyhole" aria-hidden="true"></span><span id="destination">focustube.neuralnest.co.in</span></footer>
+</body>
+</html>

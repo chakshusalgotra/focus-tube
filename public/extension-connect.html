@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
+  <title>Connect FocusTube</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/vendor/fonts/plex/400.css">
+  <link rel="stylesheet" href="/vendor/fonts/plex/600.css">
+  <link rel="stylesheet" href="/vendor/fonts/manrope/index.css">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/vendor/lucide.js" defer></script>
+  <script src="/extension-connect.js" defer></script>
+</head>
+<body>
+  <main class="auth-view" id="extensionConsent">
+    <section class="auth-shell" aria-labelledby="connectHeading">
+      <div class="auth-brand"><span class="brand-symbol" data-connect-icon="BookOpen" aria-hidden="true"></span><span>focustube<span class="brand-dot">.</span></span></div>
+      <h1 id="connectHeading">Connect FocusTube</h1>
+      <p id="connectSite"></p>
+      <p id="connectAccount" class="auth-notice" role="status">Checking your account...</p>
+      <form id="connectForm" class="auth-form hidden" hidden>
+        <p>This Chrome extension can read your account name and save YouTube videos to this library. It cannot read your notes, watch history, or full profile.</p>
+        <p>The connection ends when this session ends, or after 30 days. The connection token stays in this Chrome profile; extension storage is not an encrypted vault.</p>
+        <label class="checkbox"><input id="connectConsent" type="checkbox" required>Allow this connection for the account above.</label>
+        <button id="connectApprove" class="btn" type="submit" disabled><span data-connect-icon="Link" aria-hidden="true"></span>Connect extension</button>
+      </form>
+      <div class="auth-actions"><a id="connectLogin" class="btn hidden" href="/#extension-connect" hidden><span data-connect-icon="LogIn" aria-hidden="true"></span>Sign in to FocusTube</a><button id="connectCancel" class="btn ghost" type="button">Cancel</button></div>
+      <p id="connectError" class="add-error hidden" role="alert" hidden></p>
+      <nav class="auth-policies" aria-label="Privacy"><a href="/policies.html#privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></nav>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "FocusTube",
+  "version": "1.0.0",
+  "description": "Save a YouTube video to your FocusTube library from this Chrome profile.",
+  "minimum_chrome_version": "127",
+  "incognito": "not_allowed",
+  "permissions": ["contextMenus", "activeTab", "storage", "identity"],
+  "optional_host_permissions": [
+    "https://focustube.neuralnest.co.in/*",
+    "https://dev-ft.neuralnest.co.in/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": { "service_worker": "service-worker.js" },
+  "action": {
+    "default_title": "Save to FocusTube",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "assets/icon-16.png", "32": "assets/icon-32.png" }
+  },
+  "icons": { "16": "assets/icon-16.png", "32": "assets/icon-32.png", "48": "assets/icon-48.png", "128": "assets/icon-128.png" },
+  "content_security_policy": {
+    "extension_pages": "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' https://i.ytimg.com; connect-src https://focustube.neuralnest.co.in https://dev-ft.neuralnest.co.in http://127.0.0.1:3110; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'"
+  }
+}

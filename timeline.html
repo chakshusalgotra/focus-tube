@@ -141,8 +141,8 @@
 {
   "version": 1,
   "repository": "https://github.com/chakshusalgotra/focus-tube",
-  "generatedAt": "2026-09-18T16:46:39.990Z",
-  "head": "18109ccc72e27162d75435813c22a32176f65e35",
+  "generatedAt": "2026-09-19T05:19:45.774Z",
+  "head": "6a048972013ad5f9e2b30acda351b42337c123c1",
   "branch": "fix/player-touch-text",
   "refs": {
     "prod": {
@@ -151,11 +151,125 @@
     },
     "dev": {
       "name": "origin/dev",
-      "hash": "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
+      "hash": "a145439916d78f5780a9b27c34080a72c7c1bd75"
     }
   },
-  "commitCount": 35,
+  "commitCount": 37,
   "entries": [
+    {
+      "id": "auth-input-feedback",
+      "title": "Make passwords visible on demand and validate signup fields during input",
+      "recordedDate": "2026-09-19",
+      "commits": [],
+      "why": "Make mobile and tablet sign-in usable and show username and password feedback immediately, without waiting for blur or a completed signup attempt.",
+      "changes": [
+        "Add independent, labeled reveal/hide buttons with 44px targets for sign-in/signup passwords and signup confirmation; preserve values and mask them again on mode changes, submission, reset, and page exit.",
+        "Require a unique username for new registrations and guest conversions while preserving existing username-less accounts and learning data.",
+        "Check username format and availability as input changes through an invitation/member-protected, no-store endpoint with its own persistent rate budget. Cancel old lookups, ignore stale responses, and keep error or rate-limit states distinct from availability.",
+        "Recheck username uniqueness inside the existing registration transaction. Report a final conflict without consuming the invitation or verified email proof so another name can be chosen.",
+        "Update password length, advisory strength, and confirmation matching on every input, including the first character. Use pinned, self-hosted zxcvbn locally without password-check requests or new complexity rules.",
+        "Verify actual native Chromium typing and touch input, signup conflict/retry, masking, and both themes at 320-1440 CSS pixels with isolated fixtures. Physical iOS/Safari, real email delivery, live CAPTCHA, and hosted deployment are not implied. This milestone is not yet linked to a commit."
+      ],
+      "files": [
+        "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/auth.test.js"
+      ],
+      "date": "2026-09-19",
+      "dateKind": "recorded",
+      "stage": "pending"
+    },
+    {
+      "id": "commit-a145439916d78f5780a9b27c34080a72c7c1bd75",
+      "title": "Merge pull request #16 from chakshusalgotra/fix/player-touch-text",
+      "date": "2026-09-18T22:44:13+05:30",
+      "dateKind": "commit",
+      "stage": "dev",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Refine compact workspace navigation and player controls"
+      ],
+      "commits": [
+        {
+          "hash": "a145439916d78f5780a9b27c34080a72c7c1bd75",
+          "date": "2026-09-18T22:44:13+05:30",
+          "authoredAt": "2026-09-18T22:44:13+05:30",
+          "subject": "Merge pull request #16 from chakshusalgotra/fix/player-touch-text",
+          "parents": [
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+            "6a048972013ad5f9e2b30acda351b42337c123c1"
+          ],
+          "body": "Refine compact workspace navigation and player controls",
+          "stage": "dev",
+          "files": [
+            "README.md",
+            "docs/timeline-notes.json",
+            "public/app.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/styles.css",
+            "test/design-language.test.js",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "docs/timeline-notes.json",
+        "public/app.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/styles.css",
+        "test/design-language.test.js",
+        "test/timeline.test.js",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "commit-6a048972013ad5f9e2b30acda351b42337c123c1",
+      "title": "Record compact UI fixes in the generated timeline",
+      "date": "2026-09-18T22:18:56+05:30",
+      "dateKind": "commit",
+      "stage": "dev",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Record compact UI fixes in the generated timeline"
+      ],
+      "commits": [
+        {
+          "hash": "6a048972013ad5f9e2b30acda351b42337c123c1",
+          "date": "2026-09-18T22:18:56+05:30",
+          "authoredAt": "2026-09-18T22:18:56+05:30",
+          "subject": "Record compact UI fixes in the generated timeline",
+          "parents": [
+            "18109ccc72e27162d75435813c22a32176f65e35"
+          ],
+          "body": "",
+          "stage": "dev",
+          "files": [
+            "docs/timeline-notes.json",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "docs/timeline-notes.json",
+        "test/timeline.test.js",
+        "timeline.html"
+      ]
+    },
     {
       "id": "compact-workspace-controls",
       "title": "Compact the workspace and align navigation and playback controls",
@@ -170,7 +284,7 @@
             "0dd95f309bf61f429d72aaf278eb5690c56cbc86"
           ],
           "body": "",
-          "stage": "branch",
+          "stage": "dev",
           "files": [
             "README.md",
             "public/app.js",
@@ -202,7 +316,7 @@
       ],
       "date": "2026-09-18T22:15:55+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "dev"
     },
     {
       "id": "player-touch-controls",
@@ -217,7 +331,7 @@
             "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
           ],
           "body": "",
-          "stage": "branch",
+          "stage": "dev",
           "files": [
             "README.md",
             "public/app.js",
@@ -241,7 +355,7 @@
       ],
       "date": "2026-09-18T04:43:46+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "dev"
     },
     {
       "id": "commit-88867d376f6452c44bdf113311ee406d2bebac97",

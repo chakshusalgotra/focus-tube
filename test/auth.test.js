@@ -17,17 +17,17 @@ const { createAuthServices } = require('../auth-services');
 const root = path.join(__dirname, '..');
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 
-function memoryStore(context, filename = ':memory:') {
+function memoryStore(context, filename = ':memory:', Clock = Date) {
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(root, 'db.js'), 'utf8'), {
-    module, Buffer, __dirname: root,
+    module, Buffer, Date: Clock, __dirname: root,
     require(name) {
       if (name === 'better-sqlite3') return class extends Database { constructor() { super(filename); } };
       if (name === 'fs') return filename === ':memory:' ? { mkdirSync() {} } : fs;
       return require(name);
     },
   }, { filename: 'db.js' });
-  context.after(() => module.exports.db.close());
+  context.after(() => { if (module.exports.db.open) module.exports.db.close(); });
   return module.exports;
 }
 
@@ -104,6 +104,149 @@ test('a reusable invitation counts only completed signups and stops at its limit
   assert.equal(usage().use_count, 2);
 });
 
+test('new member invitations default to seven days, accept custom UTC expiry, and keep bootstrap at 24 hours', context => {
+  const store = memoryStore(context);
+  const customExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+  assert.throws(() => store.issueInvitation({ tokenHash: digest('custom-bootstrap'), bootstrap: true, expiresAt: customExpiry }), { code: 'INVALID_INVITATION_EXPIRY' });
+  const bootstrap = invitation(store);
+  const createdAt = id => store.db.prepare('SELECT created_at FROM invitations WHERE id = ?').get(id).created_at;
+  assert.equal(Date.parse(bootstrap.expiresAt) - Date.parse(createdAt(bootstrap.id)), 86400000);
+  assert.equal(bootstrap.maxUses, 1);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const member = invitation(store, 'default-member', admin.sessionHash);
+  assert.equal(Date.parse(member.expiresAt) - Date.parse(createdAt(member.id)), 7 * 86400000);
+  const custom = store.issueInvitation({ tokenHash: digest('custom-member'), actorSessionHash: admin.sessionHash, expiresAt: customExpiry, maxUses: 3 });
+  assert.equal(custom.expiresAt, customExpiry);
+  assert.equal(custom.maxUses, 3);
+  assert.equal(custom.useCount, 0);
+});
+
+test('invitation expiry is canonical UTC, strictly future, and bounded from each operation including equality', context => {
+  let timestamp = Date.parse('2030-01-01T12:00:00.000Z');
+  class Clock extends Date {
+    constructor(...values) { super(...(values.length ? values : [timestamp])); }
+    static now() { return timestamp; }
+  }
+  const store = memoryStore(context, ':memory:', Clock);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  const issued = invitation(store, 'valid-expiry', actorSessionHash);
+  const valid = new Date(timestamp + 86400000).toISOString();
+  const invalid = [null, true, 0, NaN, Infinity, {}, [], new Date(valid), '', 'never', '2030-02-30T12:00:00.000Z',
+    valid.replace('.000Z', 'Z'), valid.replace('Z', '+00:00'), valid.toLowerCase(), ` ${valid}`, `${valid} `,
+    new Date(timestamp).toISOString(), new Date(timestamp - 1).toISOString(),
+    new Date(timestamp + 365 * 86400000 + 1).toISOString(), '9999-12-31T23:59:59.999Z'];
+  for (const expiresAt of invalid) {
+    assert.throws(() => store.issueInvitation({ actorSessionHash, tokenHash: digest('invalid-expiry'), expiresAt }), { code: 'INVALID_INVITATION_EXPIRY' });
+    assert.throws(() => store.updateInvitation({ actorSessionHash, id: issued.id, revision: 1, expiresAt }), { code: 'INVALID_INVITATION_EXPIRY' });
+  }
+  assert.throws(() => store.updateInvitation({ actorSessionHash, id: issued.id, revision: 1 }), { code: 'INVALID_INVITATION_EXPIRY' });
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM invitations').get().count, 2);
+  assert.equal(store.listInvitations({ actorSessionHash }).invitations[0].revision, 1);
+  const boundary = store.issueInvitation({ actorSessionHash, tokenHash: digest('maximum-expiry'), expiresAt: new Date(timestamp + 365 * 86400000).toISOString() });
+  timestamp += 86400000;
+  const extended = store.updateInvitation({ actorSessionHash, id: boundary.id, revision: 1, expiresAt: new Date(timestamp + 365 * 86400000).toISOString() });
+  assert.equal(Date.parse(extended.expiresAt) - Date.parse(boundary.expiresAt), 86400000);
+  const immediate = store.issueInvitation({ actorSessionHash, tokenHash: digest('equality'), expiresAt: new Date(timestamp + 1).toISOString() });
+  const pending = registration(store, 'equality', 'boundary@example.com');
+  assert.equal(store.invitationAvailable(pending.inviteHash), true);
+  timestamp++;
+  assert.equal(store.invitationAvailable(pending.inviteHash), false);
+  assert.throws(() => store.redeemInvitation(pending), { code: 'INVALID_INVITATION' });
+  assert.equal(store.listInvitations({ actorSessionHash }).invitations.find(row => row.id === immediate.id).status, 'expired');
+  assert.equal(store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash = ?').get(pending.verificationHash).consumed_at, null);
+  assert.equal(store.getUserByEmail(pending.email), undefined);
+});
+
+test('member expiry edits preserve signup slots, require reactivation, and conflict with redemption revisions', context => {
+  const store = memoryStore(context);
+  const bootstrap = invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  const issued = store.issueInvitation({ tokenHash: digest('editable'), actorSessionHash, maxUses: 2 });
+  const keys = ['id', 'createdAt', 'expiresAt', 'maxUses', 'useCount', 'remaining', 'status', 'revision'].sort();
+  assert.deepEqual(Object.keys(issued).sort(), keys);
+  assert.equal(issued.revision, 1);
+  assert.equal(issued.status, 'active');
+  assert.equal(issued.remaining, 2);
+  const expiresAt = new Date(Date.now() + 2 * 86400000).toISOString();
+  const shortened = store.updateInvitation({ actorSessionHash, id: issued.id, revision: 1, expiresAt });
+  assert.deepEqual(Object.keys(shortened).sort(), keys);
+  assert.equal(shortened.expiresAt, expiresAt);
+  assert.equal(shortened.revision, 2);
+  store.redeemInvitation(registration(store, 'editable', 'first@example.com'));
+  assert.throws(() => store.updateInvitation({ actorSessionHash, id: issued.id, revision: 2, expiresAt }), { code: 'INVITATION_CHANGED' });
+  const pending = registration(store, 'editable', 'second@example.com');
+  store.db.prepare('UPDATE invitations SET created_at = ?, expires_at = ? WHERE id = ?')
+    .run(new Date(Date.now() - 120000).toISOString(), new Date(Date.now() - 60000).toISOString(), issued.id);
+  const expired = store.listInvitations({ actorSessionHash }).invitations[0];
+  assert.equal(expired.status, 'expired');
+  assert.equal(expired.revision, 3);
+  assert.equal(expired.useCount, 1);
+  assert.equal(expired.remaining, 1);
+  for (const reactivate of [undefined, false]) {
+    assert.throws(() => store.updateInvitation({ actorSessionHash, id: issued.id, revision: 3, expiresAt, reactivate }), { code: 'INVITATION_REACTIVATION_REQUIRED' });
+  }
+  const reactivated = store.updateInvitation({ actorSessionHash, id: issued.id, revision: 3, expiresAt, reactivate: true });
+  assert.equal(reactivated.status, 'active');
+  assert.equal(reactivated.revision, 4);
+  assert.equal(reactivated.useCount, 1);
+  assert.equal(reactivated.maxUses, 2);
+  assert.equal(reactivated.remaining, 1);
+  store.redeemInvitation(pending);
+  const exhausted = store.listInvitations({ actorSessionHash }).invitations[0];
+  assert.equal(exhausted.status, 'exhausted');
+  assert.equal(exhausted.revision, 5);
+  assert.equal(exhausted.remaining, 0);
+  const values = { actorSessionHash, id: issued.id, revision: 5, expiresAt, reactivate: true };
+  assert.throws(() => store.updateInvitation(values), { code: 'INVITATION_EXHAUSTED' });
+  assert.throws(() => store.revokeInvitation(values), { code: 'INVITATION_EXHAUSTED' });
+  assert.throws(() => store.updateInvitation({ ...values, id: bootstrap.id }), { code: 'INVITATION_NOT_FOUND' });
+  assert.throws(() => store.revokeInvitation({ ...values, id: bootstrap.id }), { code: 'INVITATION_NOT_FOUND' });
+  assert.throws(() => store.db.prepare('UPDATE invitations SET expires_at = consumed_at WHERE id = ?').run(issued.id), /CHECK constraint failed/);
+});
+
+test('revocation atomically invalidates outstanding invitation proofs without changing accounts or signup counts', context => {
+  const store = memoryStore(context);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  const issued = store.issueInvitation({ tokenHash: digest('revocable'), actorSessionHash, maxUses: 3 });
+  store.redeemInvitation(registration(store, 'revocable', 'first@example.com'));
+  const pending = registration(store, 'revocable', 'pending@example.com');
+  invitation(store, 'unrelated', actorSessionHash);
+  const other = registration(store, 'unrelated', 'other@example.com');
+  const proofCount = hash => store.db.prepare('SELECT count(*) AS count FROM email_verifications WHERE token_hash = ?').get(hash).count;
+  const accountDigest = () => digest(JSON.stringify(['users', 'sessions', 'user_data'].map(table => store.db.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all())));
+  const before = accountDigest();
+  const values = { actorSessionHash, id: issued.id, revision: 2 };
+  store.db.exec("CREATE TRIGGER fail_revoke BEFORE DELETE ON email_verifications BEGIN SELECT RAISE(ABORT, 'injected'); END");
+  assert.throws(() => store.revokeInvitation(values), /injected/);
+  assert.equal(store.invitationAvailable(pending.inviteHash), true);
+  assert.equal(store.listInvitations({ actorSessionHash }).invitations.find(row => row.id === issued.id).revision, 2);
+  assert.equal(proofCount(pending.verificationHash), 1);
+  store.db.exec('DROP TRIGGER fail_revoke');
+  const revoked = store.revokeInvitation(values);
+  assert.equal(revoked.status, 'revoked');
+  assert.equal(revoked.revision, 3);
+  assert.equal(revoked.useCount, 1);
+  assert.equal(revoked.remaining, 2);
+  assert.equal(proofCount(pending.verificationHash), 0);
+  assert.equal(proofCount(other.verificationHash), 1);
+  assert.equal(accountDigest(), before);
+  assert.equal(store.invitationAvailable(pending.inviteHash), false);
+  assert.throws(() => store.redeemInvitation(pending), { code: 'INVALID_INVITATION' });
+  assert.throws(() => store.issueEmailVerification({ ...pending, purpose: 'registration', userId: null, currentSessionHash: null }), { code: 'INVALID_INVITATION' });
+  assert.throws(() => store.updateInvitation({ ...values, revision: 3, expiresAt: issued.expiresAt, reactivate: true }), { code: 'INVITATION_REVOKED' });
+  assert.throws(() => store.revokeInvitation({ ...values, revision: 3 }), { code: 'INVITATION_REVOKED' });
+  assert.equal(accountDigest(), before);
+});
+
 test('invitation usage limits reject invalid counts and keep bootstrap single-use', context => {
   const store = memoryStore(context);
   for (const maxUses of [0, -1, 1.5, 1001, '10', null, true, NaN, Infinity, 2]) {
@@ -141,10 +284,102 @@ test('invitation usage migration preserves existing unused and consumed links ac
   for (const database of [store, restarted]) {
     const rows = database.db.prepare('SELECT * FROM invitations ORDER BY id').all();
     assert.deepEqual(Array.from(rows, row => [row.max_uses, row.use_count]), [[1, 0], [1, 1], [1, 0]]);
+    for (const row of rows) {
+      assert.equal(row.created_at, createdAt);
+      assert.equal(row.expires_at, expiresAt);
+      assert.equal(row.revoked_at, null);
+      assert.equal(row.revision, 1);
+    }
     assert.equal(database.invitationAvailable(digest('unused')), true);
     assert.equal(database.invitationAvailable(digest('used')), false);
     assert.equal(database.invitationAvailable(digest('bootstrap')), true);
   }
+});
+
+test('lifecycle migration preserves reusable counters and expiry, and reopened revocation stays final', context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-invite-lifecycle-'));
+  const filename = path.join(directory, 'focustube.db');
+  const legacy = new Database(filename);
+  legacy.exec(`CREATE TABLE auth_workspace (id INTEGER PRIMARY KEY CHECK(id = 1), max_members INTEGER NOT NULL);
+    INSERT INTO auth_workspace VALUES (1, 100);
+    CREATE TABLE invitations (
+    id INTEGER PRIMARY KEY, token_hash TEXT NOT NULL UNIQUE, is_admin INTEGER NOT NULL DEFAULT 0,
+    max_uses INTEGER NOT NULL DEFAULT 1, use_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL, expires_at TEXT NOT NULL CHECK(expires_at > created_at),
+    consumed_at TEXT CHECK(consumed_at IS NULL OR (consumed_at >= created_at AND consumed_at < expires_at))
+  )`);
+  const timestamp = Date.now();
+  const createdAt = new Date(timestamp - 120000).toISOString();
+  const expiresAt = new Date(timestamp + 86400000).toISOString();
+  const consumedAt = new Date(timestamp - 60000).toISOString();
+  const insert = legacy.prepare('INSERT INTO invitations (token_hash, max_uses, use_count, created_at, expires_at, consumed_at) VALUES (?, ?, ?, ?, ?, ?)');
+  insert.run(digest('legacy-partial'), 4, 2, createdAt, expiresAt, null);
+  insert.run(digest('legacy-exhausted'), 3, 3, createdAt, expiresAt, consumedAt);
+  const preserved = database => digest(JSON.stringify(database.prepare('SELECT id, token_hash, is_admin, max_uses, use_count, created_at, expires_at, consumed_at FROM invitations WHERE id <= 2 ORDER BY id').all()));
+  const before = preserved(legacy);
+  legacy.close();
+  const store = memoryStore(context, filename);
+  assert.equal(preserved(store.db), before);
+  assert.equal(store.invitationAvailable(digest('legacy-partial')), true);
+  assert.equal(store.invitationAvailable(digest('legacy-exhausted')), false);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  const listed = store.listInvitations({ actorSessionHash }).invitations;
+  assert.equal(listed.length, 2);
+  const partial = listed.find(row => row.status === 'active');
+  assert.equal(partial.revision, 1);
+  assert.equal(partial.maxUses, 4);
+  assert.equal(partial.useCount, 2);
+  assert.equal(partial.expiresAt, expiresAt);
+  const changedExpiry = new Date(timestamp + 5 * 86400000).toISOString();
+  store.updateInvitation({ actorSessionHash, id: partial.id, revision: 1, expiresAt: changedExpiry });
+  store.revokeInvitation({ actorSessionHash, id: partial.id, revision: 2 });
+  for (const revision of [0, -1, 1.5, null]) {
+    assert.throws(() => store.db.prepare('UPDATE invitations SET revision = ? WHERE id = ?').run(revision, partial.id), /constraint failed/);
+  }
+  store.db.close();
+  const reopened = memoryStore(context, filename);
+  const final = reopened.listInvitations({ actorSessionHash }).invitations.find(row => row.id === partial.id);
+  assert.equal(final.status, 'revoked');
+  assert.equal(final.revision, 3);
+  assert.equal(final.maxUses, 4);
+  assert.equal(final.useCount, 2);
+  assert.equal(final.expiresAt, changedExpiry);
+  assert.equal(reopened.invitationAvailable(digest('legacy-partial')), false);
+  assert.equal(reopened.db.prepare('SELECT consumed_at FROM invitations WHERE id = 2').get().consumed_at, consumedAt);
+  assert.throws(() => reopened.db.prepare('UPDATE invitations SET expires_at = consumed_at WHERE id = 2').run(), /CHECK constraint failed/);
+  assert.equal(reopened.db.pragma('quick_check', { simple: true }), 'ok');
+  assert.equal(reopened.db.pragma('foreign_key_check').length, 0);
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+});
+
+test('pruned invitations cannot reuse a stale admin target ID after reopening', context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-invite-cursor-'));
+  const filename = path.join(directory, 'focustube.db');
+  const store = memoryStore(context, filename);
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  const pruned = invitation(store, 'pruned-link', actorSessionHash);
+  store.db.prepare('UPDATE invitations SET created_at = ?, expires_at = ? WHERE id = ?')
+    .run(new Date(Date.now() - 32 * 86400000).toISOString(), new Date(Date.now() - 31 * 86400000).toISOString(), pruned.id);
+  store.cleanup();
+  assert.equal(store.listInvitations({ actorSessionHash }).invitations.length, 0);
+  store.db.close();
+  const reopened = memoryStore(context, filename);
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const fresh = invitation(reopened, 'fresh-link', actorSessionHash);
+  assert.ok(fresh.id > pruned.id, 'A stale invitation ID must never identify a newly issued secret');
+  const values = { actorSessionHash, id: pruned.id, revision: 1, expiresAt: fresh.expiresAt };
+  assert.throws(() => reopened.updateInvitation(values), { code: 'INVITATION_NOT_FOUND' });
+  assert.throws(() => reopened.revokeInvitation(values), { code: 'INVITATION_NOT_FOUND' });
+  const final = reopened.listInvitations({ actorSessionHash }).invitations[0];
+  assert.equal(final.id, fresh.id);
+  assert.equal(final.revision, 1);
+  assert.equal(final.status, 'active');
 });
 
 test('bootstrap rechecks active administrators and member invitations never inherit administrator status', context => {
@@ -229,8 +464,168 @@ function bootstrapToken(store) {
   return token;
 }
 
-const joinBody = token => ({ inviteToken: token, email: 'Admin@Example.com', displayName: 'Administrator', password: 'test-password-123', passwordConfirmation: 'test-password-123' });
+const joinBody = token => ({ inviteToken: token, email: 'Admin@Example.com', username: 'member_' + crypto.randomBytes(6).toString('hex'), displayName: 'Administrator', password: 'test-password-123', passwordConfirmation: 'test-password-123' });
 const cookieOf = response => response.headers.get('set-cookie').split(';')[0];
+
+test('registration requires a valid username before spending an invitation', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const token = bootstrapToken(store);
+  for (const username of [undefined, null, '', '  ', 'ab', 'has spaces', 'x'.repeat(33), 123]) {
+    const response = await request('/api/auth/register', { method: 'POST', body: { ...joinBody(token), username } });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_USERNAME');
+  }
+  assert.equal(store.invitationAvailable(digest(token)), true);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 0);
+  const response = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(token), username: '  Chosen.Name  ' }) });
+  assert.equal(response.status, 201);
+  assert.equal((await response.json()).user.username, 'chosen.name');
+});
+
+test('password reveal controls preserve values and reset to masked input', () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const css = fs.readFileSync(path.join(root, 'public/styles.css'), 'utf8');
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const controls = [...html.matchAll(/<button[^>]*data-password-for="([^"]+)"[^>]*>/g)];
+  assert.deepEqual(controls.map(match => match[1]), ['authPassword', 'authPasswordConfirmation']);
+  for (const [markup, id] of controls) {
+    assert.match(markup, /type="button"/);
+    assert.ok(markup.includes(`aria-controls="${id}"`));
+  }
+  assert.match(css, /\.password-control \.password-toggle \{[^}]*width: 44px; height: 44px;/);
+  assert.match(css, /\.password-control input \{[^}]*padding-inline-end: 52px;/);
+  const input = { type: 'password', value: 'local-test-password' };
+  const button = { dataset: { passwordFor: 'authPassword', passwordLabel: 'password' }, setAttribute(name, value) { this[name] = value; } };
+  const context = vm.createContext({ $: () => input, icon: name => name, document: { querySelectorAll: () => [button] }, button });
+  vm.runInContext(source.slice(source.indexOf('function setPasswordVisibility('), source.indexOf('function passwordFeedback(')), context);
+  vm.runInContext('setPasswordVisibility(button, true);', context);
+  assert.equal(input.type, 'text');
+  assert.equal(input.value, 'local-test-password');
+  assert.equal(button['aria-label'], 'Hide password');
+  assert.equal(button['aria-pressed'], 'true');
+  assert.equal(button.innerHTML, 'EyeOff');
+  vm.runInContext('resetAuthPasswordVisibility();', context);
+  assert.equal(input.type, 'password');
+  assert.equal(button['aria-label'], 'Show password');
+  assert.equal(button['aria-pressed'], 'false');
+  assert.match(source, /window\.addEventListener\('pagehide', \(\) => \{ resetAuthHandleCheck\(\); resetAuthPasswordVisibility\(\); \}\)/);
+});
+
+test('password feedback is local and synchronous for every input character and confirmation edit', () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const fields = new Map();
+  const field = id => {
+    if (!fields.has(id)) fields.set(id, { value: '', dataset: {}, classList: { toggle(_name, hidden) { this.hidden = hidden; } }, setCustomValidity(value) { this.validity = value; }, setAttribute(name, value) { this[name] = value; } });
+    return fields.get(id);
+  };
+  const context = vm.createContext({ window: { zxcvbn: require('zxcvbn') }, authMode: 'register', $: field,
+    setTimeout() { throw new Error('Password feedback must not wait for typing to stop'); }, fetch() { throw new Error('Passwords must stay local'); } });
+  vm.runInContext(source.slice(source.indexOf('function passwordFeedback('), source.indexOf('function loadCaptcha(')), context);
+  for (let length = 1; length <= 12; length++) {
+    field('#authPassword').value = 'a'.repeat(length);
+    vm.runInContext('syncAuthPasswordFeedback();', context);
+    assert.match(field('#authPasswordLength').textContent, new RegExp(`Length: ${length}(?:/| )`));
+    assert.equal(field('#authPasswordLength').dataset.state, length < 8 ? 'invalid' : 'valid');
+    assert.equal(field('#authPasswordMeter').value, 0, 'Repeated characters must not look strong just because they are long');
+  }
+  field('#authPassword').value = 'wQ7!eR9$uT3@iP6#oY2%aS8';
+  vm.runInContext('syncAuthPasswordFeedback();', context);
+  assert.equal(field('#authPasswordStrength').textContent, 'Strength estimate: Strong');
+  field('#authPasswordConfirmation').value = 'different';
+  vm.runInContext('syncAuthPasswordFeedback();', context);
+  assert.equal(field('#authPasswordMatch').textContent, 'Passwords do not match.');
+  assert.equal(field('#authPasswordConfirmation').validity, 'Passwords do not match.');
+  field('#authPasswordConfirmation').value = field('#authPassword').value;
+  vm.runInContext('syncAuthPasswordFeedback();', context);
+  assert.equal(field('#authPasswordMatch').textContent, 'Passwords match.');
+  field('#authPassword').value += 'x';
+  vm.runInContext('syncAuthPasswordFeedback();', context);
+  assert.equal(field('#authPasswordMatch').dataset.state, 'invalid');
+  context.authMode = 'login';
+  vm.runInContext('syncAuthPasswordFeedback();', context);
+  assert.equal(field('#authPasswordFeedback').classList.hidden, true);
+  assert.equal(field('#authPasswordConfirmation').validity, '');
+  assert.match(source, /addEventListener\('input', syncAuthPasswordFeedback\)/);
+});
+
+test('username feedback ignores stale responses, aborts edits, and recovers from failures', async () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const input = { value: '', setCustomValidity(value) { this.validity = value; }, setAttribute(name, value) { this[name] = value; } };
+  const status = { dataset: {}, textContent: '' };
+  const requests = [];
+  const timers = new Map();
+  let timerId = 0;
+  let clock = 0;
+  const context = vm.createContext({
+    authMode: 'register', window: { FocusTubeInvite: { has: () => true } }, AbortController,
+    Date: { now: () => clock }, $: selector => selector === '#authHandle' ? input : status,
+    api(url, options) { return new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })); },
+    setTimeout(callback) { timers.set(++timerId, callback); return timerId; }, clearTimeout: id => timers.delete(id),
+  });
+  vm.runInContext(source.slice(source.indexOf('let authHandleVersion ='), source.indexOf('function setPasswordVisibility(')), context);
+  const check = () => vm.runInContext('checkAuthHandle()', context);
+  input.value = 'ab';
+  assert.equal(await check(), false);
+  assert.equal(requests.length, 0);
+  assert.equal(status.dataset.state, 'invalid');
+  input.value = ' padded ';
+  assert.equal(await check(), false);
+  assert.equal(requests.length, 0);
+  assert.equal(status.dataset.state, 'invalid');
+  input.value = 'first';
+  const first = check();
+  assert.equal(status.dataset.state, 'checking');
+  assert.equal(requests[0].url, '/api/auth/username/check');
+  assert.equal(requests[0].options.invitation, true);
+  assert.deepEqual(JSON.parse(requests[0].options.body), { username: 'first' });
+  input.value = 'second';
+  const second = check();
+  assert.equal(requests[0].options.signal.aborted, true);
+  requests[0].resolve({ username: 'first', available: false });
+  await first;
+  assert.equal(status.dataset.state, 'checking');
+  requests[1].resolve({ username: 'second', available: true });
+  assert.equal(await second, true);
+  assert.equal(status.dataset.state, 'available');
+  assert.equal(input.validity, '');
+  assert.equal(await check(), true);
+  assert.equal(requests.length, 2, 'Submit reuses the current completed check');
+  input.value = 'taken';
+  const taken = check();
+  requests.at(-1).resolve({ username: 'taken', available: false });
+  assert.equal(await taken, false);
+  assert.equal(status.dataset.state, 'taken');
+  assert.match(input.validity, /already taken/);
+  input.value = 'network';
+  const failed = check();
+  requests.at(-1).reject(new Error('Network unavailable'));
+  assert.equal(await failed, false);
+  assert.equal(status.dataset.state, 'error');
+  const retry = check();
+  requests.at(-1).resolve({ username: 'network', available: true });
+  assert.equal(await retry, true);
+  input.value = 'limited';
+  const limited = check();
+  requests.at(-1).reject(Object.assign(new Error('Limited'), { retryAfter: 30 }));
+  assert.equal(await limited, false);
+  const count = requests.length;
+  input.value = 'another';
+  assert.equal(await check(), false);
+  assert.equal(requests.length, count);
+  clock = 31000;
+  const afterLimit = check();
+  requests.at(-1).resolve({ username: 'another', available: true });
+  assert.equal(await afterLimit, true);
+  input.value = 'departing';
+  const departed = check();
+  context.authMode = 'login';
+  vm.runInContext('resetAuthHandleCheck();', context);
+  assert.equal(requests.at(-1).options.signal.aborted, true);
+  requests.at(-1).resolve({ username: 'departing', available: false });
+  await departed;
+  assert.equal(status.dataset.state, 'idle');
+  assert.equal(timers.size, 0);
+});
 
 test('terms and privacy are publicly readable without signing in or issuing a session', async context => {
   const { request } = await httpFixture(context);
@@ -314,6 +709,299 @@ test('admin HTTP invitations validate reusable limits and stop verified signups 
   assert.equal((await request('/api/auth/verification/request', { method: 'POST', body: { email: 'fourth@example.com', inviteToken: token } })).status, 400);
 });
 
+test('admin HTTP invitation lifecycle exposes only safe metadata and invalidates revoked signup proofs', async context => {
+  const { store, request, verify, origin } = await httpFixture(context);
+  assert.equal((await request('/api/invites')).status, 401);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  assert.equal(admin.status, 201);
+  const headers = { Cookie: cookieOf(admin) };
+  const expiresAt = new Date(Date.now() + 30 * 86400000).toISOString();
+  const created = await request('/api/invites', { method: 'POST', headers, body: { maxUses: 3, expiresAt } });
+  assert.equal(created.status, 201);
+  const issued = await created.json();
+  const token = new URL(issued.inviteUrl).hash.slice('#join='.length);
+  assert.equal(new URL(issued.inviteUrl).origin, origin);
+  assert.equal(issued.expiresAt, expiresAt);
+  assert.equal(issued.revision, 1);
+  assert.equal(issued.remaining, 3);
+  assert.equal(issued.status, 'active');
+  const metadataKeys = ['id', 'createdAt', 'expiresAt', 'maxUses', 'useCount', 'remaining', 'status', 'revision'].sort();
+  assert.deepEqual(Object.keys(issued).sort(), [...metadataKeys, 'inviteUrl'].sort());
+  const safe = metadata => {
+    assert.deepEqual(Object.keys(metadata).sort(), metadataKeys);
+    const text = JSON.stringify(metadata);
+    assert.equal(text.includes(token), false);
+    assert.equal(text.includes(digest(token)), false);
+  };
+  assert.equal(JSON.stringify(store.db.prepare('SELECT * FROM invitations').all()).includes(token), false);
+  const list = await request('/api/invites', { headers });
+  assert.equal(list.status, 200);
+  assert.equal(list.headers.get('cache-control'), 'no-store');
+  const listed = await list.json();
+  assert.equal(listed.invitations.length, 1, 'Bootstrap invitations must not be listed');
+  assert.equal(listed.nextCursor, null);
+  safe(listed.invitations[0]);
+  const endpoint = `/api/invites/${issued.id}`;
+  const shortened = await request(endpoint, { method: 'PATCH', headers,
+    body: { expiresAt: new Date(Date.now() + 86400000).toISOString(), revision: 1 } });
+  assert.equal(shortened.status, 200);
+  assert.equal(shortened.headers.get('cache-control'), 'no-store');
+  const updated = await shortened.json();
+  safe(updated);
+  assert.equal(updated.revision, 2);
+  for (const method of ['PATCH', 'DELETE']) {
+    const stale = await request(endpoint, { method, headers, body: { revision: 1, ...(method === 'PATCH' ? { expiresAt } : {}) } });
+    assert.equal(stale.status, 409);
+    assert.equal((await stale.json()).code, 'INVITATION_CHANGED');
+  }
+  const member = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(token), email: 'first@example.com' }) });
+  assert.equal(member.status, 201);
+  const pending = await verify({ ...joinBody(token), email: 'pending@example.com' });
+  store.db.prepare('UPDATE invitations SET created_at = ?, expires_at = ? WHERE id = ?')
+    .run(new Date(Date.now() - 120000).toISOString(), new Date(Date.now() - 60000).toISOString(), issued.id);
+  assert.equal((await (await request('/api/invites', { headers })).json()).invitations[0].status, 'expired');
+  const confirmation = await request(endpoint, { method: 'PATCH', headers, body: { expiresAt, revision: 3 } });
+  assert.equal(confirmation.status, 409);
+  assert.equal((await confirmation.json()).code, 'INVITATION_REACTIVATION_REQUIRED');
+  const reactivated = await request(endpoint, { method: 'PATCH', headers, body: { expiresAt, revision: 3, reactivate: true } });
+  assert.equal(reactivated.status, 200);
+  const active = await reactivated.json();
+  safe(active);
+  assert.equal(active.status, 'active');
+  assert.equal(active.revision, 4);
+  assert.equal(active.maxUses, 3);
+  assert.equal(active.useCount, 1);
+  assert.equal(active.remaining, 2);
+  const revoked = await request(endpoint, { method: 'DELETE', headers, body: { revision: 4 } });
+  assert.equal(revoked.status, 200);
+  assert.equal(revoked.headers.get('cache-control'), 'no-store');
+  const result = await revoked.json();
+  safe(result);
+  assert.equal(result.status, 'revoked');
+  assert.equal(result.revision, 5);
+  assert.equal(result.useCount, 1);
+  assert.equal(result.remaining, 2);
+  for (const method of ['PATCH', 'DELETE']) {
+    const rejected = await request(endpoint, { method, headers, body: { revision: 5, ...(method === 'PATCH' ? { expiresAt, reactivate: true } : {}) } });
+    assert.equal(rejected.status, 409);
+    assert.equal((await rejected.json()).code, 'INVITATION_REVOKED');
+  }
+  for (const [path, body] of [
+    ['/api/auth/register', pending],
+    ['/api/auth/username/check', { username: 'another.name', inviteToken: token }],
+    ['/api/auth/verification/request', { email: 'another@example.com', inviteToken: token }],
+  ]) {
+    const rejected = await request(path, { method: 'POST', body });
+    assert.equal(rejected.status, 400);
+    assert.equal((await rejected.json()).code, 'INVALID_INVITATION');
+  }
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM email_verifications WHERE token_hash = ?').get(digest(pending.verificationToken)).count, 0);
+  assert.equal(store.getUserByEmail(pending.email), undefined);
+  assert.equal((await request('/api/auth/me', { headers: { Cookie: cookieOf(member) } })).status, 200);
+});
+
+test('admin invitation listing uses a bounded descending ID cursor without repeating concurrent inserts', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const actorSessionHash = digest(headers.Cookie.split('=')[1]);
+  const ids = [];
+  for (let index = 0; index < 53; index++) ids.push(invitation(store, `page-${index}`, actorSessionHash).id);
+  const first = await request('/api/invites', { headers });
+  assert.equal(first.status, 200);
+  const page = await first.json();
+  assert.equal(page.invitations.length, 50);
+  assert.equal(page.nextCursor, page.invitations.at(-1).id);
+  const inserted = invitation(store, 'concurrent-new-invite', actorSessionHash);
+  const second = await request(`/api/invites?before=${page.nextCursor}`, { headers });
+  assert.equal(second.status, 200);
+  const last = await second.json();
+  assert.equal(last.invitations.length, 3);
+  assert.equal(last.nextCursor, null);
+  const observed = [...page.invitations, ...last.invitations].map(row => row.id);
+  assert.deepEqual(observed, ids.reverse());
+  assert.equal(observed.includes(inserted.id), false);
+  const limited = await (await request('/api/invites?limit=1', { headers })).json();
+  assert.equal(limited.invitations.length, 1);
+  assert.equal(limited.invitations[0].id, inserted.id);
+  for (const query of ['limit=0', 'limit=51', 'limit=1.5', 'limit=01', 'before=0', 'before=-1', 'before=1e3',
+    'before=9007199254740992', 'before=abc', 'before=1&before=2', 'before=', 'unknown=1']) {
+    const response = await request(`/api/invites?${query}`, { headers });
+    assert.equal(response.status, 400, query);
+    assert.equal((await response.json()).code, 'INVALID_REQUEST');
+  }
+});
+
+test('invitation HTTP validation rejects invalid expiry, revisions, IDs and attempts to add signup slots', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+  for (const expiry of [null, '', 123, 'never', expiresAt.replace('Z', '+00:00'),
+    new Date(Date.now() - 1000).toISOString(), new Date(Date.now() + 366 * 86400000).toISOString()]) {
+    const response = await request('/api/invites', { method: 'POST', headers, body: { expiresAt: expiry } });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_INVITATION_EXPIRY');
+  }
+  const created = await request('/api/invites', { method: 'POST', headers, body: {} });
+  assert.equal(created.status, 201);
+  const issued = await created.json();
+  assert.equal(Date.parse(issued.expiresAt) - Date.parse(issued.createdAt), 7 * 86400000);
+  const endpoint = `/api/invites/${issued.id}`;
+  for (const body of [{ expiresAt }, { expiresAt, revision: '1' }, { expiresAt, revision: 0 },
+    { expiresAt, revision: 1.5 }, { expiresAt, revision: 1, maxUses: 10 }, { expiresAt, revision: 1, reactivate: 'true' }]) {
+    const response = await request(endpoint, { method: 'PATCH', headers, body });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_REQUEST');
+  }
+  const missingExpiry = await request(endpoint, { method: 'PATCH', headers, body: { revision: 1 } });
+  assert.equal(missingExpiry.status, 400);
+  assert.equal((await missingExpiry.json()).code, 'INVALID_INVITATION_EXPIRY');
+  for (const id of ['01', '1e2', '9007199254740992']) {
+    const invalidId = await request(`/api/invites/${id}`, { method: 'DELETE', headers, body: { revision: 1 } });
+    assert.equal(invalidId.status, 400);
+    assert.equal((await invalidId.json()).code, 'INVALID_REQUEST');
+  }
+  const metadata = (await (await request('/api/invites', { headers })).json()).invitations[0];
+  assert.equal(metadata.revision, 1);
+  assert.equal(metadata.maxUses, 1);
+  assert.equal(metadata.useCount, 0);
+  assert.equal(metadata.expiresAt, issued.expiresAt);
+});
+
+test('invite management remains administrator-only with exact origins, host validation and bounded JSON', async context => {
+  const { store, request, verify, origin } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const actorSessionHash = digest(headers.Cookie.split('=')[1]);
+  const issued = invitation(store, 'security-member-invite', actorSessionHash);
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+  const endpoint = `/api/invites/${issued.id}`;
+  for (const isGuest of [false, true]) {
+    const user = store.createUser({ username: isGuest ? null : 'ordinary-member', isGuest });
+    const token = crypto.randomBytes(32).toString('base64url');
+    store.createSession(digest(token), user.id, expiresAt);
+    for (const [method, path, body] of [['GET', '/api/invites', undefined], ['POST', '/api/invites', {}],
+      ['PATCH', endpoint, { revision: 1, expiresAt }], ['DELETE', endpoint, { revision: 1 }]]) {
+      assert.equal((await request(path, { method, body })).status, 401);
+      assert.equal((await request(path, { method, body, headers: { Cookie: `ft_session=${token}` } })).status, 403);
+    }
+  }
+  for (const method of ['PATCH', 'DELETE']) {
+    const body = { revision: 1, ...(method === 'PATCH' ? { expiresAt } : {}) };
+    for (const Origin of ['', 'null', 'https://untrusted.example', origin.replace('http:', 'https:'), `${origin}/`]) {
+      assert.equal((await request(endpoint, { method, body, headers: { ...headers, Origin } })).status, 403);
+    }
+    assert.equal((await fetch(origin + endpoint, { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).status, 403);
+    const text = await request(endpoint, { method, headers: { ...headers, 'Content-Type': 'text/plain' }, body });
+    assert.equal(text.status, 415);
+    assert.equal((await text.json()).code, 'UNSUPPORTED_MEDIA_TYPE');
+    const malformed = await fetch(origin + endpoint, { method, headers: { ...headers, Origin: origin, 'Content-Type': 'application/json' }, body: '{' });
+    assert.equal(malformed.status, 400);
+    assert.equal((await request(endpoint, { method, headers, body: { ...body, extra: 'x'.repeat(9000) } })).status, 413);
+    const missing = await request('/api/invites/999999', { method, headers, body });
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, 'INVITATION_NOT_FOUND');
+    const bootstrapId = store.db.prepare('SELECT id FROM invitations WHERE is_admin = 1').get().id;
+    const bootstrap = await request(`/api/invites/${bootstrapId}`, { method, headers, body });
+    assert.equal(bootstrap.status, 404);
+    assert.equal((await bootstrap.json()).code, 'INVITATION_NOT_FOUND');
+  }
+  const blockedHost = await new Promise((resolve, reject) => {
+    const outgoing = http.request(origin + endpoint, { method: 'PATCH', headers: { ...headers, Host: 'untrusted.example',
+      Origin: origin, 'Content-Type': 'application/json' } }, response => {
+      let body = '';
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, body }));
+    });
+    outgoing.on('error', reject);
+    outgoing.end(JSON.stringify({ expiresAt, revision: 1 }));
+  });
+  assert.equal(blockedHost.status, 400);
+  assert.equal(blockedHost.body, 'Invalid Host header.');
+  assert.equal(store.listInvitations({ actorSessionHash }).invitations[0].revision, 1);
+});
+
+test('invite transactions reject stale admin roles and the exact disabled, expired or revoked session after middleware', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const user = (await admin.json()).user;
+  const headers = { Cookie: cookieOf(admin) };
+  const actorSessionHash = digest(headers.Cookie.split('=')[1]);
+  const issued = invitation(store, 'stale-admin-invite', actorSessionHash);
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+  store.createSession(digest('another-admin-session'), user.id, expiresAt);
+  const count = () => store.db.prepare('SELECT count(*) AS count FROM invitations').get().count;
+  const before = count();
+  for (const [invalidate, status, code] of [
+    [() => store.db.prepare('UPDATE users SET is_admin = 0 WHERE id = ?').run(user.id), 403, 'FORBIDDEN'],
+    [() => store.db.prepare("UPDATE users SET account_state = 'disabled' WHERE id = ?").run(user.id), 401, 'UNAUTHENTICATED'],
+    [() => store.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(actorSessionHash), 401, 'UNAUTHENTICATED'],
+    [() => store.db.prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?').run(new Date(Date.now() - 1000).toISOString(), actorSessionHash), 401, 'UNAUTHENTICATED'],
+  ]) {
+    for (const [method, path, operation, body] of [
+      ['GET', '/api/invites', 'listInvitations', undefined],
+      ['POST', '/api/invites', 'issueInvitation', {}],
+      ['PATCH', `/api/invites/${issued.id}`, 'updateInvitation', { revision: 1, expiresAt }],
+      ['DELETE', `/api/invites/${issued.id}`, 'revokeInvitation', { revision: 1 }],
+    ]) {
+      const original = store[operation];
+      let invoked = false;
+      store[operation] = values => {
+        invoked = true;
+        invalidate();
+        return original(values);
+      };
+      try {
+        const response = await request(path, { method, body, headers });
+        assert.equal(response.status, status, `${operation}: ${code}`);
+        assert.equal((await response.json()).code, code);
+        assert.equal(invoked, true, 'Exercise the transaction after middleware accepted the previous account snapshot');
+        assert.equal(count(), before);
+      } finally {
+        store[operation] = original;
+        store.db.prepare("UPDATE users SET is_admin = 1, account_state = 'active' WHERE id = ?").run(user.id);
+        store.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(actorSessionHash);
+        store.createSession(actorSessionHash, user.id, expiresAt);
+      }
+    }
+  }
+  const final = store.listInvitations({ actorSessionHash }).invitations[0];
+  assert.equal(final.revision, 1);
+  assert.equal(final.status, 'active');
+  assert.equal(store.getSessionUser(digest('another-admin-session')).id, user.id);
+});
+
+test('POST, PATCH and DELETE invitations share the durable issuer and source mutation budgets', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const method = attempt % 2 ? 'PATCH' : 'DELETE';
+    const response = await request('/api/invites/999999', { method, headers, body: { revision: 1, ...(method === 'PATCH' ? { expiresAt } : {}) } });
+    assert.equal(response.status, 404);
+  }
+  for (const method of ['POST', 'PATCH', 'DELETE']) {
+    const limited = await request(method === 'POST' ? '/api/invites' : '/api/invites/999999', { method, headers, body: {} });
+    assert.equal(limited.status, 429);
+    assert.equal((await limited.json()).code, 'RATE_LIMITED');
+    assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  }
+  assert.equal((await request('/api/invites', { headers })).status, 200, 'Mutation budgets must not prevent refreshing stale metadata');
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM invitations WHERE is_admin = 0').get().count, 0);
+  const anonymous = await httpFixture(context);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const response = await anonymous.request('/api/invites/1', { method: attempt % 2 ? 'PATCH' : 'DELETE', body: { revision: 1 } });
+    assert.equal(response.status, 401);
+  }
+  for (const method of ['POST', 'PATCH', 'DELETE']) {
+    const limited = await anonymous.request('/api/invites', { method, body: {} });
+    assert.equal(limited.status, 429);
+    assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  }
+});
+
 test('password confirmation is required on the backend before an invitation can be consumed', async context => {
   const { store, request } = await httpFixture(context);
   const token = bootstrapToken(store);
@@ -326,7 +1014,7 @@ test('password confirmation is required on the backend before an invitation can 
   assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 0);
 });
 
-test('optional usernames are unique case-insensitively and support email or username login', async context => {
+test('required usernames are unique case-insensitively and support email or username login', async context => {
   const { store, request, verify } = await httpFixture(context);
   const response = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(bootstrapToken(store)), username: ' New.Member ' }) });
   assert.equal(response.status, 201);
@@ -336,8 +1024,63 @@ test('optional usernames are unique case-insensitively and support email or user
   }
   const admin = store.db.prepare('SELECT token_hash FROM sessions LIMIT 1').get().token_hash;
   invitation(store, 'username-conflict', admin);
-  assert.throws(() => store.redeemInvitation({ ...registration(store, 'username-conflict', 'another@example.com'), username: 'NEW.MEMBER' }), { code: 'REGISTRATION_CONFLICT' });
+  assert.throws(() => store.redeemInvitation({ ...registration(store, 'username-conflict', 'another@example.com'), username: 'NEW.MEMBER' }), { code: 'USERNAME_TAKEN' });
   assert.equal(store.invitationAvailable(digest('username-conflict')), true);
+});
+
+test('username availability requires an invitation or member and exposes no account details', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const check = (body, headers) => request('/api/auth/username/check', { method: 'POST', body, headers });
+  assert.equal((await check({ username: 'chosen' })).status, 400);
+  const token = bootstrapToken(store);
+  const free = await check({ inviteToken: token, username: ' Chosen.Name ' });
+  assert.equal(free.status, 200);
+  assert.equal(free.headers.get('cache-control'), 'no-store');
+  assert.deepEqual(await free.json(), { username: 'chosen.name', available: true });
+  assert.equal(store.invitationAvailable(digest(token)), true);
+  assert.equal(store.db.prepare('SELECT count(*) AS count FROM email_verifications').get().count, 0);
+  for (const username of ['', 'ab', 'x'.repeat(33), 'two words', 123, null]) {
+    const response = await check({ inviteToken: token, username });
+    assert.equal(response.status, 400);
+    assert.equal((await response.json()).code, 'INVALID_USERNAME');
+  }
+  assert.equal((await check({ inviteToken: token, username: 'chosen', email: 'private@example.com' })).status, 400);
+  assert.equal((await check({ inviteToken: token, username: 'chosen' }, { Origin: 'https://untrusted.example' })).status, 403);
+  const registered = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(token), username: 'chosen.name' }) });
+  assert.equal(registered.status, 201);
+  const cookie = cookieOf(registered);
+  assert.deepEqual(await (await check({ username: 'CHOSEN.NAME' }, { Cookie: cookie })).json(), { username: 'chosen.name', available: true });
+  assert.equal((await check({ inviteToken: token, username: 'other' })).status, 400, 'Spent invitations cannot enumerate usernames');
+  const issued = await request('/api/invites', { method: 'POST', headers: { Cookie: cookie }, body: { maxUses: 2 } });
+  const inviteToken = new URL((await issued.json()).inviteUrl).hash.slice('#join='.length);
+  const unavailable = await check({ inviteToken, username: 'CHOSEN.NAME' });
+  assert.deepEqual(await unavailable.json(), { username: 'chosen.name', available: false });
+  store.createUser({ username: 'disabled.name', passwordHash: 'hash', salt: 'salt' });
+  store.db.prepare("UPDATE users SET account_state = 'disabled' WHERE username = ?").run('disabled.name');
+  assert.equal((await (await check({ inviteToken, username: 'disabled.name' })).json()).available, false);
+  const first = await verify({ ...joinBody(inviteToken), email: 'first@example.com', username: 'shared.name' });
+  const second = await verify({ ...joinBody(inviteToken), email: 'second@example.com', username: 'SHARED.NAME' });
+  assert.equal((await (await check({ inviteToken, username: 'shared.name' })).json()).available, true);
+  assert.equal((await request('/api/auth/register', { method: 'POST', body: first })).status, 201);
+  const conflict = await request('/api/auth/register', { method: 'POST', body: second });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, 'USERNAME_TAKEN');
+  assert.equal(store.db.prepare('SELECT use_count FROM invitations WHERE token_hash = ?').get(digest(inviteToken)).use_count, 1);
+  assert.equal(store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash = ?').get(digest(second.verificationToken)).consumed_at, null);
+});
+
+test('username checks have a separate durable limit without exhausting signup attempts', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const inviteToken = bootstrapToken(store);
+  for (let attempt = 0; attempt < 180; attempt++) {
+    const response = await request('/api/auth/username/check', { method: 'POST', body: { inviteToken, username: 'available.name' } });
+    assert.equal(response.status, 200);
+  }
+  const limited = await request('/api/auth/username/check', { method: 'POST', body: { inviteToken, username: 'available.name' } });
+  assert.equal(limited.status, 429);
+  assert.ok(Number(limited.headers.get('retry-after')) > 0);
+  const registered = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(inviteToken)) });
+  assert.equal(registered.status, 201);
 });
 
 test('email challenges bind context, expire, limit code guesses and do not mark users verified', context => {
@@ -505,13 +1248,14 @@ test('account profile claims are case-insensitive and reject stale or revoked ch
   assert.throws(() => store.passwordSession({ user: captured, sessionHash: digest('stale-username'), sessionMs: 10000 }), { code: 'INVALID_CREDENTIALS' });
 });
 
-test('members without usernames can add one and profile updates have a persistent account budget', async context => {
+test('legacy members without usernames can add one and profile updates have a persistent account budget', async context => {
   const { store, request, verify } = await httpFixture(context);
   const body = await verify(joinBody(bootstrapToken(store)));
   const registered = await request('/api/auth/register', { method: 'POST', body });
   const headers = { Cookie: cookieOf(registered) };
   const user = (await registered.json()).user;
-  assert.equal(user.username, null);
+  store.db.prepare('UPDATE users SET username = NULL WHERE id = ?').run(user.id);
+  assert.equal((await (await request('/api/auth/me', { headers })).json()).user.username, null);
   const update = { displayName: 'Learner', username: 'added.name', password: body.password };
   assert.equal((await request('/api/auth/profile', { method: 'POST', headers: { ...headers, Origin: 'https://foreign.example' }, body: update })).status, 403);
   const added = await request('/api/auth/profile', { method: 'POST', headers, body: update });
@@ -626,24 +1370,28 @@ test('password rotation rolls back on session failure and concurrent changes can
     passwordHash: 'stale', salt: 'stale', sessionHash: digest('stale-password-change'), sessionMs: 60000 }), { code: 'INVALID_CREDENTIALS' });
 });
 
-async function raceRedemptions(directory, values) {
-  const workers = values.map(value => new Worker(`
+async function raceRedemptions(directory, values, mutations = []) {
+  const operations = [...values.map(value => ({ action: 'redeemInvitation', values: value })), ...mutations];
+  const workers = operations.map(operation => new Worker(`
     const { parentPort, workerData } = require('node:worker_threads');
     process.env.FOCUSTUBE_DATA_DIR = workerData.directory;
     const store = require(workerData.root + '/db');
     parentPort.once('message', () => {
-      try { store.redeemInvitation(workerData.values); parentPort.postMessage('ok'); }
+      try { store[workerData.action](workerData.values); parentPort.postMessage('ok'); }
       catch (error) { parentPort.postMessage(error.code); }
       finally { store.db.close(); parentPort.close(); }
     });
     parentPort.postMessage('ready');
-  `, { eval: true, workerData: { directory, root, values: value } }));
+  `, { eval: true, workerData: { directory, root, ...operation } }));
+  const exits = workers.map(worker => new Promise(resolve => worker.once('exit', resolve)));
   try {
     await Promise.all(workers.map(worker => new Promise((resolve, reject) => { worker.once('message', resolve); worker.once('error', reject); })));
     const results = workers.map(worker => new Promise((resolve, reject) => { worker.once('message', resolve); worker.once('error', reject); }));
     for (const worker of workers) worker.postMessage('redeem');
-    return await Promise.all(results);
-  } finally { await Promise.all(workers.map(worker => worker.terminate())); }
+    const [outcomes, exitCodes] = await Promise.all([Promise.all(results), Promise.all(exits)]);
+    assert.ok(exitCodes.every(code => code === 0), 'Every SQLite worker must exit normally before fixture cleanup');
+    return outcomes;
+  } finally { await Promise.all(workers.filter(worker => worker.threadId !== -1).map(worker => worker.terminate())); }
 }
 
 test('independent SQLite connections serialize invitation, bootstrap, email, and last-slot races', async context => {
@@ -699,6 +1447,131 @@ test('reusable invitation races enforce both remaining uses and the workspace me
   assert.equal(store.db.prepare('SELECT count(*) AS count FROM users').get().count, 5);
 });
 
+test('independent SQLite workers serialize last-use signup against revocation, shortening and extension', async context => {
+  for (const action of ['revoke', 'shorten', 'extend']) {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), `focustube-invite-${action}-race-`));
+    const store = memoryStore(context, path.join(directory, 'focustube.db'));
+    context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    invitation(store);
+    const admin = registration(store, 'invite', 'admin@example.com');
+    store.redeemInvitation(admin);
+    const actorSessionHash = admin.sessionHash;
+    const issued = invitation(store, 'last-use', actorSessionHash);
+    const candidate = registration(store, 'last-use', 'last@example.com');
+    const expiresAt = new Date(Date.now() + (action === 'shorten' ? 1 : 30) * 86400000).toISOString();
+    const results = await raceRedemptions(directory, [candidate], [{
+      action: action === 'revoke' ? 'revokeInvitation' : 'updateInvitation',
+      values: { actorSessionHash, id: issued.id, revision: 1, ...(action === 'revoke' ? {} : { expiresAt }) },
+    }]);
+    assert.ok(['ok', 'INVITATION_CHANGED'].includes(results[1]));
+    const final = store.listInvitations({ actorSessionHash }).invitations[0];
+    const proof = store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash = ?').get(candidate.verificationHash);
+    if (action === 'revoke' && results[1] === 'ok') {
+      assert.equal(results[0], 'INVALID_INVITATION');
+      assert.equal(final.status, 'revoked');
+      assert.equal(final.useCount, 0);
+      assert.equal(final.revision, 2);
+      assert.equal(proof, undefined);
+      assert.equal(store.getUserByEmail(candidate.email), undefined);
+      assert.equal(store.getSessionUser(candidate.sessionHash), undefined);
+    } else {
+      assert.equal(results[0], 'ok');
+      assert.equal(final.status, 'exhausted');
+      assert.equal(final.useCount, 1);
+      assert.equal(final.remaining, 0);
+      assert.equal(final.revision, results[1] === 'ok' ? 3 : 2);
+      assert.equal(final.expiresAt, results[1] === 'ok' ? expiresAt : issued.expiresAt);
+      assert.ok(proof.consumed_at);
+      assert.ok(store.getUserByEmail(candidate.email));
+      assert.ok(store.getSessionUser(candidate.sessionHash));
+    }
+    for (const table of ['users', 'user_data', 'sessions']) {
+      assert.equal(store.db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count, results[0] === 'ok' ? 2 : 1, table);
+    }
+    assert.equal(store.invitationAvailable(candidate.inviteHash), false);
+    assert.throws(() => store.redeemInvitation(registration(store, 'last-use', 'extra@example.com')), { code: 'INVALID_INVITATION' });
+    assert.equal(store.db.inTransaction, false);
+  }
+});
+
+test('last workspace slot races with invite mutations preserve losing proofs, capacity and account-session atomicity', async context => {
+  for (const action of ['revoke', 'shorten', 'extend']) {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), `focustube-capacity-${action}-race-`));
+    const store = memoryStore(context, path.join(directory, 'focustube.db'));
+    context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+    invitation(store);
+    const admin = registration(store, 'invite', 'admin@example.com');
+    store.redeemInvitation(admin);
+    const actorSessionHash = admin.sessionHash;
+    store.setMemberLimit(2);
+    const issued = store.issueInvitation({ actorSessionHash, tokenHash: digest('capacity-race'), maxUses: 3 });
+    const candidates = ['one@example.com', 'two@example.com'].map(email => registration(store, 'capacity-race', email));
+    const results = await raceRedemptions(directory, candidates, [{
+      action: action === 'revoke' ? 'revokeInvitation' : 'updateInvitation',
+      values: { actorSessionHash, id: issued.id, revision: 1,
+        ...(action === 'revoke' ? {} : { expiresAt: new Date(Date.now() + (action === 'shorten' ? 1 : 30) * 86400000).toISOString() }) },
+    }]);
+    assert.ok(['ok', 'INVITATION_CHANGED'].includes(results[2]));
+    const signups = results.slice(0, 2);
+    const admitted = signups.filter(result => result === 'ok').length;
+    const revoked = action === 'revoke' && results[2] === 'ok';
+    assert.equal(admitted, revoked ? 0 : 1);
+    const final = store.listInvitations({ actorSessionHash }).invitations[0];
+    assert.equal(final.status, revoked ? 'revoked' : 'active');
+    assert.equal(final.maxUses, 3);
+    assert.equal(final.useCount, admitted);
+    assert.equal(final.revision, 1 + admitted + Number(results[2] === 'ok'));
+    assert.equal(signups.filter(result => result === (revoked ? 'INVALID_INVITATION' : 'REGISTRATION_CONFLICT')).length, revoked ? 2 : 1);
+    for (const table of ['users', 'user_data', 'sessions']) {
+      assert.equal(store.db.prepare(`SELECT count(*) AS count FROM ${table}`).get().count, 1 + admitted, table);
+    }
+    for (const [index, candidate] of candidates.entries()) {
+      const succeeded = signups[index] === 'ok';
+      const proof = store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash = ?').get(candidate.verificationHash);
+      if (revoked) assert.equal(proof, undefined);
+      else assert.equal(!!proof.consumed_at, succeeded);
+      assert.equal(!!store.getUserByEmail(candidate.email), succeeded);
+      assert.equal(!!store.getSessionUser(candidate.sessionHash), succeeded);
+    }
+    if (!revoked) {
+      store.setMemberLimit(3);
+      const retry = candidates[signups.indexOf('REGISTRATION_CONFLICT')];
+      assert.equal(store.redeemInvitation(retry).user.email_normalized, retry.email);
+      assert.equal(store.listInvitations({ actorSessionHash }).invitations[0].useCount, 2);
+    }
+    assert.equal(store.db.pragma('foreign_key_check').length, 0);
+  }
+});
+
+test('independent admin edit and revoke races reject stale revisions without resetting signup counts', async context => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-admin-invite-race-'));
+  const store = memoryStore(context, path.join(directory, 'focustube.db'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  invitation(store);
+  const admin = registration(store, 'invite', 'admin@example.com');
+  store.redeemInvitation(admin);
+  const actorSessionHash = admin.sessionHash;
+  for (const action of ['updateInvitation', 'revokeInvitation']) {
+    const issued = store.issueInvitation({ actorSessionHash, tokenHash: digest(action), maxUses: 3 });
+    store.redeemInvitation(registration(store, action, `${action.toLowerCase()}@example.com`));
+    const firstExpiry = new Date(Date.now() + 86400000).toISOString();
+    const secondExpiry = new Date(Date.now() + 30 * 86400000).toISOString();
+    const values = { actorSessionHash, id: issued.id, revision: 2 };
+    const results = await raceRedemptions(directory, [], [
+      { action: 'updateInvitation', values: { ...values, expiresAt: firstExpiry } },
+      { action, values: { ...values, ...(action === 'updateInvitation' ? { expiresAt: secondExpiry } : {}) } },
+    ]);
+    assert.deepEqual([...results].sort(), ['INVITATION_CHANGED', 'ok']);
+    const final = store.listInvitations({ actorSessionHash }).invitations.find(row => row.id === issued.id);
+    assert.equal(final.revision, 3);
+    assert.equal(final.useCount, 1);
+    assert.equal(final.maxUses, 3);
+    assert.equal(final.remaining, 2);
+    assert.equal(final.status, action === 'revokeInvitation' && results[1] === 'ok' ? 'revoked' : 'active');
+    assert.equal(final.expiresAt, results[0] === 'ok' ? firstExpiry : action === 'updateInvitation' ? secondExpiry : issued.expiresAt);
+  }
+});
+
 test('reusable invitations retain usage after guest conversion and reopening, and still expire', context => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-shared-invite-state-'));
   const filename = path.join(directory, 'focustube.db');
@@ -729,77 +1602,545 @@ test('reusable invitations retain usage after guest conversion and reopening, an
   assert.equal(reopened.getUserByEmail(candidate.email), undefined);
 });
 
+function invitationUiHarness({ autoList = true, active = true } = {}) {
+  const elements = new Map();
+  const makeNode = (tag = 'div') => {
+    const classes = new Set();
+    const listeners = new Map();
+    const node = { tagName: tag.toUpperCase(), value: '', textContent: '', disabled: false, checked: false, dataset: {}, attributes: {}, children: [],
+      classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
+        toggle(name, enabled = !classes.has(name)) { if (enabled) classes.add(name); else classes.delete(name); } },
+      get valueAsNumber() { return this.value === '' ? NaN : Number(this.value); },
+      setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'id') elements.set(value, this); },
+      getAttribute(name) { return this.attributes[name] ?? null; },
+      removeAttribute(name) { delete this.attributes[name]; },
+      setCustomValidity(message) { this.validationMessage = message; },
+      reportValidity() { return !this.validationMessage && this.valid !== false; },
+      addEventListener(name, callback) { if (!listeners.has(name)) listeners.set(name, []); listeners.get(name).push(callback); },
+      async fire(name, event = {}) { for (const callback of listeners.get(name) || []) await callback({ preventDefault() {}, currentTarget: this, target: this, ...event }); },
+      append(...children) { this.children.push(...children); },
+      replaceChildren(...children) { this.children = children; },
+      focus() { this.focused = true; }, select() { this.selected = true; },
+    };
+    return node;
+  };
+  const element = id => { if (!elements.has(id)) elements.set(id, makeNode()); return elements.get(id); };
+  const account = { id: 11, generation: 1, isAdmin: true, isGuest: false };
+  const requests = [];
+  const reads = [];
+  const timers = new Map();
+  let timestamp = Date.parse('2030-01-01T12:00:00.000Z');
+  let timerId = 0;
+  class Clock extends Date { constructor(...values) { super(...(values.length ? values : [timestamp])); } static now() { return timestamp; } }
+  const window = { location: new URL('https://example.test/') };
+  const context = vm.createContext({
+    window, account, URL, AbortController, Date: Clock,
+    document: { getElementById: element, createElement: makeNode },
+    navigator: { clipboard: { async writeText(value) { context.copied = value; } } },
+    fetch(url, options) {
+      if (autoList && options.method === 'GET') {
+        reads.push({ url, options });
+        return Promise.resolve({ ok: true, status: 200, headers: { get: () => String(account.id) }, json: async () => ({ invitations: [], nextCursor: null }) });
+      }
+      return new Promise((resolve, reject) => { requests.push({ url, options, resolve, reject }); });
+    },
+    setTimeout(callback, delay) { const id = ++timerId; timers.set(id, { callback, at: timestamp + delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+  });
+  const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  vm.runInContext(app.slice(app.indexOf('function el('), app.indexOf('function fmtDuration(')), context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'public/invitations.js'), 'utf8'), context);
+  vm.runInContext('window.invitationSettings = new window.InvitationSettings({ getAccount: () => account, el, icon: name => name });', context);
+  const ui = window.invitationSettings;
+  element('inviteForm').reportValidity = () => element('inviteForm').valid !== false &&
+    ['inviteMaxUses', 'inviteCustomExpiry'].every(id => element(id).disabled || !element(id).validationMessage);
+  element('inviteEditForm').reportValidity = () => element('inviteEditForm').valid !== false &&
+    (element('inviteEditExpiry').disabled || !element('inviteEditExpiry').validationMessage) &&
+    (!element('inviteReactivate').required || element('inviteReactivate').checked);
+  element('profileModal').open = true;
+  ui.open();
+  const ready = ui.activate(active);
+  return { ui, account, context, element, requests, reads, ready, timers,
+    respond(request, data, status = 200, headers = {}) { request.resolve({ ok: status < 400, status,
+      headers: { get(name) { return Object.hasOwn(headers, name) ? headers[name] : name === 'X-Invite-Account' ? String(account.id) : null; } },
+      json: async () => data }); },
+    advance(milliseconds) { timestamp += milliseconds; for (const [id, timer] of [...timers]) if (timer.at <= timestamp) { timers.delete(id); timer.callback(); } },
+  };
+}
+
+function invitationUiItem(id = 100, overrides = {}) {
+  return { id, revision: 1, createdAt: '2030-01-01T12:00:00.000Z', expiresAt: '2030-01-08T12:00:00.000Z',
+    maxUses: 10, useCount: 0, remaining: 10, status: 'active', ...overrides };
+}
+
 test('admin invitation form sends the chosen signup limit and discards stale results', async () => {
+  const { ui, account, element, requests, respond, ready } = invitationUiHarness();
+  await ready;
   const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   const administration = html.slice(html.indexOf('<section id="settingsAdmin"'), html.indexOf('</section>', html.indexOf('<section id="settingsAdmin"')));
   assert.match(administration, /<form id="inviteForm"[^>]*>[\s\S]*<label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required/);
   assert.match(administration, /id="createInvite"[^>]*type="submit"/);
   assert.match(administration, /id="profileMonitoring"[^>]*type="button"/);
-  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
-  const handler = source.slice(source.indexOf("$('#inviteForm').addEventListener('submit'"), source.indexOf("$('#copyInvite').addEventListener"));
-  const clear = source.slice(source.indexOf('function clearIssuedInvite()'), source.indexOf('function showAccountError('));
-  const elements = new Map();
-  const element = selector => {
-    if (!elements.has(selector)) {
-      const classes = new Set(['hidden']);
-      elements.set(selector, { value: '', textContent: '', disabled: false, dataset: {},
-        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name) },
-        addEventListener(name, callback) { this[name] = callback; } });
-    }
-    return elements.get(selector);
-  };
-  const form = element('#inviteForm');
-  form.reportValidity = () => true;
-  element('#inviteMaxUses').valueAsNumber = 10;
-  element('#profileModal').open = true;
-  const requests = [];
-  let finish;
-  let reject;
-  const context = vm.createContext({
-    $: element, sessionGeneration: 1,
-    api(url, options) { requests.push({ url, options }); return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); },
-    showAccountError(error, target) { target.textContent = error.message; target.classList.remove('hidden'); },
-  });
-  vm.runInContext(clear + '\n' + handler, context);
-  const submit = () => form.submit({ preventDefault() {}, currentTarget: form });
-  const pending = submit();
-  assert.equal(element('#createInvite').disabled, true);
-  assert.equal(element('#inviteMaxUses').disabled, true);
-  await submit();
+  element('inviteMaxUses').value = '10';
+  const pending = element('inviteForm').fire('submit');
+  assert.equal(element('createInvite').disabled, true);
+  assert.equal(element('inviteMaxUses').disabled, true);
+  await element('inviteForm').fire('submit');
   assert.equal(requests.length, 1);
   assert.equal(requests[0].url, '/api/invites');
   assert.deepEqual(JSON.parse(requests[0].options.body), { maxUses: 10 });
-  element('#inviteMaxUses').valueAsNumber = 20;
-  const result = { maxUses: 10, useCount: 0, inviteUrl: 'https://example.test/#join=example', expiresAt: '2026-09-17T10:00:00.000Z' };
-  finish(result);
+  assert.equal(requests[0].options.headers['X-Invite-Account'], '11');
+  assert.equal(requests[0].options.cache, 'no-store');
+  element('inviteMaxUses').value = '20';
+  const result = { ...invitationUiItem(), inviteUrl: `https://example.test/#join=${'a'.repeat(43)}` };
+  respond(requests[0], result);
   await pending;
-  assert.equal(element('#issuedInviteLink').value, result.inviteUrl);
-  assert.match(element('#inviteExpiry').textContent, /^Limit: 10 signups\. Expires /);
-  assert.equal(element('#inviteResult').classList.contains('hidden'), false);
-  assert.equal(element('#createInvite').disabled, false);
-  assert.equal(element('#inviteMaxUses').disabled, false);
-  form.reportValidity = () => false;
-  await submit();
+  assert.equal(element('issuedInviteLink').value, result.inviteUrl);
+  assert.match(element('inviteExpiry').textContent, /^Limit: 10 signups\. Expires /);
+  assert.equal(element('inviteResult').classList.contains('hidden'), false);
+  assert.equal(element('createInvite').disabled, false);
+  assert.equal(element('inviteMaxUses').value, '20');
+  assert.equal(element('inviteMaxUses').disabled, false);
+  element('inviteForm').valid = false;
+  await ui.create();
   assert.equal(requests.length, 1);
-  form.reportValidity = () => true;
-  const closed = submit();
-  element('#profileModal').open = false;
-  finish(result);
+  element('inviteForm').valid = true;
+  const closed = ui.create();
+  element('profileModal').open = false;
+  respond(requests[1], result);
   await closed;
-  assert.equal(element('#issuedInviteLink').value, '');
-  element('#profileModal').open = true;
-  const stale = submit();
-  context.sessionGeneration++;
-  finish(result);
+  assert.equal(element('issuedInviteLink').value, '');
+  element('profileModal').open = true;
+  ui.open(); await ui.activate(true);
+  const stale = ui.create();
+  account.generation++;
+  respond(requests[2], result);
   await stale;
-  assert.equal(element('#issuedInviteLink').value, '');
-  assert.equal(element('#inviteResult').classList.contains('hidden'), true);
-  const failed = submit();
-  reject(new Error('Request failed'));
+  assert.equal(element('issuedInviteLink').value, '');
+  assert.equal(element('inviteResult').classList.contains('hidden'), true);
+  ui.open(); await ui.activate(true);
+  const failed = ui.create();
+  requests[3].reject(new Error('Request failed'));
   await failed;
-  assert.equal(element('#inviteError').textContent, 'Request failed');
-  assert.equal(element('#createInvite').disabled, false);
-  assert.equal(element('#inviteMaxUses').disabled, false);
+  assert.match(element('inviteError').textContent, /could not be confirmed/);
+  assert.equal(element('createInvite').disabled, false);
+  assert.equal(element('inviteMaxUses').disabled, false);
+});
+
+test('invitation UI converts each expiry choice to canonical UTC and resets only on a new profile opening', async () => {
+  const { ui, element, requests, respond, ready, context } = invitationUiHarness();
+  await ready;
+  assert.equal(element('inviteLifetime').value, '7');
+  assert.ok(element('inviteTimezone').textContent.startsWith('Time zone: '));
+  for (const lifetime of ['1', '7', '30', 'custom']) {
+    element('inviteLifetime').value = lifetime;
+    await element('inviteLifetime').fire('change');
+    element('inviteCustomExpiry').value = '2030-01-04T18:30:15';
+    element('inviteMaxUses').value = '23';
+    const pending = ui.create();
+    const request = requests.at(-1);
+    const body = JSON.parse(request.options.body);
+    assert.equal(body.maxUses, 23);
+    const expiry = lifetime === 'custom' ? new Date('2030-01-04T18:30:15').toISOString() : new Date(context.Date.now() + Number(lifetime) * 86400000).toISOString();
+    if (lifetime === '7') assert.equal(Object.hasOwn(body, 'expiresAt'), false);
+    else assert.equal(body.expiresAt, expiry);
+    respond(request, { ...invitationUiItem(100, { maxUses: 23, remaining: 23, expiresAt: expiry }), inviteUrl: `https://example.test/#join=${'a'.repeat(43)}` });
+    await pending;
+    assert.ok(element('inviteExpiry').textContent.includes(expiry));
+  }
+  const previousLink = element('issuedInviteLink').value;
+  ui.activate(false);
+  await ui.activate(true);
+  assert.equal(element('issuedInviteLink').value, previousLink);
+  assert.equal(element('inviteLifetime').value, 'custom');
+  ui.close(); ui.open();
+  assert.equal(element('inviteLifetime').value, '7');
+  assert.equal(element('inviteMaxUses').value, '1');
+  assert.equal(element('inviteCustomExpiry').value, '');
+  assert.equal(element('inviteCustomExpiry').disabled, true);
+  assert.equal(element('issuedInviteLink').value, '');
+});
+
+test('invitation UI retains form and copy-once link on invalid dates, offline, validation errors and rate limits', async () => {
+  const { ui, element, requests, respond, ready, advance } = invitationUiHarness();
+  await ready;
+  element('inviteLifetime').value = 'custom';
+  await element('inviteLifetime').fire('change');
+  for (const value of ['', '2030-02-30T12:00', '2029-12-31T12:00', '2032-01-01T12:00', '2030-01-04T12:00Z']) {
+    element('inviteCustomExpiry').value = value;
+    await element('inviteCustomExpiry').fire('input');
+    await ui.create();
+    assert.equal(requests.length, 0);
+    assert.equal(element('inviteCustomExpiry').value, value);
+    assert.ok(element('inviteCustomExpiry').validationMessage);
+  }
+  element('inviteCustomExpiry').value = '2030-01-04T18:30';
+  await element('inviteCustomExpiry').fire('input');
+  element('inviteMaxUses').value = '17';
+  element('issuedInviteLink').value = 'copy-once-fixture';
+  for (const status of [0, 400, 429]) {
+    const pending = ui.create();
+    const request = requests.at(-1);
+    if (!status) request.reject(new TypeError('offline'));
+    else respond(request, { code: status === 400 ? 'INVALID_INVITATION_EXPIRY' : 'RATE_LIMITED', error: 'Expiry is invalid.' }, status, { 'Retry-After': '30' });
+    await pending;
+    assert.equal(element('inviteMaxUses').value, '17');
+    assert.equal(element('inviteCustomExpiry').value, '2030-01-04T18:30');
+    assert.equal(element('issuedInviteLink').value, 'copy-once-fixture');
+    assert.equal(element('inviteError').classList.contains('hidden'), false);
+  }
+  const count = requests.length;
+  assert.equal(element('createInvite').disabled, true);
+  await ui.create();
+  assert.equal(requests.length, count);
+  advance(30000);
+  assert.equal(element('createInvite').disabled, false);
+});
+
+test('invitation UI lists only on Administration activation and paginates with safe descending cursors', async () => {
+  const { ui, element, requests, respond, advance } = invitationUiHarness({ autoList: false, active: false });
+  assert.equal(requests.length, 0);
+  const first = ui.activate(true);
+  assert.equal(requests[0].url, '/api/invites?limit=50');
+  assert.equal(element('inviteList').getAttribute('aria-busy'), 'true');
+  const rows = Array.from({ length: 50 }, (_, index) => invitationUiItem(100 - index));
+  respond(requests[0], { invitations: rows, nextCursor: 51 });
+  await first;
+  assert.equal(element('inviteList').children.length, 50);
+  assert.equal(element('invitePrevious').disabled, true);
+  assert.equal(element('inviteNext').disabled, false);
+  const next = element('inviteNext').fire('click');
+  assert.equal(requests[1].url, '/api/invites?limit=50&before=51');
+  respond(requests[1], { invitations: [], nextCursor: null });
+  await next;
+  assert.equal(ui.page, 1);
+  assert.equal(element('invitePrevious').disabled, false);
+  assert.equal(element('inviteNext').disabled, true);
+  assert.match(element('inviteListStatus').textContent, /No older invitations/);
+  const previous = element('invitePrevious').fire('click');
+  assert.equal(requests[2].url, '/api/invites?limit=50');
+  respond(requests[2], { invitations: [invitationUiItem(101), ...rows.slice(0, 49)], nextCursor: 52 });
+  await previous;
+  assert.equal(ui.page, 0);
+  const failed = element('inviteNext').fire('click');
+  requests[3].reject(new TypeError('offline'));
+  await failed;
+  assert.equal(ui.page, 0);
+  assert.equal(ui.items[0].id, 101);
+  assert.match(element('inviteListError').textContent, /last successful load/);
+  await ui.activate(true);
+  await ui.activate(true);
+  advance(60000);
+  assert.equal(requests.length, 4, 'No background polling or duplicate activation reads');
+  ui.activate(false);
+  const reentered = ui.activate(true);
+  assert.equal(requests.length, 5, 'Entering Administration again refreshes its current page');
+  respond(requests[4], { invitations: rows, nextCursor: 51 });
+  await reentered;
+});
+
+test('invitation UI labels unavailable unused slots and rejects other-account data before reading it', async () => {
+  const { ui, element, requests, respond, ready, account } = invitationUiHarness({ autoList: false });
+  respond(requests[0], { invitations: [invitationUiItem(4), invitationUiItem(3, { status: 'expired' }),
+    invitationUiItem(2, { status: 'exhausted', useCount: 10, remaining: 0 }), invitationUiItem(1, { status: 'revoked' })], nextCursor: null });
+  await ready;
+  const text = node => typeof node === 'string' ? node : node.textContent + node.children.map(text).join(' ');
+  assert.match(text(element('inviteList')), /Active[\s\S]*Expired[\s\S]*Exhausted[\s\S]*Revoked/);
+  assert.match(text(element('inviteList').children[3]), /10 unused slots; 0 available now/);
+  const pending = ui.loadPage();
+  let decoded = false;
+  requests[1].resolve({ ok: true, status: 200, headers: { get: () => '22' }, json: async () => { decoded = true; return { invitations: [invitationUiItem(99)], nextCursor: null }; } });
+  await pending;
+  assert.equal(decoded, false);
+  assert.equal(element('inviteList').children.length, 0);
+  assert.match(element('inviteError').textContent, /account could not be verified/);
+  ui.open();
+  const stale = ui.activate(true);
+  account.id = 22;
+  ui.syncAccount();
+  respond(requests[2], { invitations: [invitationUiItem()], nextCursor: null }, 200, { 'X-Invite-Account': '11' });
+  await stale;
+  assert.equal(element('inviteList').children.length, 0);
+  assert.equal(requests[2].options.signal.aborted, true);
+  assert.equal(element('issuedInviteLink').value, '');
+});
+
+test('invitation UI expiry edits send the displayed revision and expired reactivation needs explicit confirmation', async () => {
+  const { ui, element, requests, respond, ready } = invitationUiHarness({ autoList: false });
+  respond(requests[0], { invitations: [invitationUiItem(100, { revision: 5 }), invitationUiItem(99, { status: 'expired', expiresAt: '2029-12-31T12:00:00.000Z' })], nextCursor: null });
+  await ready;
+  await element('invitation-edit-100').fire('click');
+  assert.equal(element('inviteEditExpiry').focused, true);
+  assert.equal(element('inviteEditForm').classList.contains('hidden'), false);
+  element('inviteEditExpiry').value = '2030-02-01T09:15:20';
+  const saved = element('inviteEditForm').fire('submit');
+  assert.equal(requests[1].url, '/api/invites/100');
+  assert.equal(requests[1].options.method, 'PATCH');
+  assert.deepEqual(JSON.parse(requests[1].options.body), { revision: 5, expiresAt: new Date('2030-02-01T09:15:20').toISOString() });
+  await ui.saveEdit();
+  assert.equal(requests.length, 2);
+  respond(requests[1], invitationUiItem(100, { revision: 6, expiresAt: '2030-02-01T09:15:20.000Z' }));
+  await saved;
+  assert.equal(ui.items[0].revision, 6);
+  assert.equal(element('inviteEditForm').classList.contains('hidden'), true);
+  await element('invitation-edit-99').fire('click');
+  element('inviteEditExpiry').value = '2030-01-15T12:00';
+  await ui.saveEdit();
+  assert.equal(requests.length, 2);
+  assert.equal(element('inviteReactivateField').classList.contains('hidden'), false);
+  assert.equal(element('inviteReactivate').required, true);
+  assert.match(element('inviteEditError').textContent, /Confirm reactivation/);
+  element('inviteReactivate').checked = true;
+  const reactivated = ui.saveEdit();
+  assert.deepEqual(JSON.parse(requests[2].options.body), { revision: 1, expiresAt: new Date('2030-01-15T12:00').toISOString(), reactivate: true });
+  respond(requests[2], invitationUiItem(99, { revision: 2, expiresAt: '2030-01-15T12:00:00.000Z' }));
+  await reactivated;
+  assert.equal(ui.items[1].status, 'active');
+});
+
+test('invitation UI revocation is an inline explicit confirmation and sends only the captured revision', async () => {
+  const { ui, element, requests, respond, ready } = invitationUiHarness({ autoList: false });
+  const item = invitationUiItem(100, { revision: 7, useCount: 3, remaining: 7 });
+  respond(requests[0], { invitations: [item], nextCursor: null });
+  await ready;
+  await element('invitation-revoke-100').fire('click');
+  assert.equal(requests.length, 1);
+  assert.match(element('inviteEditWarning').textContent, /cannot be undone/);
+  assert.equal(element('inviteEditCancel').focused, true);
+  assert.equal(element('inviteEditExpiry').disabled, true);
+  await element('inviteEditCancel').fire('click');
+  assert.equal(requests.length, 1);
+  await element('invitation-revoke-100').fire('click');
+  const revoked = element('inviteEditForm').fire('submit');
+  assert.equal(requests[1].options.method, 'DELETE');
+  assert.deepEqual(JSON.parse(requests[1].options.body), { revision: 7 });
+  respond(requests[1], { ...item, revision: 8, status: 'revoked' });
+  await revoked;
+  assert.equal(ui.items[0].status, 'revoked');
+  assert.equal(ui.items[0].useCount, 3);
+  assert.equal(ui.rowButtons.length, 0);
+  assert.equal(element('issuedInviteLink').value, '');
+  ui.beginEdit(100, 'edit');
+  assert.equal(ui.editing, null);
+});
+
+test('invitation UI keeps the latest entered expiry through revision conflicts and requires reviewed retry', async () => {
+  const { ui, element, requests, respond, ready } = invitationUiHarness({ autoList: false });
+  respond(requests[0], { invitations: [invitationUiItem(100, { revision: 2 })], nextCursor: null });
+  await ready;
+  ui.beginEdit(100, 'edit');
+  element('inviteEditExpiry').value = '2030-02-01T09:15';
+  const conflict = ui.saveEdit();
+  respond(requests[1], { code: 'INVITATION_CHANGED', error: 'Changed' }, 409);
+  await conflict;
+  assert.equal(ui.editing.item.revision, 2);
+  assert.equal(element('inviteEditExpiry').value, '2030-02-01T09:15');
+  assert.equal(element('inviteEditSubmit').disabled, true);
+  await ui.saveEdit();
+  assert.equal(requests.length, 2);
+  const review = element('inviteEditRefresh').fire('click');
+  assert.equal(requests[2].url, '/api/invites?limit=50&before=101');
+  element('inviteEditExpiry').value = '2030-03-02T10:20';
+  respond(requests[2], { invitations: [invitationUiItem(100, { revision: 3, useCount: 1, remaining: 9 })], nextCursor: null });
+  await review;
+  assert.equal(ui.editing.item.revision, 3);
+  assert.equal(element('inviteEditExpiry').value, '2030-03-02T10:20');
+  assert.equal(element('inviteEditSubmit').disabled, false);
+  assert.equal(requests.length, 3, 'Review must not automatically retry a mutation');
+  const retry = ui.saveEdit();
+  assert.deepEqual(JSON.parse(requests[3].options.body), { revision: 3, expiresAt: new Date('2030-03-02T10:20').toISOString() });
+  respond(requests[3], invitationUiItem(100, { revision: 4, expiresAt: new Date('2030-03-02T10:20').toISOString(), useCount: 1, remaining: 9 }));
+  await retry;
+  assert.equal(ui.items[0].useCount, 1);
+});
+
+test('invitation UI preserves edit drafts on each server rejection and shares mutation cooldowns with creation', async () => {
+  for (const [code, status] of [['INVALID_INVITATION_EXPIRY', 400], ['INVALID_REQUEST', 400], ['INVITATION_NOT_FOUND', 404],
+    ['INVITATION_REVOKED', 409], ['INVITATION_EXHAUSTED', 409], ['INVITATION_REACTIVATION_REQUIRED', 409], ['RATE_LIMITED', 429], ['UNAVAILABLE', 503]]) {
+    const { ui, element, requests, respond, ready, advance } = invitationUiHarness({ autoList: false });
+    respond(requests[0], { invitations: [invitationUiItem()], nextCursor: null });
+    await ready;
+    ui.beginEdit(100, 'edit');
+    element('inviteEditExpiry').value = '2030-01-20T10:30';
+    const pending = ui.saveEdit();
+    respond(requests[1], { code, error: 'Request rejected.' }, status, { 'Retry-After': '60' });
+    await pending;
+    assert.equal(element('inviteEditExpiry').value, '2030-01-20T10:30', code);
+    assert.equal(element('inviteEditError').classList.contains('hidden'), false, code);
+    if (code === 'INVITATION_REACTIVATION_REQUIRED') {
+      assert.equal(element('inviteReactivateField').classList.contains('hidden'), false);
+      assert.equal(element('inviteReactivate').checked, false);
+    }
+    if (['INVITATION_REVOKED', 'INVITATION_EXHAUSTED', 'INVITATION_NOT_FOUND'].includes(code)) assert.equal(element('inviteEditSubmit').disabled, true);
+    if (status === 429) {
+      ui.cancelEdit();
+      assert.equal(element('createInvite').disabled, true);
+      ui.beginEdit(100, 'revoke');
+      assert.equal(element('inviteEditSubmit').disabled, true);
+      await ui.saveEdit();
+      assert.equal(requests.length, 2);
+      advance(60000);
+      assert.equal(element('inviteEditSubmit').disabled, false);
+    }
+  }
+});
+
+test('invitation UI late reads and writes cannot paint after close, generation change or role loss', async () => {
+  for (const operation of ['list', 'create', 'edit', 'review']) {
+    for (const boundary of ['close', 'account', 'generation', 'role']) {
+      const { ui, account, element, requests, respond, ready } = invitationUiHarness({ autoList: false });
+      respond(requests[0], { invitations: [invitationUiItem()], nextCursor: null });
+      await ready;
+      if (['edit', 'review'].includes(operation)) { ui.beginEdit(100, 'edit'); element('inviteEditExpiry').value = '2030-02-01T12:00'; }
+      const pending = operation === 'list' ? ui.loadPage() : operation === 'create' ? ui.create() : operation === 'edit' ? ui.saveEdit() : ui.refreshEdit();
+      const request = requests.at(-1);
+      assert.equal(request.options.headers['X-Invite-Account'], '11');
+      let finishDecode;
+      let beganDecode;
+      const decoding = new Promise(resolve => { beganDecode = resolve; });
+      request.resolve({ ok: true, status: 200, headers: { get: () => '11' }, json() {
+        beganDecode(); return new Promise(resolve => { finishDecode = resolve; });
+      } });
+      await decoding;
+      if (boundary === 'close') { element('profileModal').open = false; ui.close(); }
+      if (boundary === 'account') account.id = 22;
+      if (boundary === 'generation') account.generation++;
+      if (boundary === 'role') account.isAdmin = false;
+      ui.syncAccount();
+      finishDecode(['list', 'review'].includes(operation) ? { invitations: [invitationUiItem()], nextCursor: null } :
+        { ...invitationUiItem(100, { revision: 2 }), inviteUrl: `https://example.test/#join=${'b'.repeat(43)}` });
+      await pending;
+      assert.equal(element('inviteList').children.length, 0, `${operation}: ${boundary}`);
+      assert.equal(element('issuedInviteLink').value, '', `${operation}: ${boundary}`);
+      assert.equal(element('inviteEditSummary').textContent, '', `${operation}: ${boundary}`);
+      assert.equal(request.options.signal.aborted, true, `${operation}: ${boundary}`);
+      assert.equal(element('createInvite').disabled, true, `${operation}: ${boundary}`);
+    }
+  }
+});
+
+test('invitation UI ignores an old completion while a reopened profile has a newer operation', async () => {
+  const { ui, element, requests, respond, ready } = invitationUiHarness();
+  await ready;
+  const older = ui.create();
+  ui.close(); ui.open(); await ui.activate(true);
+  element('inviteMaxUses').value = '27';
+  const newer = ui.create();
+  requests[0].reject(new Error('old offline response'));
+  await older;
+  assert.equal(element('createInvite').disabled, true);
+  assert.equal(element('inviteMaxUses').value, '27');
+  assert.equal(element('inviteError').textContent, '');
+  respond(requests[1], { ...invitationUiItem(101, { maxUses: 27, remaining: 27 }), inviteUrl: `https://example.test/#join=${'c'.repeat(43)}` });
+  await newer;
+  assert.ok(element('issuedInviteLink').value.endsWith('c'.repeat(43)));
+  assert.equal(element('createInvite').disabled, false);
+});
+
+test('invitation UI fails closed without a verified owner and guards late clipboard feedback', async () => {
+  const { ui, element, requests, ready } = invitationUiHarness();
+  await ready;
+  const unverified = ui.create();
+  let decoded = false;
+  requests[0].resolve({ ok: true, status: 201, headers: { get: () => null }, json() { decoded = true; return {}; } });
+  await unverified;
+  assert.equal(decoded, false);
+  assert.equal(element('issuedInviteLink').value, '');
+  assert.equal(element('createInvite').disabled, true);
+  const fixture = invitationUiHarness();
+  await fixture.ready;
+  fixture.element('issuedInviteLink').value = 'copy-once-fixture';
+  fixture.ui.sync();
+  let clipboardFailed;
+  fixture.context.navigator.clipboard.writeText = () => new Promise((_resolve, reject) => { clipboardFailed = reject; });
+  const copying = fixture.ui.copy();
+  fixture.ui.close(); fixture.ui.open();
+  clipboardFailed(new Error('clipboard denied'));
+  await copying;
+  assert.equal(fixture.element('inviteError').textContent, '');
+  assert.notEqual(fixture.element('issuedInviteLink').focused, true);
+});
+
+test('invitation UI keeps cursor bounds after create refresh failure and makes read cooldowns recoverable', async () => {
+  const { ui, element, requests, respond, ready, advance } = invitationUiHarness({ autoList: false });
+  respond(requests[0], { invitations: [invitationUiItem(100)], nextCursor: 100 });
+  await ready;
+  const next = ui.loadPage(100, 1);
+  respond(requests[1], { invitations: [invitationUiItem(99)], nextCursor: null });
+  await next;
+  const creation = ui.create();
+  let readStarted;
+  const refreshing = new Promise(resolve => { readStarted = resolve; });
+  const originalFetch = ui.getAccount;
+  const originalRequest = ui.request.bind(ui);
+  ui.request = (...args) => {
+    const pending = originalRequest(...args);
+    if (args[2] === undefined) readStarted();
+    return pending;
+  };
+  respond(requests[2], { ...invitationUiItem(101), inviteUrl: `https://example.test/#join=${'d'.repeat(43)}` });
+  await refreshing;
+  assert.equal(requests[3].url, '/api/invites?limit=50&before=100');
+  requests[3].reject(new TypeError('offline'));
+  await creation;
+  assert.equal(ui.page, 1);
+  assert.equal(ui.cursors[1], 100);
+  assert.match(element('invitePage').textContent, /^Page 2\./);
+  assert.equal(element('invitePrevious').disabled, false);
+  assert.ok(element('issuedInviteLink').value.endsWith('d'.repeat(43)));
+  const limited = ui.loadPage(100, 1);
+  respond(requests[4], { code: 'RATE_LIMITED', error: 'Wait' }, 429, { 'Retry-After': '30' });
+  await limited;
+  ui.close(); ui.open();
+  await ui.activate(true);
+  assert.equal(requests.length, 5);
+  assert.match(element('inviteListError').textContent, /rate limited/);
+  assert.equal(element('inviteRefresh').disabled, true);
+  advance(30000);
+  assert.equal(element('inviteRefresh').disabled, false);
+  assert.equal(ui.getAccount, originalFetch);
+});
+
+test('invitation settings hooks preserve rejected-close drafts and bind the current account generation', () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  new vm.Script(source, { filename: 'app.js' });
+  new vm.Script(fs.readFileSync(path.join(root, 'public/invitations.js'), 'utf8'), { filename: 'invitations.js' });
+  const guard = source.match(/dialog\.confirmClose = \(\) => \{[\s\S]*?\n  \};/)[0];
+  let allowClose = false;
+  let passwordsCleared = 0;
+  let invitationsCleared = 0;
+  const window = { invitationSettings: { close() { invitationsCleared++; } }, InvitationSettings: class { constructor(options) { this.getAccount = options.getAccount; } } };
+  const context = vm.createContext({ window, dialog: {}, confirmAccountDiscard: () => allowClose,
+    clearPasswordFields() { passwordsCleared++; }, authUser: { id: 11, isAdmin: true }, sessionGeneration: 1, el() {}, icon() {} });
+  vm.runInContext(guard, context);
+  assert.equal(context.dialog.confirmClose(), false);
+  assert.equal(invitationsCleared, 0);
+  assert.equal(passwordsCleared, 0);
+  allowClose = true;
+  assert.equal(context.dialog.confirmClose(), true);
+  assert.equal(invitationsCleared, 1);
+  assert.equal(passwordsCleared, 1);
+  const wiring = source.slice(source.indexOf('window.invitationSettings = new window.InvitationSettings('), source.indexOf("$('#profileModal').addEventListener('close', () => { if"));
+  vm.runInContext(wiring, context);
+  const first = window.invitationSettings.getAccount();
+  context.authUser = { id: 22, isAdmin: false };
+  context.sessionGeneration++;
+  assert.equal(first.id, 11);
+  assert.deepEqual(JSON.parse(JSON.stringify(window.invitationSettings.getAccount())), { id: 22, isAdmin: false, isGuest: false, generation: 2 });
+  assert.match(source, /if \(!\$\('#profileModal'\)\.open\) clearIssuedInvite\(\)/);
+  assert.match(source.slice(source.indexOf('function selectSettingsSection('), source.indexOf('async function openProfile(')), /invitationSettings\?\.activate\(section === 'admin'\)/);
+  assert.match(source.slice(source.indexOf('function resetSessionState('), source.indexOf('function showAuth(')), /clearIssuedInvite\(\)/);
+  assert.match(source.slice(source.indexOf('function updateProfileUI('), source.indexOf('async function loadProfileData(')), /invitationSettings\?\.syncAccount\(\)/);
+});
+
+test('invitation creation keeps allowed signups and offers seven-day default with native custom expiry', () => {
+  const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+  const form = html.slice(html.indexOf('<form id="inviteForm"'), html.indexOf('<div id="inviteResult"'));
+  assert.match(form, /Allowed signups<input id="inviteMaxUses"[^>]*min="1"[^>]*max="1000"/);
+  assert.match(form, /<select id="inviteLifetime"[^>]*aria-describedby="inviteTimezone"/);
+  for (const days of [1, 7, 30]) assert.match(form, new RegExp(`<option value="${days}"${days === 7 ? ' selected' : ''}>`));
+  assert.match(form, /<option value="custom">Custom date and time<\/option>/);
+  assert.match(form, /id="inviteCustomExpiry"[^>]*type="datetime-local"[^>]*disabled/);
 });
 
 test('invitation entry scrubs secrets before other scripts and never persists or previews them', async () => {
@@ -824,6 +2165,13 @@ test('invitation entry scrubs secrets before other scripts and never persists or
   await window.FocusTubeInvite.submit('/api/auth/register', { body: JSON.stringify({ email: 'test@example.com' }) });
   assert.equal(JSON.parse(requests[0].options.body).inviteToken, token);
   assert.equal(requests[0].endpoint.includes(token), false);
+  const controller = new AbortController();
+  await window.FocusTubeInvite.submit('/api/auth/username/check', { body: JSON.stringify({ username: 'candidate' }), signal: controller.signal });
+  assert.deepEqual(JSON.parse(requests[1].options.body), { username: 'candidate', inviteToken: token });
+  assert.equal(requests[1].options.signal, controller.signal);
+  assert.equal(requests[1].options.method, 'POST');
+  controller.abort();
+  assert.equal(requests[1].options.signal.aborted, true);
   listeners.get('pagehide')();
   assert.equal(window.FocusTubeInvite.has(), false);
   await assert.rejects(window.FocusTubeInvite.submit('/api/auth/register', { body: '{}' }));
@@ -867,6 +2215,7 @@ test('operator bootstrap is local-only, refuses an existing admin, and supports 
   const command = (...args) => spawnSync(process.execPath, [path.join(root, 'scripts/auth-admin.js'), ...args, '--data-dir', directory], { encoding: 'utf8' });
   const issued = command('bootstrap', '--origin', 'http://localhost:3101');
   assert.equal(issued.status, 0, issued.stderr);
+  assert.deepEqual(Object.keys(JSON.parse(issued.stdout)).sort(), ['database', 'id', 'expiresAt', 'maxUses', 'useCount', 'inviteUrl'].sort());
   const token = new URL(JSON.parse(issued.stdout).inviteUrl).hash.slice('#join='.length);
   assert.equal(authModule.validToken(token), true);
   store.redeemInvitation(registration(store, token));
@@ -997,7 +2346,8 @@ test('real member sessions isolate profile data, notebooks, imports, exports and
   const memberExport = await (await request('/api/export', { headers: { Cookie: memberCookie } })).json();
   assert.ok(memberExport.courses.secret);
   for (const endpoint of ['/api/data', '/api/export']) {
-    const response = await request(`${endpoint}?userId=${member.id}`, { headers: { Cookie: adminCookie, 'x-test-user': String(member.id) } });
+    const response = await request(`${endpoint}?userId=${member.id}`, { headers: { Cookie: adminCookie, 'x-test-user': String(member.id), 'X-Profile-Account': String(admin.id) } });
+    assert.equal(response.status, 200);
     assert.equal(JSON.stringify(await response.json()).includes('Private course'), false);
   }
   const adminNotes = await request('/api/notebooks/secret', { headers: { Cookie: adminCookie } });

@@ -1,23 +1,24 @@
 # FocusTube Invite-Only Authentication Specification
 
-Status: implemented and verified locally on port 3002. Release documentation updated 2026-09-15. Email delivery and optional CAPTCHA require configuration for each installation; local verification is not a hosted-deployment claim.
+Status: the earlier account baseline was verified locally on port 3002. The 2026-09-25 member-invitation lifecycle is implemented with 84 focused authentication/invitation checks reported passed by the implementation handoff; it is not claimed deployed or browser-verified here. Email delivery and optional CAPTCHA require configuration for each installation. Current V1 release evidence and remaining gates live in [v1-release.md](v1-release.md).
 
 ## Current Release
 
 | Action | Current behavior |
 | --- | --- |
-| Join | Requires an unexpired invitation with remaining uses, a verified six-digit email code, and matching password confirmation. A unique username is optional. |
+| Join | Requires an unexpired, unrevoked invitation with remaining uses, a verified six-digit email code, matching password confirmation, and a unique username. Format, availability, password length/strength, and confirmation feedback update during input. |
 | Sign in | Existing members use email or username and their password. No new invitation is needed. |
-| Invite someone | Active administrators choose 1-1,000 allowed signups per member invitation (default 1). The first administrator invitation remains single-use and comes only from the local operator command. |
+| Invite someone | Active administrators choose 1-1,000 signups (default 1) and 1/7/30 days or a custom future expiry (default 7 days, maximum 365 days). Existing dates/counts are unchanged. Bootstrap remains single-use/24-hour and local-operator-only. |
+| Manage invitations | Administrators list member links, edit expiry with revision checks, and revoke eligible links. Expired links need explicit reactivation; revoked/exhausted links cannot be revived. Raw links are copy-once and cannot be reconstructed. |
 | Edit an account | Settings saves display name and username. Adding or changing the username requires the current password. |
 | Change a password | Requires the current password and matching new-password confirmation; revokes old sessions and issues a replacement to the current browser atomically. |
 | Verify an existing account | Members retain access while unverified. Email verification requires a code and current password; no invented address or automatic verification is applied. |
 | Keep existing data | Migration preserves member identities and learning data. Existing guests may export or convert with an invitation; new guest creation is disabled. |
 | Configure protection | Exact origins, persistent rate limits, and per-user data checks apply on the backend. SMTP is required for new registration; Turnstile is optional for the operator. |
 
-Forgotten-password recovery, arbitrary email changes, invitation revocation in the UI, account deletion, and Google/GitHub OAuth are not implemented. Public Terms and Privacy are baseline notices that still need operator review.
+Forgotten-password recovery, arbitrary email changes, self-service account deletion, and Google/GitHub OAuth are not implemented. Public Terms and Privacy are baseline notices that still need operator review.
 
-For installation, use the [administrator setup](../README.md#administrator-setup), [email configuration](../README.md#email-verification-and-optional-captcha), and [deployment prerequisites](../README.md#review-and-deployment). Section 14 records the current email, account, and password extensions. Sections 1-13 retain the original inspection and design history; statements about missing features in those sections are not descriptions of the current release.
+For installation, use the [administrator setup](../README.md#administrator-setup), [email configuration](../README.md#email-verification-and-optional-captcha), and [deployment prerequisites](../README.md#review-and-deployment). Sections 14-17 record the email, account, invitation, and input-feedback extensions; section 17 is the current invitation lifecycle contract. Sections 1-13 retain the original inspection/design history, and section 15 describes the earlier reusable-link implementation. Their old 24-hour member expiry and no-revocation statements are historical, not current behavior. Ordinary auth/invitation routes retain same-origin protection; the separate, narrow extension-origin contract is documented in [v1-release.md](v1-release.md).
 
 ## Original Scope
 
@@ -396,6 +397,8 @@ The initial email tests used controlled delivery because local SMTP was not conf
 
 ## 15. Reusable Member Invitations
 
+Historical reusable-link extension (2026-09-15): section 17 supersedes this section's expiry, API-field, listing, and no-revocation restrictions while preserving signup-count enforcement.
+
 This extension supersedes the single-use-only member-invitation contract above. **Settings > Administration > Member invitations** includes an **Allowed signups** numeric input from 1 to 1,000, defaulting to 1. The Site monitoring control and other settings remain available. `POST /api/invites` accepts only optional `maxUses`; invalid types, fractions, zero, negative values, and values above 1,000 are rejected. Its response adds `maxUses` and initial `useCount: 0` to the existing ID, secret link, and expiry. The UI displays the selected limit and expiry, not invitation history or live usage.
 
 - `invitations.max_uses` and `use_count` are constrained integers. The additive transaction maps every old link to a limit of 1, with already-consumed links at count 1; reopening the database never resets counts. Bootstrap administrator invitations are constrained to one use in both the store and schema.
@@ -405,3 +408,57 @@ This extension supersedes the single-use-only member-invitation contract above. 
 - The link remains a bearer credential and uses the approved request origin. External onboarding requires the existing reachable HTTPS deployment; a localhost URL is not a public invitation. This feature does not add revocation, an invitation dashboard, a new delivery provider, or public network exposure.
 
 Back up the target database and deploy frontend/backend together. An older application image treats every invitation as single-use, so image rollback does not retain reusable-link behavior. Existing accounts, credentials, sessions, and learning records are not rewritten by this migration.
+
+## 16. Required Usernames and Immediate Password Feedback
+
+This extension supersedes the optional-new-username behavior in section 14. Both registration and legacy guest conversion require a 3-32-character username containing letters, numbers, dots, dashes, or underscores. The backend trims and lowercases it and preserves case-insensitive uniqueness. Existing username-less accounts remain supported; there is no account migration or automatic username assignment.
+
+- `POST /api/auth/username/check` accepts `{username,inviteToken}` from anonymous/guest visitors with an available invitation, or `{username}` from an active member. It returns only normalized `username` and boolean `available`, with no-store responses and the existing exact-Origin/JSON/body-size guards. The member's own name is available to that member; occupied names, including disabled accounts, are unavailable to others.
+- Availability has a separate persistent limit of 180 requests per source per 15 minutes so typing does not consume the signup/login source budget. Checks do not consume invitation uses, send email, or reserve a name. Final registration remains authoritative and returns `USERNAME_TAKEN` without consuming the invitation or email proof on a collision.
+- The form checks valid names immediately on input, cancels superseded requests, ignores stale responses, and waits for the current result before requesting a code or submitting registration. Invalid, taken, timeout, network-error, and rate-limit states remain distinct; failures never imply availability.
+- Signup, sign-in, and signup confirmation have independent, keyboard-labeled reveal/hide buttons with 44px touch targets. Values are preserved when toggled and masked on mode changes, submission, reset, and page exit.
+- Password length, advisory strength, and confirmation matching update synchronously on every input, including the first character, paste, and change events. Pinned, self-hosted zxcvbn runs locally; no strength-check request or password storage is added. Strength is an estimate, not a guarantee or a new complexity requirement. The existing 8-128-character backend policy and scrypt hashing are unchanged.
+
+Verification uses real-route security/transaction tests and isolated browser fixtures. Native Chromium touch and typing checks cover sign-in/signup in both themes at 320, 375, 768, 1024, and 1440 CSS pixels, plus per-character feedback, full-target reveal, username conflicts and retry, and masking after failed sign-in. Physical iOS/Safari, real inbox delivery, and live CAPTCHA are not claimed by these checks.
+
+## 17. Member Invitation Lifecycle V1
+
+Implemented contract as of **2026-09-25**. This supersedes earlier member-expiry, no-listing, and no-revocation restrictions, not invitation-only registration or the bootstrap boundary.
+
+### Lifetime and Administration
+
+- New member links default to server-now plus **seven days** when `expiresAt` is omitted. Settings offers **1 day / 7 days / 30 days / Custom date and time**, with seven selected. Custom input is displayed in the browser's stated timezone and submitted as canonical UTC `YYYY-MM-DDTHH:mm:ss.sssZ`. The returned expiry is authoritative.
+- Creation and expiry edits require a finite future timestamp no more than **365 days from that operation**; there is no never-expiring value. At `now >= expiresAt` a link is expired. Editing cannot move expiry before its creation.
+- Existing stored expiry dates, signup limits, and use counts are not automatically rewritten. `maxUses` remains 1-1,000, default 1; expiry edits never reset `useCount`, add places, or bypass workspace capacity. Only successful registration/conversion consumes a place.
+- **Issued invitations** lists Active, Expired, Exhausted, and Revoked member links, including expiry and used/remaining places. Refresh and cursor pagination do not expose secrets. Edit/Revoke operate on the current revision, so a concurrent edit or signup requires reloading stale details.
+- Extending an expired link with unused places requires the explicit **Reactivate** confirmation and `reactivate:true`. Revoked or exhausted links cannot be revived by expiry editing; create a new link. Revoke is available for active/expired, unexhausted member links, requires confirmation, and blocks future redemption without changing accounts already created.
+- Bootstrap administrator links remain **one signup / 24 hours**, issued only by the trusted local command when no active administrator exists. They cannot take a custom expiry and are excluded from browser list/edit/revoke operations. Redemption rechecks the active-administrator condition.
+
+### Current API
+
+All routes require a current active administrator. Mutation bodies remain bounded JSON with the exact web Origin; browser role/identity fields are rejected. The optional `X-Invite-Account` header binds the view to its displayed administrator and cannot grant authorization. Create/edit/revoke share the existing 20-attempt administrator budget per 15 minutes, in addition to source controls.
+
+| Method and route | Request | Result |
+| --- | --- | --- |
+| `POST /api/invites` | `{maxUses?,expiresAt?}` | `201`, safe metadata plus the **one-time** `inviteUrl`; `{}` means one signup/seven days. |
+| `GET /api/invites` | Optional `before` positive ID cursor and `limit` 1-50 (default 50) | `{invitations,nextCursor}`, newest IDs first, member links only. |
+| `PATCH /api/invites/:id` | `{expiresAt,revision,reactivate?}` | Updated metadata; expired links require `reactivate:true`. |
+| `DELETE /api/invites/:id` | `{revision}` | Revoked metadata; unused invitation-bound email proofs invalidated. This is revocation, not erasure of the record. |
+
+Safe metadata is `{id,createdAt,expiresAt,maxUses,useCount,remaining,status,revision}`. No list/edit/revoke response contains `inviteUrl`, a token, or a token hash. Only a SHA-256 token hash is stored, so a lost raw link cannot be reconstructed. Copy privately at creation; the existing fragment scrubbing and memory-only join-secret handling remain.
+
+Stale revisions return `INVITATION_CHANGED`; explicit reactivation is enforced with `INVITATION_REACTIVATION_REQUIRED`. Invalid expiry is `INVALID_INVITATION_EXPIRY`. Exhausted and revoked edits fail distinctly for administrators, while anonymous signup continues receiving the shared neutral invalid-invitation response. Missing/pruned member records cannot be edited back into existence.
+
+### Transactions and Retention
+
+The additive migration adds revocation/revision state without rewriting old dates or counts. Invitation IDs are monotonic across cleanup, avoiding stale links to reused administration IDs. Status precedence is Revoked, Exhausted, Expired, then Active. Availability requires a non-revoked, non-consumed link with remaining uses and future expiry, shared by preflight checks, email-proof issuance, and final redemption.
+
+Issue, expiry edit, revoke, and redemption revalidate authority inside immediate SQLite transactions. A final signup racing an expiry edit or revocation is governed by committed transaction order. Revocation deletes unused bound email challenges; final redemption also rechecks availability. Failed admission must not consume a proof/place or partially create an account. Existing `consumed_at < expires_at` constraints, signup counts, and member-cap enforcement remain intact.
+
+Periodic cleanup removes invitations whose expiry is at least **30 days old**. This is not a permanent invitation history; legacy pruned records and secrets cannot be recovered through the UI. Revocation prevents use immediately at authorization checks, regardless of eventual cleanup. Operator backups have separately managed retention.
+
+### Verification and Rollout
+
+On **2026-09-25**, all **84 focused authentication/invitation checks** passed, followed by **266 integrated tests on both host and built container**. An isolated Chromium/HTTPS run verified native create/seven-day default/expiry edit/revoke controls and desktop/mobile rendering with synthetic accounts. Real SMTP, CAPTCHA and hosted signup were not exercised; these local results do not certify provider configuration or the deployed instance.
+
+Before rollout, run the full release checks and populated-backup migration rehearsal, verify create/list/edit/reactivate/revoke and stale-view behavior in the actual browser, and preserve the target database, rate key, SMTP, proxy, ports, and volumes. Do not roll back to an older handler that ignores `revoked_at` or the new session/extension protections. The canonical evidence, remaining gates, and compatible-image rollback procedure are in [v1-release.md](v1-release.md).

@@ -19,6 +19,7 @@ const errors = {
   PASSWORD_MISMATCH: [400, 'Passwords do not match.'],
   PASSWORD_UNCHANGED: [400, 'Choose a new password that differs from your current password.'],
   PROFILE_PASSWORD_INVALID: [400, 'The current password is incorrect.'],
+  INVALID_USERNAME: [400, 'Choose a username with 3-32 letters, numbers, dots, dashes, or underscores.'],
   USERNAME_TAKEN: [409, 'This username is already taken. Try another.'],
   PROFILE_CHANGED: [409, 'Your account details changed in another session. Reopen settings and try again.'],
   INVALID_VERIFICATION: [400, 'The email code is invalid or expired. Request a new code if needed.'],
@@ -30,6 +31,13 @@ const errors = {
   CAPTCHA_UNAVAILABLE: [503, 'The security check is temporarily unavailable. Try again later.'],
   INVALID_INVITATION: [400, 'This invitation is invalid or unavailable.'],
   INVALID_INVITATION_LIMIT: [400, 'Allowed signups must be a whole number between 1 and 1,000.'],
+  INVALID_INVITATION_EXPIRY: [400, 'Use a future UTC expiry in YYYY-MM-DDTHH:mm:ss.sssZ format, no more than 365 days from now.'],
+  INVITATION_NOT_FOUND: [404, 'This member invitation was not found.'],
+  INVITATION_CHANGED: [409, 'This invitation changed. Refresh the list before trying again.'],
+  INVITATION_REVOKED: [409, 'This invitation was revoked. Create a new invitation.'],
+  INVITATION_EXHAUSTED: [409, 'This invitation has no signups remaining. Create a new invitation.'],
+  INVITATION_REACTIVATION_REQUIRED: [409, 'Confirm reactivation before extending an expired invitation.'],
+  UNSUPPORTED_MEDIA_TYPE: [415, 'Send account details as JSON.'],
   INVALID_CREDENTIALS: [401, 'Invalid email or password.'],
   UNAUTHENTICATED: [401, 'Sign in to continue.'],
   FORBIDDEN: [403, 'This action is not allowed.'],
@@ -101,6 +109,12 @@ function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 8 || password.length > 128) fail('INVALID_REQUEST');
 }
 
+function normalizeUsername(value) {
+  const username = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!USERNAME_RE.test(username)) fail('INVALID_USERNAME');
+  return username;
+}
+
 function loadRateSecret(dataDir) {
   const filename = path.join(dataDir, '.auth-rate-key');
   try {
@@ -116,7 +130,7 @@ function loadRateSecret(dataDir) {
 function respondError(error, req, res, _next) {
   const code = /^SQLITE_(BUSY|LOCKED|IOERR|FULL|READONLY|CANTOPEN|CORRUPT|NOTADB)/.test(error.code || '') ? 'AUTH_UNAVAILABLE' : error.code;
   const [status, message] = errors[code] || [500, 'Could not complete the account request.'];
-  const operation = ({ '/login': 'login', '/register': 'register', '/upgrade': 'upgrade', '/logout': 'logout', '/email': 'email', '/profile': 'profile', '/password': 'password', '/verification/request': 'verification', '/': 'invite' })[req.route?.path];
+  const operation = ({ '/login': 'login', '/register': 'register', '/upgrade': 'upgrade', '/logout': 'logout', '/email': 'email', '/profile': 'profile', '/password': 'password', '/verification/request': 'verification', '/': 'invite', '/:id': 'invite' })[req.route?.path];
   req.monitoring?.observe(operation, status === 429 ? 'limited' : status >= 500 ? 'failed' : 'rejected');
   if (/^SQLITE_/.test(error.code || '')) req.monitoring?.reportError(error);
   if (status === 503) res.set('Retry-After', '5');
@@ -162,7 +176,9 @@ function createAuth(store, options = {}) {
 
   function actionBudget(req, _res, next) {
     try {
-      if (req.method === 'POST') reserve(req, [{ key: budgetKey('auth-source', req.ip), limit: 100 }]);
+      if (['POST', 'PATCH', 'DELETE'].includes(req.method) && !(req.method === 'POST' && req.path === '/username/check')) {
+        reserve(req, [{ key: budgetKey('auth-source', req.ip), limit: 100 }]);
+      }
       next();
     } catch (error) { next(error); }
   }
@@ -208,6 +224,17 @@ function createAuth(store, options = {}) {
     emailVerification: { required: true, configured: services.emailConfigured }, captcha: { siteKey: services.captchaSiteKey } }));
   router.get('/me', requireSession, (req, res) => res.json({ user: store.publicUser(req.user) }));
 
+  router.post('/username/check', route((req, res) => {
+    reserve(req, [{ key: budgetKey('username-source', req.ip), limit: 180 }]);
+    validateBody(req.body, ['username', 'inviteToken']);
+    const member = req.user && !req.user.is_guest;
+    if (member ? Object.hasOwn(req.body, 'inviteToken') : !validToken(req.body.inviteToken)) fail('INVALID_INVITATION');
+    if (!member && !store.invitationAvailable(tokenHash(req.body.inviteToken))) fail('INVALID_INVITATION');
+    const username = normalizeUsername(req.body.username);
+    const owner = store.getUserByName(username);
+    res.json({ username, available: !owner || !!(member && owner.id === req.user.id) });
+  }));
+
   router.post('/verification/request', route(async (req, res) => {
     reserve(req, [{ key: budgetKey('verification-source', req.ip), limit: 5 }]);
     validateBody(req.body, ['email', 'inviteToken', 'captchaToken']);
@@ -240,9 +267,7 @@ function createAuth(store, options = {}) {
     validateBody(req.body, ['inviteToken', 'email', 'username', 'displayName', 'password', 'passwordConfirmation', 'verificationToken', 'verificationCode', 'captchaToken']);
     if (!validToken(req.body.inviteToken)) fail('INVALID_INVITATION');
     const email = normalizeEmail(req.body.email);
-    const username = req.body.username === undefined || req.body.username === '' ? null :
-      typeof req.body.username === 'string' ? req.body.username.trim().toLowerCase() : false;
-    if (username !== null && (typeof username !== 'string' || !USERNAME_RE.test(username))) fail('INVALID_REQUEST');
+    const username = normalizeUsername(req.body.username);
     const displayName = typeof req.body.displayName === 'string' ? req.body.displayName.trim() : '';
     if (!displayName || displayName.length > 80 || /[\u0000-\u001f\u007f-\u009f]/.test(displayName)) fail('INVALID_REQUEST');
     validatePassword(req.body.password);
@@ -281,7 +306,8 @@ function createAuth(store, options = {}) {
     const valid = await verifyPassword(req.body.password, eligible ? user : null);
     if (!eligible || !valid) fail('INVALID_CREDENTIALS');
     const token = crypto.randomBytes(32).toString('base64url');
-    const result = store.passwordSession({ user, sessionHash: tokenHash(token), sessionMs });
+    const result = store.passwordSession({ user, sessionHash: tokenHash(token), sessionMs,
+      onSessionReplaced: req.sessionHash && options.onSessionReplaced ? () => options.onSessionReplaced(req.sessionHash) : undefined });
     observe('login', 'success');
     setSessionCookie(req, res, token, result.expiresAt);
     res.json({ user: store.publicUser(result.user) });
@@ -345,19 +371,56 @@ function createAuth(store, options = {}) {
   }));
   router.use(respondError);
 
+  function invitationInteger(value) {
+    if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(Number(value))) fail('INVALID_REQUEST');
+    return Number(value);
+  }
+
   const invitesRouter = express.Router();
   invitesRouter.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
-  invitesRouter.use(optionalAuth, actionBudget);
-  invitesRouter.post('/', requireAuth, route((req, res) => {
-    if (!req.user.is_admin) fail('FORBIDDEN');
-    reserve(req, [{ key: budgetKey('invite-issuer', req.user.id), limit: 20 }]);
-    validateBody(req.body, ['maxUses']);
+  invitesRouter.use(optionalAuth, actionBudget, requireAuth);
+  invitesRouter.use((req, res, next) => {
+    try {
+      if (!req.user.is_admin) fail('FORBIDDEN');
+      const expectedAccount = req.get('X-Invite-Account');
+      if (expectedAccount !== undefined && expectedAccount !== String(req.user.id)) {
+        return res.status(409).json({ code: 'INVITATION_ACCOUNT_CHANGED', error: 'Your account changed. Reopen Administration before continuing.' });
+      }
+      res.set('X-Invite-Account', String(req.user.id));
+      if (['POST', 'PATCH', 'DELETE'].includes(req.method)) {
+        reserve(req, [{ key: budgetKey('invite-issuer', req.user.id), limit: 20 }]);
+        if (!req.is('application/json')) fail('UNSUPPORTED_MEDIA_TYPE');
+      }
+      next();
+    } catch (error) { next(error); }
+  });
+  invitesRouter.get('/', route((req, res) => {
+    validateBody(req.query, ['before', 'limit']);
+    res.json(store.listInvitations({ actorSessionHash: req.sessionHash,
+      beforeId: req.query.before === undefined ? null : invitationInteger(req.query.before),
+      limit: req.query.limit === undefined ? 50 : invitationInteger(req.query.limit) }));
+  }));
+  invitesRouter.post('/', route((req, res) => {
+    validateBody(req.body, ['maxUses', 'expiresAt']);
     const maxUses = req.body.maxUses === undefined ? 1 : req.body.maxUses;
     if (!Number.isSafeInteger(maxUses) || maxUses < 1 || maxUses > 1000) fail('INVALID_INVITATION_LIMIT');
     const token = crypto.randomBytes(32).toString('base64url');
-    const result = store.issueInvitation({ tokenHash: tokenHash(token), actorSessionHash: req.sessionHash, maxUses });
+    const result = store.issueInvitation({ tokenHash: tokenHash(token), actorSessionHash: req.sessionHash, maxUses, expiresAt: req.body.expiresAt });
     observe('invite', 'success');
     res.status(201).json({ ...result, inviteUrl: `${req.authOrigin}/#join=${token}` });
+  }));
+  invitesRouter.patch('/:id', route((req, res) => {
+    validateBody(req.body, ['expiresAt', 'revision', 'reactivate']);
+    const result = store.updateInvitation({ actorSessionHash: req.sessionHash, id: invitationInteger(req.params.id),
+      expiresAt: req.body.expiresAt, revision: req.body.revision, reactivate: req.body.reactivate });
+    observe('invite', 'success');
+    res.json(result);
+  }));
+  invitesRouter.delete('/:id', route((req, res) => {
+    validateBody(req.body, ['revision']);
+    const result = store.revokeInvitation({ actorSessionHash: req.sessionHash, id: invitationInteger(req.params.id), revision: req.body.revision });
+    observe('invite', 'success');
+    res.json(result);
   }));
   invitesRouter.use(respondError);
 

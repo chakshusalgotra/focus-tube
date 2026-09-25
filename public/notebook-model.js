@@ -148,6 +148,39 @@
     return fromLines(blocks);
   }
 
+  function generatedBlocks(proposal) {
+    if (!proposal || !/^p_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(proposal.id) ||
+        !validId(proposal.courseId) || !/^[A-Za-z0-9_-]{11}$/.test(proposal.videoId || '') || !/^[a-f0-9]{64}$/.test(proposal.sourceHash || '') ||
+        !Array.isArray(proposal.blocks) || !proposal.blocks.length || proposal.blocks.length > 12) throw new Error('The note preview is invalid. Reload chat.');
+    let length = 0;
+    const blocks = proposal.blocks.flatMap((block, index) => {
+      if (!block || !['paragraph', 'heading'].includes(block.kind) || typeof block.text !== 'string' || !block.text.trim() || block.text.length > 4000 ||
+          (length += block.text.length) > 16000 || block.text.includes('\u0000') ||
+          !Array.isArray(block.segmentIds) || block.segmentIds.length > 8 || block.segmentIds.some(id => typeof id !== 'string' || !/^s[1-9]\d{0,4}$/.test(id)) ||
+          !Array.isArray(block.messageIds) || block.messageIds.length > 8 || block.messageIds.some(id => typeof id !== 'string' || !/^[a-f0-9-]{36}$/.test(id)) ||
+          (block.seconds !== null && (!hasTime(block.seconds) || block.seconds > 14400 || !block.segmentIds.length || block.kind === 'heading')) ||
+          (block.kind === 'paragraph' && !block.segmentIds.length && !block.messageIds.length)) throw new Error('The note preview has invalid text or source references.');
+      return block.text.replace(/\r\n?/g, '\n').split('\n').map((text, line) => ({ ops: text ? [{ insert: text }] : [], attributes: {
+        blockId: `${proposal.id}_${index}_${line}`, ...(block.kind === 'heading' ? { header: 2 } : {}),
+        ...(block.seconds === null ? {} : { anchorSeconds: block.seconds }),
+      } }));
+    });
+    validate(fromLines(blocks));
+    return blocks;
+  }
+
+  function generatedStatus(document, proposal, blocks = generatedBlocks(proposal)) {
+    const existing = lines(document).filter(block => block.attributes.blockId?.startsWith(proposal.id + '_'));
+    if (!existing.length) return 'absent';
+    const expected = new Map(blocks.map(block => [block.attributes.blockId, block]));
+    if (existing.length !== blocks.length || existing.some(block => {
+      const target = expected.get(block.attributes.blockId);
+      return !target || JSON.stringify(block.ops) !== JSON.stringify(target.ops) ||
+        Object.keys({ ...target.attributes, ...block.attributes }).some(key => target.attributes[key] !== block.attributes[key]);
+    })) throw new Error('Part of this preview is already in the note or has been edited. Review Notes before adding it again.');
+    return 'present';
+  }
+
   function sourceUrl(videoId, seconds) {
     if (!/^[A-Za-z0-9_-]{11}$/.test(videoId || '')) return null;
     const url = new URL('https://www.youtube.com/watch');
@@ -214,5 +247,5 @@
     }).filter(block => block !== null).join('\n\n');
   }
 
-  return { MAX_BYTES, MAX_PROFILE_BYTES, MAX_DOCUMENTS, empty, bytes, hasTime, validId, safeLink, lines, fromLines, validate, validateRecords, anchorChanges, sourceUrl, escapeMarkdown, markdown };
+  return { MAX_BYTES, MAX_PROFILE_BYTES, MAX_DOCUMENTS, empty, bytes, hasTime, validId, safeLink, lines, fromLines, validate, validateRecords, anchorChanges, generatedBlocks, generatedStatus, sourceUrl, escapeMarkdown, markdown };
 });

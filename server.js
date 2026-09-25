@@ -10,6 +10,9 @@ const { createFeedback } = require('./feedback');
 const { createDownloads } = require('./downloads');
 const { createSearchRequest, parseSearchResults } = require('./youtube-search');
 const noteModel = require('./public/notebook-model');
+const { createVideoChat } = require('./video-chat');
+const { validateChatBackup } = require('./video-chat-store');
+const { createExtension } = require('./extension');
 const { createObservability } = require('./observability');
 
 const app = express();
@@ -81,6 +84,7 @@ app.use('/api', (req, res, next) => {
   if (!publicOrigins.has(expected)) return res.status(403).json({ error: 'This connection is not approved for account access.', code: 'UNAPPROVED_ORIGIN' });
   req.authOrigin = expected;
   if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) return next();
+  if (extension.isAllowedRequest(req)) return next();
   const origin = req.get('origin');
   try {
     if (!origin || new URL(origin).origin !== origin || origin !== expected) {
@@ -92,20 +96,25 @@ app.use('/api', (req, res, next) => {
   next();
 });
 app.use(['/api/auth', '/api/invites'], (req, res, next) => {
-  if (req.method !== 'POST') return next();
+  if (!['POST', 'PATCH', 'DELETE'].includes(req.method)) return next();
   const bodylessLogout = req.originalUrl.split('?')[0] === '/api/auth/logout' && !req.get('transfer-encoding') && !Number(req.get('content-length') || 0);
   if (!bodylessLogout && !req.is('application/json')) return res.status(415).json({ error: 'Send account details as JSON.', code: 'UNSUPPORTED_MEDIA_TYPE' });
   next();
 }, express.json({ limit: '8kb' }));
+app.use('/api/extension', express.json({ limit: '8kb' }));
 app.use('/api/import', express.json({ limit: '25mb' }));
 app.use('/api/notebooks', express.json({ limit: '300kb' }));
+app.use('/api/video-chat', express.json({ limit: '2mb' }));
 app.use(['/api/feedback', '/api/admin/feedback'], (req, res, next) => feedback.parseBody(req, res, next));
 app.use(express.json({ limit: '3mb' }));
 
-const auth = createAuth(store, { observe: monitoring.observe });
+const auth = createAuth(store, { observe: monitoring.observe, onSessionReplaced: sessionHash => extension.revokeSession(sessionHash) });
+const extension = createExtension(store, auth, { environment: process.env, fetchVideo });
 app.use('/api/auth', auth.router);
 app.use('/api/invites', auth.invitesRouter);
 app.use('/api', auth.optionalAuth);
+app.use('/api/extension', extension.router);
+app.use('/api/video-chat', createVideoChat(store, auth).router);
 const feedback = createFeedback(store, auth, { environment: process.env, observe: monitoring.observe });
 app.use('/api/feedback', feedback.router);
 app.use('/api/admin/feedback', feedback.adminRouter);
@@ -189,6 +198,9 @@ app.get('/vendor/quill.css', (_req, res) =>
 );
 app.get('/vendor/lucide.js', (_req, res) =>
   res.sendFile(path.join(__dirname, 'node_modules/lucide/dist/umd/lucide.min.js'))
+);
+app.get('/vendor/zxcvbn.js', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'node_modules/zxcvbn/dist/zxcvbn.js'))
 );
 app.use('/vendor/fonts/plex', express.static(path.join(__dirname, 'node_modules/@fontsource/ibm-plex-sans')));
 app.use('/vendor/fonts/manrope', express.static(path.join(__dirname, 'node_modules/@fontsource-variable/manrope')));
@@ -494,20 +506,42 @@ async function fetchPlaylist(playlistId) {
   };
 }
 
-async function fetchWatchHtml(videoId) {
+async function readVideoResponse(response, signal, maximumBytes = 8 * 1024 * 1024) {
+  if (!response.ok) throw new HttpError(502, `YouTube responded with status ${response.status}.`);
+  if (Number(response.headers.get('content-length') || 0) > maximumBytes) throw new HttpError(502, 'YouTube metadata is too large.');
+  const chunks = [];
+  let bytes = 0;
+  try {
+    for await (const chunk of response.body) {
+      signal.throwIfAborted();
+      bytes += chunk.byteLength;
+      if (bytes > maximumBytes) throw new HttpError(502, 'YouTube metadata is too large.');
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    if (!response.body?.locked) await response.body?.cancel().catch(() => {});
+    throw error;
+  }
+  signal.throwIfAborted();
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+async function fetchWatchHtml(videoId, { signal = AbortSignal.timeout(15000) } = {}) {
+  if (!VIDEO_ID_RE.test(videoId)) throw new HttpError(400, 'Invalid video.');
   const res = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}&hl=en`, {
+    signal,
+    redirect: 'error',
     headers: {
       'user-agent': UA,
       'accept-language': 'en-US,en;q=0.9',
       cookie: 'CONSENT=YES+cb; SOCS=CAI',
     },
   });
-  if (!res.ok) throw new HttpError(502, `YouTube responded with status ${res.status}.`);
-  return res.text();
+  return readVideoResponse(res, signal);
 }
 
-async function fetchVideo(videoId) {
-  const html = await fetchWatchHtml(videoId);
+async function fetchVideo(videoId, { signal = AbortSignal.timeout(15000) } = {}) {
+  const html = await fetchWatchHtml(videoId, { signal });
   const pr =
     extractJson(html, 'var ytInitialPlayerResponse = ') ||
     extractJson(html, 'window["ytInitialPlayerResponse"] = ');
@@ -524,10 +558,10 @@ async function fetchVideo(videoId) {
       `https://www.youtube.com/oembed?url=${encodeURIComponent(
         'https://www.youtube.com/watch?v=' + videoId
       )}&format=json`,
-      { headers: { 'user-agent': UA } }
+      { headers: { 'user-agent': UA }, signal, redirect: 'error' }
     );
     if (oe.ok) {
-      const j = await oe.json();
+      const j = JSON.parse(await readVideoResponse(oe, signal, 256 * 1024));
       title = j.title || '';
       author = author || j.author_name || '';
     }
@@ -626,13 +660,13 @@ function profileSnapshot(value) {
 }
 
 function importedExport(value) {
-  if (value?.schema !== 'focustube-user-export' || ![1, 2].includes(value?.schemaVersion)) {
-    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1 or 2).');
+  if (value?.schema !== 'focustube-user-export' || ![1, 2, 3].includes(value?.schemaVersion)) {
+    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1, 2 or 3).');
   }
   const snapshot = profileSnapshot(value);
   let notebooks;
   try {
-    notebooks = noteModel.validateRecords(value.schemaVersion === 2 ? value.notebooks : []);
+    notebooks = noteModel.validateRecords(value.schemaVersion >= 2 ? value.notebooks : []);
   } catch (err) {
     throw new HttpError(400, err.message);
   }
@@ -689,10 +723,19 @@ function importedExport(value) {
   const downloadQuality = allowedQualities.has(value.profile?.downloadQuality)
     ? value.profile.downloadQuality
     : null;
-  return { ...snapshot, notebooks, dailyActivity, watchHistory, downloadQuality };
+  const videoChats = validateChatBackup(value.schemaVersion >= 3 ? value.videoChats : []);
+  return { ...snapshot, notebooks, videoChats, dailyActivity, watchHistory, downloadQuality };
 }
 
 /* ---------- routes ---------- */
+
+app.use('/api/notebooks', (req, res, next) => {
+  const expectedAccount = req.get('X-Notebook-Account');
+  if (req.user && expectedAccount !== undefined && expectedAccount !== String(req.user.id)) {
+    return res.status(409).json({ code: 'SESSION_CHANGED', error: 'Your account changed. Reload before saving notes.' });
+  }
+  next();
+});
 
 app.get('/api/notebooks', auth.requireAuth, (req, res) => {
   res.json(store.getNotebooks(req.user.id));
@@ -724,11 +767,19 @@ app.delete('/api/notebooks/:courseId', auth.requireAuth, (req, res) => {
   res.json(result);
 });
 
-app.get('/api/data', auth.requireAuth, (req, res) => {
+function requireProfileAccount(req, res, next) {
+  if (req.get('X-Profile-Account') !== String(req.user.id)) {
+    return res.status(409).json({ code: 'SESSION_CHANGED', error: 'Your account changed. Reload before accessing your library.' });
+  }
+  next();
+}
+
+app.get('/api/data', auth.requireAuth, requireProfileAccount, (req, res) => {
   res.json(store.getUserData(req.user.id));
 });
 
 app.get('/api/export', auth.requireSession, (req, res) => {
+  if (store.chat.hasPending(req.user.id)) return res.status(409).json({ error: 'Wait for pending video chat requests before exporting.' });
   const date = new Date().toISOString().slice(0, 10);
   const owner = String(req.user.username || `guest-${req.user.id}`)
     .replace(/[^a-zA-Z0-9_.-]/g, '-')
@@ -741,11 +792,13 @@ app.post('/api/import', auth.requireAuth, (req, res) => {
   try {
     const revision = Number(req.query.revision);
     const notesRevision = Number(req.query.notesRevision);
+    const chatRevision = Number(req.query.chatRevision ?? 0);
     if (!Number.isInteger(revision) || revision < 0) throw new HttpError(400, 'A profile revision is required.');
     if (!Number.isSafeInteger(notesRevision) || notesRevision < 0) throw new HttpError(400, 'A notebook revision is required. Reload before importing.');
-    const nextRevision = store.importUserData(req.user.id, importedExport(req.body), revision, notesRevision);
+    if (!Number.isSafeInteger(chatRevision) || chatRevision < 0) throw new HttpError(400, 'A chat revision is required. Reload before importing.');
+    const nextRevision = store.importUserData(req.user.id, importedExport(req.body), revision, notesRevision, chatRevision);
     if (nextRevision === null) {
-      return res.status(409).json({ error: 'Progress or notes changed in another tab. Try importing again.' });
+      return res.status(409).json({ error: 'Progress, notes or chat changed, or an answer is pending. Try importing again.' });
     }
     res.json({ ok: true, revision: nextRevision, user: store.publicUser(store.getUserById(req.user.id)) });
   } catch (err) {
@@ -754,7 +807,7 @@ app.post('/api/import', auth.requireAuth, (req, res) => {
   }
 });
 
-app.put('/api/data', auth.requireAuth, (req, res) => {
+app.put('/api/data', auth.requireAuth, requireProfileAccount, (req, res) => {
   try {
     const { courses, stats, settings, workspace } = profileSnapshot(req.body);
     const revision = Number(req.body?.revision);
