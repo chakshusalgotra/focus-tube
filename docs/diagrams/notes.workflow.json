@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Notes save and recovery",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "save", "label": "Edit to acknowledged save", "focus": ["edit", "draft", "send", "revision", "saved"], "note": "Saved is shown only after the notebook API acknowledges the revision-checked write." },
+      { "id": "conflict", "label": "Conflict recovery", "focus": ["revision", "conflict", "choice"], "note": "A stale revision returns the current record; the local draft survives for an explicit choice." }
+    ]
+  },
+  "lanes": [
+    { "id": "editor", "label": "Browser notebook" },
+    { "id": "api", "label": "Notebook API / SQLite" },
+    { "id": "recovery", "label": "Recovery", "variant": "exception" }
+  ],
+  "mainPath": ["edit", "draft", "send", "revision", "saved"],
+  "nodes": [
+    { "id": "edit", "lane": "editor", "col": 0, "type": "frontend", "label": "Edit in Quill", "sublabel": "Keep source-time anchors", "width": 170 },
+    { "id": "draft", "lane": "editor", "col": 1, "type": "frontend", "label": "Keep recovery draft", "sublabel": "Account / tab / video", "width": 180 },
+    { "id": "send", "lane": "api", "col": 2, "type": "backend", "label": "Debounced save", "sublabel": "Document and revision", "width": 170 },
+    { "id": "revision", "lane": "api", "col": 3, "type": "security", "label": "Check owner + CAS", "sublabel": "Validate document bounds", "width": 180 },
+    { "id": "saved", "lane": "editor", "col": 4, "type": "frontend", "label": "Show Saved", "sublabel": "Server acknowledgement", "width": 170 },
+    { "id": "conflict", "lane": "recovery", "col": 3, "type": "security", "label": "Keep both versions", "sublabel": "Local draft + saved record", "width": 180 },
+    { "id": "choice", "lane": "recovery", "col": 4, "type": "frontend", "label": "Resolve explicitly", "sublabel": "Keep draft or use saved", "width": 180 }
+  ],
+  "edges": [
+    { "id": "local-change", "from": "edit", "to": "draft", "label": "Local edit", "variant": "emphasis" },
+    { "id": "save-request", "from": "draft", "to": "send", "label": "800 ms debounce", "variant": "emphasis" },
+    { "id": "validate-write", "from": "send", "to": "revision", "label": "PUT note", "variant": "security" },
+    { "id": "save-ack", "from": "revision", "to": "saved", "label": "Commit + ack", "variant": "emphasis" },
+    { "id": "stale-note", "from": "revision", "to": "conflict", "label": "409 conflict", "variant": "security", "role": "error" },
+    { "id": "resolve-conflict", "from": "conflict", "to": "choice", "label": "Choose version", "role": "branch" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Preserve the document", "items": ["AI output needs a completed answer, an editable preview and explicit Append to notes.", "Read, Markdown and print retain source links; panel changes preserve editor state."] },
+    { "dot": "rose", "title": "Recovery is not success", "items": ["Network errors retain a recovery draft and retry path.", "Deleting a notebook preserves revision markers so stale tabs cannot restore removed content."] }
+  ]
+}

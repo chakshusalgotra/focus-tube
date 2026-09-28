@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "From discovery to learning progress",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "discovery", "label": "Find and save a course", "focus": ["discover", "metadata", "library"], "note": "Keyword search and pasted URLs resolve metadata before the account-bound profile save." },
+      { "id": "study", "label": "Watch and review", "focus": ["library", "player", "progress", "review"], "note": "Playback, progress persistence and batched activity feed the learning dashboard and exports." }
+    ]
+  },
+  "lanes": [
+    { "id": "browser", "label": "Learning workspace" },
+    { "id": "server", "label": "Express handlers" },
+    { "id": "data", "label": "Account-owned data" }
+  ],
+  "mainPath": ["discover", "metadata", "library", "player", "progress", "review"],
+  "nodes": [
+    { "id": "discover", "lane": "browser", "col": 0, "type": "frontend", "label": "Search or paste URL", "sublabel": "Video or playlist", "width": 180 },
+    { "id": "metadata", "lane": "server", "col": 1, "type": "backend", "label": "Resolve metadata", "sublabel": "Public YouTube endpoints", "width": 180 },
+    { "id": "library", "lane": "data", "col": 2, "type": "database", "label": "Save to Library", "sublabel": "Account and revision bound", "width": 180 },
+    { "id": "player", "lane": "browser", "col": 3, "type": "frontend", "label": "Watch a lesson", "sublabel": "Official YouTube embed", "width": 180 },
+    { "id": "progress", "lane": "server", "col": 4, "type": "backend", "label": "Persist learning", "sublabel": "Progress + activity batches", "width": 180 },
+    { "id": "review", "lane": "browser", "col": 5, "type": "frontend", "label": "Review or export", "sublabel": "Dashboard, plans, backup", "width": 180 }
+  ],
+  "edges": [
+    { "id": "resolve", "from": "discover", "to": "metadata", "label": "Search / import", "variant": "emphasis" },
+    { "id": "profile-save", "from": "metadata", "to": "library", "label": "PUT profile", "variant": "security" },
+    { "id": "open-course", "from": "library", "to": "player", "label": "Open course", "variant": "emphasis" },
+    { "id": "record", "from": "player", "to": "progress", "label": "Save + track", "variant": "emphasis" },
+    { "id": "read-progress", "from": "progress", "to": "review", "label": "Read own data", "variant": "emphasis" }
+  ]
+}

@@ -575,15 +575,20 @@ function issueInvitation(values) {
   return issueInvitationTx.immediate(values);
 }
 
-function listInvitations({ actorSessionHash, beforeId = null, limit = 50 }) {
+function listInvitations({ actorSessionHash, beforeId = null, limit = 50, status = 'all' }) {
   return db.transaction(() => {
     const timestamp = now();
     invitationAdmin(actorSessionHash, timestamp);
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50 ||
-        (beforeId !== null && (!Number.isSafeInteger(beforeId) || beforeId < 1))) throw authFailure('INVALID_REQUEST');
+        (beforeId !== null && (!Number.isSafeInteger(beforeId) || beforeId < 1)) ||
+        !['all', 'active', 'expired', 'exhausted', 'revoked'].includes(status)) throw authFailure('INVALID_REQUEST');
     const rows = db.prepare(`SELECT id, created_at, expires_at, max_uses, use_count, consumed_at, revoked_at, revision
-      FROM invitations WHERE is_admin = 0 AND id <= ? ORDER BY id DESC LIMIT ?`)
-      .all(beforeId === null ? Number.MAX_SAFE_INTEGER : beforeId - 1, limit + 1);
+      FROM invitations WHERE is_admin = 0 AND id <= @before AND (@status = 'all' OR
+        CASE WHEN revoked_at IS NOT NULL THEN 'revoked'
+          WHEN consumed_at IS NOT NULL OR use_count >= max_uses THEN 'exhausted'
+          WHEN expires_at <= @timestamp THEN 'expired' ELSE 'active' END = @status)
+      ORDER BY id DESC LIMIT @limit`)
+      .all({ before: beforeId === null ? Number.MAX_SAFE_INTEGER : beforeId - 1, limit: limit + 1, status, timestamp });
     return { invitations: rows.slice(0, limit).map(row => invitationMetadata(row, timestamp)),
       nextCursor: rows.length > limit ? rows[limit - 1].id : null };
   }).deferred();
@@ -737,6 +742,7 @@ const redeemInvitationTx = db.transaction(values => {
   const expiresAt = new Date(Date.parse(createdAt) + values.sessionMs).toISOString();
   stmts.createSession.run(values.sessionHash, userId, createdAt, expiresAt);
   recordAuthEvent(userId, guest ? 'upgrade' : 'register', createdAt);
+  analytics.saveOnboarding(userId, values.onboarding);
   return { user: stmts.userById.get(userId), expiresAt };
 });
 
@@ -849,7 +855,7 @@ function issuePresenceChallenge(sessionHash, tabId, challengeHash, timestamp = D
   }).immediate();
 }
 
-function confirmPresence(sessionHash, tabId, challengeHash, timestamp = Date.now()) {
+function confirmPresence(sessionHash, tabId, challengeHash, timestamp = Date.now(), watching = false) {
   return db.transaction(() => {
     const activeAt = new Date(timestamp).toISOString();
     const user = presenceUser(sessionHash, activeAt);
@@ -860,11 +866,14 @@ function confirmPresence(sessionHash, tabId, challengeHash, timestamp = Date.now
     db.prepare(`INSERT INTO user_usage (user_id, last_active_at) VALUES (?, ?)
       ON CONFLICT(user_id) DO UPDATE SET last_active_at = excluded.last_active_at`).run(user.id, activeAt);
     db.prepare('INSERT OR IGNORE INTO usage_days (user_id, date) VALUES (?, ?)').run(user.id, activeAt.slice(0, 10));
+    analytics.capture('activity', user.id, watching, timestamp);
   }).immediate();
 }
 
 function clearPresence(sessionHash, tabId) {
   db.prepare('UPDATE presence_leases SET challenge_hash = NULL, last_active_at = NULL WHERE session_hash = ? AND tab_id = ?').run(sessionHash, tabId);
+  const session = db.prepare('SELECT user_id FROM sessions WHERE token_hash=?').get(sessionHash);
+  if (session) analytics.capture('stop', session.user_id);
 }
 
 function getUsageCounts(timestamp = Date.now()) {
@@ -881,27 +890,41 @@ function getUsageCounts(timestamp = Date.now()) {
   return { activeNow, activeToday, activeWeek, members };
 }
 
-function getAdminUsage(page = 1, timestamp = Date.now()) {
+function getAdminUsage(page = 1, timestamp = Date.now(), filters = {}) {
+  const { query = '', role = 'all', activity = 'all', sort = 'activity', event = 'all', days = 30 } = filters;
+  if (typeof query !== 'string' || query.length > 100 || !['all', 'admin', 'member'].includes(role) ||
+    !['all', 'active', 'idle', 'disabled'].includes(activity) || !['activity', 'name', 'newest'].includes(sort) ||
+    !['all', 'login', 'register', 'upgrade', 'email', 'logout'].includes(event) || ![1, 7, 30].includes(days)) throw authFailure('INVALID_REQUEST');
   const current = new Date(timestamp).toISOString();
   const cutoff = new Date(timestamp - 5 * 60000).toISOString();
   const counts = getUsageCounts(timestamp);
   const totalUsers = db.prepare("SELECT count(*) AS count FROM users WHERE is_guest = 0 AND account_state != 'deleted'").get().count;
-  const users = db.prepare(`SELECT u.id, u.username, u.account_state AS accountState, u.is_admin AS isAdmin,
+  const memberQuery = `FROM (SELECT u.id, u.username, u.account_state AS accountState, u.is_admin AS isAdmin,
     usage.last_login_at AS lastLoginAt, usage.last_active_at AS lastActiveAt,
     EXISTS(SELECT 1 FROM presence_leases p JOIN sessions s ON s.token_hash = p.session_hash
-      WHERE s.user_id = u.id AND s.expires_at > ? AND p.last_active_at > ? AND u.account_state = 'active') AS active
-    FROM users u LEFT JOIN user_usage usage ON usage.user_id = u.id WHERE u.is_guest = 0 AND u.account_state != 'deleted'
-    ORDER BY active DESC, usage.last_active_at DESC, u.id DESC LIMIT 25 OFFSET ?`).all(current, cutoff, (page - 1) * 25);
+      WHERE s.user_id = u.id AND s.expires_at > @current AND p.last_active_at > @cutoff AND u.account_state = 'active') AS active
+    FROM users u LEFT JOIN user_usage usage ON usage.user_id = u.id WHERE u.is_guest = 0 AND u.account_state != 'deleted')
+    WHERE (@query = '' OR instr(lower(COALESCE(username, '') || ' ' || id), @query) > 0)
+      AND (@role = 'all' OR isAdmin = CASE WHEN @role = 'admin' THEN 1 ELSE 0 END)
+      AND (@activity = 'all' OR CASE WHEN accountState = 'disabled' THEN 'disabled' WHEN active THEN 'active' ELSE 'idle' END = @activity)`;
+  const parameters = { current, cutoff, query: query.trim().toLowerCase(), role, activity };
+  const filteredUsers = db.prepare(`SELECT count(*) AS count ${memberQuery}`).get(parameters).count;
+  const pages = Math.max(1, Math.ceil(filteredUsers / 25));
+  page = Math.min(page, pages);
+  const order = { activity: 'active DESC, lastActiveAt DESC, id DESC', name: "COALESCE(username, '') COLLATE NOCASE, id DESC", newest: 'id DESC' }[sort];
+  const users = db.prepare(`SELECT * ${memberQuery} ORDER BY ${order} LIMIT 25 OFFSET @offset`).all({ ...parameters, offset: (page - 1) * 25 });
   const daily = db.prepare(`SELECT date, count(*) AS users FROM usage_days JOIN users ON users.id = user_id
     WHERE date >= ? AND users.account_state != 'deleted' GROUP BY date ORDER BY date`)
     .all(new Date(timestamp - 29 * 86400000).toISOString().slice(0, 10));
   const events = db.prepare(`SELECT a.id, a.user_id AS userId, u.username, a.event, a.created_at AS createdAt
     FROM auth_audit a JOIN users u ON u.id = a.user_id WHERE a.created_at >= ? AND u.account_state != 'deleted'
-    ORDER BY a.id DESC LIMIT 30`).all(new Date(timestamp - 30 * 86400000).toISOString());
-  return { ...counts, totalUsers, page, pages: Math.max(1, Math.ceil(totalUsers / 25)), users, daily, events, generatedAt: current };
+      AND (? = 'all' OR a.event = ?)
+    ORDER BY a.id DESC LIMIT 30`).all(new Date(timestamp - days * 86400000).toISOString(), event, event);
+  return { ...counts, totalUsers, filteredUsers, page, pages, users, daily, events, generatedAt: current };
 }
 
-const chat = require(path.join(__dirname, 'video-chat-store')).createChatStore(db);
+const analytics = require(path.join(__dirname, 'analytics-store')).createAnalyticsStore(db, { clock: () => Date.now() });
+const chat = require(path.join(__dirname, 'video-chat-store')).createChatStore(db, userId => analytics.capture('chat', userId));
 
 function getUserData(userId) {
   stmts.createData.run(userId, now());
@@ -978,6 +1001,7 @@ const saveNote = db.transaction((userId, courseId, videoId, document, expectedRe
     document: serialized, updatedAt: now(),
   });
   stmts.bumpNotes.run(userId);
+  if (serialized && serialized !== row?.document_json) analytics.capture('notes', userId);
   return { record: noteRecord(stmts.noteByKey.get(userId, courseId, videoId)), notesRevision: data.notesRevision + 1 };
 });
 
@@ -1018,6 +1042,7 @@ function importLegacyRows(userId, courses, stats) {
 
 const saveUserDataTx = db.transaction(
   (userId, { courses = {}, stats = {}, settings = {}, workspace = {} }, expectedRevision, importLegacy) => {
+  const previousCourses = !importLegacy ? parseJson(stmts.dataByUser.get(userId)?.courses_json, {}) : {};
   const result = stmts.saveData.run({
     userId,
     courses: JSON.stringify(courses),
@@ -1029,6 +1054,7 @@ const saveUserDataTx = db.transaction(
   });
   if (!result.changes) return null;
     if (importLegacy) importLegacyRows(userId, courses, stats);
+  if (!importLegacy && Object.keys(courses).some(key => !Object.hasOwn(previousCourses, key))) analytics.capture('course', userId);
   return Number(stmts.dataByUser.get(userId).revision);
   }
 );
@@ -1250,7 +1276,7 @@ const getExportData = db.transaction(userId => {
   }));
   return {
     schema: 'focustube-user-export',
-    schemaVersion: 3,
+    schemaVersion: 4,
     exportedAt: now(),
     profile: publicUser(user),
     courses: data.courses,
@@ -1507,6 +1533,7 @@ function moderateFeedbackReply(sessionHash, threadId, replyId, input) {
 }
 
 function cleanup() {
+  analytics.cleanup();
   const cutoff = new Date(Date.now() - 90 * 86400000).toISOString();
   const batchCutoff = new Date(Date.now() - 30 * 86400000).toISOString();
   stmts.cleanupSessions.run(now());
@@ -1529,6 +1556,7 @@ function importLegacyData(userId, courses, stats) {
 cleanup();
 
 module.exports = {
+  analytics,
   chat,
   db,
   dataDir,

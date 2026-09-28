@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Feedback with private screenshots",
+    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "views": [
+      { "id": "report", "label": "Report and screenshots", "focus": ["draft", "validation", "commit"], "note": "Public reports require consent; normalized screenshots and parent records commit together." },
+      { "id": "moderation", "label": "Read, reply and moderate", "focus": ["commit", "discussion", "moderate"], "note": "Every thread and image read rechecks access; status, locking and visibility remain distinct." }
+    ]
+  },
+  "lanes": [
+    { "id": "member", "label": "Feedback page" },
+    { "id": "server", "label": "Feedback API / store" },
+    { "id": "admin", "label": "Administrator" }
+  ],
+  "mainPath": ["draft", "validation", "commit", "discussion", "moderate"],
+  "nodes": [
+    { "id": "draft", "lane": "member", "col": 0, "type": "frontend", "label": "Choose visibility", "sublabel": "Private by default", "width": 170 },
+    { "id": "validation", "lane": "server", "col": 1, "type": "security", "label": "Validate submission", "sublabel": "Identity, limits, real images", "width": 185 },
+    { "id": "commit", "lane": "server", "col": 2, "type": "database", "label": "Atomic forum save", "sublabel": "Stable submission identity", "width": 180 },
+    { "id": "discussion", "lane": "member", "col": 3, "type": "frontend", "label": "Read and reply", "sublabel": "Parent-level permissions", "width": 175 },
+    { "id": "moderate", "lane": "admin", "col": 4, "type": "security", "label": "Status / hide / lock", "sublabel": "Revision-checked updates", "width": 185 }
+  ],
+  "edges": [
+    { "id": "submit-feedback", "from": "draft", "to": "validation", "label": "POST report", "variant": "security" },
+    { "id": "save-feedback", "from": "validation", "to": "commit", "label": "Text + PNGs", "variant": "emphasis" },
+    { "id": "read-feedback", "from": "commit", "to": "discussion", "label": "Authorized reads", "variant": "emphasis" },
+    { "id": "moderate-feedback", "from": "discussion", "to": "moderate", "label": "Admin review", "variant": "security" }
+  ],
+  "cards": [
+    { "dot": "rose", "title": "Visibility follows content", "items": ["Private and hidden threads: reporter + admins. Hidden replies: admins only.", "Copied screenshot URLs cannot bypass access; public readers cannot post without sign-in."] },
+    { "dot": "cyan", "title": "Independent moderation", "items": ["Resolved does not lock replies; hidden threads reject new replies without deleting records.", "Identical retries reuse the record. No GitHub issue or feedback email is sent by v1."] }
+  ]
+}

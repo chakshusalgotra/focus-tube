@@ -92,6 +92,91 @@ test('metric access is disabled by default and requires private host, address, a
   assert.throws(() => fixture({ METRICS_TOKEN: 'short' }), /METRICS_TOKEN/);
 });
 
+test('analytics client rejects stale preferences and clears collection state across account changes', async () => {
+  const elements = new Map();
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { value: '', checked: false, disabled: false, textContent: '',
+      classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {}, replaceChildren() {} });
+    return elements.get(id);
+  };
+  const account = { id: 1, generation: 1, isAdmin: false, isGuest: false };
+  const requests = [];
+  const window = { addEventListener() {} };
+  const context = vm.createContext({ window, AbortController, AbortSignal, setTimeout, clearTimeout,
+    document: { hidden: true, getElementById: element, querySelectorAll: () => [], addEventListener() {} },
+    fetch(url) { return new Promise(resolve => requests.push({ url, resolve })); } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/analytics.js'), 'utf8'), context);
+  const ui = new window.ProductAnalytics({ getAccount: () => account, el() {}, chartTable() {} });
+  const respond = (request, data, owner = '1') => request.resolve({ ok: true, status: 200,
+    headers: { get: () => owner }, json: async () => data });
+  ui.configure();
+  const latest = ui.loadPreference();
+  respond(requests[1], { available: true, consent: true, excluded: false, notice: '2026-09-28' });
+  await latest;
+  assert.equal(ui.collecting, true);
+  respond(requests[0], { available: true, consent: false, excluded: false, notice: '2026-09-28' });
+  await new Promise(setImmediate);
+  assert.equal(ui.collecting, true);
+  const stale = ui.loadPreference();
+  account.id = 2;
+  account.generation++;
+  ui.configure();
+  assert.equal(ui.collecting, false);
+  respond(requests[2], { available: true, consent: true, excluded: false });
+  await stale;
+  assert.equal(ui.collecting, false);
+  respond(requests[3], { available: true, consent: false, excluded: false }, '2');
+  await new Promise(setImmediate);
+  ui.reset();
+  assert.equal(ui.account, null);
+  assert.equal(element('analyticsConsent').checked, false);
+});
+
+test('audience client retains drafts on version conflicts and requires refresh before retrying', async () => {
+  const elements = new Map();
+  const element = id => {
+    if (!elements.has(id)) elements.set(id, { value: '', checked: false, disabled: false, textContent: '',
+      classList: { add() {}, remove() {}, toggle() {} }, addEventListener() {}, replaceChildren() {} });
+    return elements.get(id);
+  };
+  const account = { id: 1, generation: 1, isAdmin: false, isGuest: false };
+  const window = { addEventListener() {} };
+  const context = vm.createContext({ window, AbortController, AbortSignal, setTimeout, clearTimeout, confirm: () => false,
+    document: { hidden: true, getElementById: element, querySelectorAll: () => [], addEventListener() {} } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../public/analytics.js'), 'utf8'), context);
+  const ui = new window.ProductAnalytics({ getAccount: () => account, el() {}, chartTable() {} });
+  ui.account = account;
+  ui.renderSurvey({ available: true, revision: 'first', notice: 'notice', state: 'answered', answers: { role: 'student', goal: null, source: null } });
+  element('surveyRole').value = 'professional';
+  ui.surveyDirty = true;
+  ui.request = async () => { throw Object.assign(new Error('Survey changed'), { code: 'AUDIENCE_CHANGED' }); };
+  await ui.changeSurvey('save');
+  assert.equal(element('surveyRole').value, 'professional');
+  assert.equal(element('surveySave').disabled, true);
+  assert.equal(ui.confirmSurveyClose(), false);
+  ui.request = async () => ({ available: true, revision: 'second', notice: 'notice', state: 'answered', answers: { role: 'other', goal: null, source: null } });
+  await ui.loadSurvey();
+  assert.equal(ui.survey.revision, 'second');
+  assert.equal(element('surveyRole').value, 'professional');
+  assert.equal(element('surveySave').disabled, false);
+  ui.clearSurvey();
+  assert.equal(element('surveyRole').value, '');
+  const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const signOut = app.slice(app.indexOf('async function signOut()'), app.indexOf("for (const selector of ['#logoutBtn'"));
+  assert.ok(signOut.indexOf('confirmSurveyClose()') < signOut.indexOf("await api('/api/auth/logout'"));
+});
+
+test('analytics route metrics never include account identifiers or query contents', async () => {
+  const { monitor, lines } = fixture();
+  const req = { method: 'PUT', baseUrl: '/api/admin/analytics', route: { path: '/exclusions/:id' },
+    url: '/exclusions/PRIVATE_ACCOUNT?query=PRIVATE_QUERY', headers: {}, body: { private: 'PRIVATE_BODY' } };
+  const res = response();
+  monitor.middleware(req, res, () => {});
+  res.emit('finish');
+  assert.equal(lines[0].route, '/api/admin/analytics/exclusions/:id');
+  assert.doesNotMatch(JSON.stringify(lines) + await monitor.registry.metrics(), /PRIVATE_/);
+});
+
 test('foreground presence excludes guests, hidden tabs and idle sessions but permits active playback', () => {
   const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
   const block = source.slice(source.indexOf('function hasLiveActivity()'), source.indexOf('function withdrawPresence()'));
@@ -118,6 +203,82 @@ test('admin monitoring uses a responsive wide dialog without changing other dial
   const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
   assert.match(html, /id="monitoringModal"[^>]+aria-labelledby="monitoringTitle"/);
   assert.match(html, /id="monitoringBtn"[^>]+hidden/);
+  for (const [section, panel] of [['Overview', 'Overview'], ['Members', 'MembersPanel'], ['Events', 'EventsPanel'], ['System', 'System']]) {
+    assert.match(html, new RegExp(`id="monitoring${section}Tab"[^>]+role="tab"[^>]+aria-controls="monitoring${panel}"`));
+    assert.match(html, new RegExp(`id="monitoring${panel}"[^>]+role="tabpanel"[^>]+aria-labelledby="monitoring${section}Tab"`));
+  }
+  assert.match(css, /\.admin-tabs\s*\{\s*display: grid; grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(html, /id="monitoringSearch"[^>]+type="search"[^>]+maxlength="100"/);
+});
+
+test('monitoring sections retain filters and only the latest open-view request can render', async () => {
+  const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const nodes = new Map();
+  const node = id => {
+    if (!nodes.has(id)) {
+      const classes = new Set();
+      nodes.set(id, { value: '', textContent: '', attributes: {},
+        classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
+          toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); } },
+        setAttribute(name, value) { this.attributes[name] = value; }, getAttribute(name) { return this.attributes[name]; },
+        replaceChildren() {}, focus() { this.focused = true; } });
+    }
+    return nodes.get(id);
+  };
+  const tabs = ['overview', 'members', 'events', 'system'].map(section => {
+    const tab = node(`tab-${section}`);
+    tab.dataset = { monitoringSection: section };
+    tab.setAttribute('aria-controls', `panel-${section}`);
+    return tab;
+  });
+  const fields = Object.entries({ monitoringSearch: 'query', monitoringRole: 'role', monitoringActivity: 'activity', monitoringSort: 'sort', monitoringEventType: 'event', monitoringEventDays: 'days' })
+    .map(([id, name]) => Object.assign(node(id), { name }));
+  const requests = [];
+  const renders = [];
+  const context = vm.createContext({ AbortController, URLSearchParams, setTimeout, clearTimeout, renders,
+    $: selector => node(selector.slice(1)), authUser: { id: 1, isAdmin: true }, sessionGeneration: 1,
+    document: { hidden: false, querySelectorAll: selector => selector === '[data-monitoring-section]' ? tabs : fields },
+    api(url, options) { return new Promise((resolve, reject) => requests.push({ url, options, resolve, reject })); },
+  });
+  vm.runInContext(source.slice(source.indexOf('let monitoringPage ='), source.indexOf('async function exportProfileData(')), context);
+  vm.runInContext('renderMonitoring = data => renders.push(data);', context);
+  context.clearMonitoring();
+  node('monitoringModal').open = true;
+  const first = context.refreshMonitoring();
+  node('monitoringSearch').value = 'alpha & beta';
+  node('monitoringRole').value = 'admin';
+  const second = context.applyMonitoringFilters();
+  assert.equal(requests[0].options.signal.aborted, true);
+  assert.equal(new URL(requests[1].url, 'http://local.test').searchParams.get('query'), 'alpha & beta');
+  context.selectMonitoringSection('members', true);
+  assert.equal(tabs[1].getAttribute('aria-selected'), 'true');
+  assert.equal(tabs[1].focused, true);
+  assert.equal(node('panel-overview').classList.contains('hidden'), true);
+  assert.equal(node('panel-members').classList.contains('hidden'), false);
+  assert.equal(node('monitoringSearch').value, 'alpha & beta');
+  requests[1].resolve({ usage: { page: 1, pages: 2 } });
+  await second;
+  requests[0].resolve({ usage: { page: 9, pages: 9 } });
+  await first;
+  assert.equal(renders.length, 1);
+  assert.equal(renders[0].usage.page, 1);
+  assert.equal(node('monitoringRefresh').disabled, false);
+  assert.equal(node('monitoringNext').disabled, false);
+  node('monitoringActivity').value = 'disabled';
+  const failed = context.applyMonitoringFilters();
+  requests[2].reject(Object.assign(new Error('Unavailable'), { status: 503 }));
+  await failed;
+  assert.equal(node('monitoringNext').disabled, true);
+  assert.match(node('monitoringError').textContent, /may not match the selected filters/);
+  const pending = context.refreshMonitoring();
+  context.clearMonitoring();
+  node('monitoringModal').open = false;
+  requests[3].resolve({ usage: { page: 2, pages: 2 } });
+  await pending;
+  assert.equal(renders.length, 1);
+  assert.equal(node('monitoringSearch').value, '');
+  assert.equal(node('monitoringRole').value, 'all');
+  assert.equal(node('monitoringContent').classList.contains('hidden'), true);
 });
 
 test('rotating log output contains only sanitized structured events and closes cleanly', context => {

@@ -221,7 +221,7 @@ function createAuth(store, options = {}) {
   router.use((_req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.use(optionalAuth, actionBudget);
   router.get('/status', (req, res) => res.json({ registration: 'invite-only', authenticated: !!req.user,
-    emailVerification: { required: true, configured: services.emailConfigured }, captcha: { siteKey: services.captchaSiteKey } }));
+    emailVerification: { required: true, configured: services.emailConfigured }, captcha: { siteKey: services.captchaSiteKey }, onboarding: store.analytics.onboardingConfig() }));
   router.get('/me', requireSession, (req, res) => res.json({ user: store.publicUser(req.user) }));
 
   router.post('/username/check', route((req, res) => {
@@ -264,7 +264,8 @@ function createAuth(store, options = {}) {
 
   async function register(req, res, upgrade) {
     reserve(req, [{ key: budgetKey('registration-source', req.ip), limit: 10 }]);
-    validateBody(req.body, ['inviteToken', 'email', 'username', 'displayName', 'password', 'passwordConfirmation', 'verificationToken', 'verificationCode', 'captchaToken']);
+    validateBody(req.body, ['inviteToken', 'email', 'username', 'displayName', 'password', 'passwordConfirmation', 'verificationToken', 'verificationCode', 'captchaToken', 'onboarding']);
+    store.analytics.validateOnboarding(req.body.onboarding);
     if (!validToken(req.body.inviteToken)) fail('INVALID_INVITATION');
     const email = normalizeEmail(req.body.email);
     const username = normalizeUsername(req.body.username);
@@ -280,7 +281,7 @@ function createAuth(store, options = {}) {
     const hashed = await hashPassword(req.body.password);
     const token = crypto.randomBytes(32).toString('base64url');
     const result = store.redeemInvitation({ inviteHash, email, username, displayName, ...hashed, ...verification,
-      sessionHash: tokenHash(token), sessionMs, guestSessionHash: upgrade ? req.sessionHash : null });
+      sessionHash: tokenHash(token), sessionMs, guestSessionHash: upgrade ? req.sessionHash : null, onboarding: req.body.onboarding });
     setSessionCookie(req, res, token, result.expiresAt);
     observe(upgrade ? 'upgrade' : 'register', 'success');
     res.status(upgrade ? 200 : 201).json({ user: store.publicUser(result.user) });
@@ -395,10 +396,11 @@ function createAuth(store, options = {}) {
     } catch (error) { next(error); }
   });
   invitesRouter.get('/', route((req, res) => {
-    validateBody(req.query, ['before', 'limit']);
+    validateBody(req.query, ['before', 'limit', 'status']);
     res.json(store.listInvitations({ actorSessionHash: req.sessionHash,
       beforeId: req.query.before === undefined ? null : invitationInteger(req.query.before),
-      limit: req.query.limit === undefined ? 50 : invitationInteger(req.query.limit) }));
+      limit: req.query.limit === undefined ? 50 : invitationInteger(req.query.limit),
+      status: req.query.status === undefined ? 'all' : req.query.status }));
   }));
   invitesRouter.post('/', route((req, res) => {
     validateBody(req.body, ['maxUses', 'expiresAt']);

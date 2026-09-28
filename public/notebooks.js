@@ -305,7 +305,7 @@
           try {
             validation = await this.request(`/api/video-chat/${encodeURIComponent(state.courseId)}/videos/${state.videoId}/notes/validate`, {
               method: 'POST', headers: { 'X-Video-Chat-Account': String(ownerId) }, body: JSON.stringify({ proposalId: proposal.id, texts: proposal.blocks.map(block => block.text),
-                sourceHash: proposal.sourceHash, generation: sourceGeneration, document: state.document, noteRevision: state.revision }),
+                conversationId: proposal.conversationId, sourceHash: proposal.sourceHash, generation: sourceGeneration, document: state.document, noteRevision: state.revision }),
             });
           } catch (error) {
             if (current() && error.status === 409 && Object.hasOwn(error.body || {}, 'record')) {
@@ -319,6 +319,7 @@
           this.editor.quill.update();
           if (sequence !== state.sequence) throw new Error('The note changed while preparing this append. Review the preview and append again.');
           if (!validation.proposal || validation.proposal.id !== proposal.id || validation.proposal.sourceHash !== proposal.sourceHash ||
+              (validation.proposal.conversationId || 'default') !== (proposal.conversationId || 'default') ||
               !same(model.generatedBlocks(validation.proposal), blocks) || !Number.isSafeInteger(validation.noteRevision)) {
             throw new Error('The preview could not be verified. Reload chat before appending.');
           }

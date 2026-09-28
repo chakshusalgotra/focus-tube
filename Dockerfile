@@ -11,6 +11,7 @@ RUN apk add --no-cache nodejs npm \
 
 COPY auth.js auth-services.js db.js downloads.js feedback.js server.js youtube-search.js observability.js ./
 COPY extension.js extension-store.js video-chat.js video-chat-store.js ./
+COPY analytics.js analytics-store.js ./
 COPY scripts/auth-admin.js ./scripts/auth-admin.js
 COPY public ./public
 

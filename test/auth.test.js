@@ -47,6 +47,482 @@ function registration(store, invite = 'invite', email = 'member@example.com', ex
   return values;
 }
 
+test('optional analytics requires consent, excludes admins, bounds watch signals and erases on withdrawal', context => {
+  const store = memoryStore(context);
+  let timestamp = Date.parse('2030-01-01T12:00:00Z');
+  const { createAnalyticsStore, NOTICE } = require('../analytics-store');
+  const analytics = createAnalyticsStore(store.db, { enabled: true, clock: () => timestamp });
+  const user = store.createUser({ username: 'analytics-member', isGuest: false });
+  analytics.activity(user.id, true);
+  assert.equal(analytics.summary().dau, 0);
+  analytics.setPreference(user.id, true, NOTICE);
+  analytics.feature(user.id, 'course');
+  analytics.activity(user.id, true);
+  for (let index = 0; index < 10; index++) {
+    timestamp += 30000;
+    analytics.activity(user.id, true);
+    analytics.activity(user.id, true);
+  }
+  assert.equal(analytics.summary().weeklyLearners, 1);
+  assert.equal(analytics.summary().medianWatchMinutes, 5);
+  timestamp += 120000;
+  analytics.activity(user.id, true);
+  assert.equal(analytics.summary().medianWatchMinutes, 5);
+  analytics.setPreference(user.id, false, NOTICE);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM analytics_daily').get().count, 0);
+  assert.equal(analytics.summary().participants, 0);
+  store.db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(user.id);
+  analytics.setPreference(user.id, true, NOTICE);
+  analytics.feature(user.id, 'notes');
+  assert.equal(analytics.summary().dau, 0);
+  const disabled = createAnalyticsStore(store.db);
+  assert.throws(() => disabled.setPreference(user.id, true, NOTICE), /not enabled/);
+});
+
+test('analytics cohorts use exact UTC return days and distinguish immature and unobserved cohorts', context => {
+  const store = memoryStore(context);
+  let timestamp = Date.parse('2032-02-28T12:00:00Z');
+  const { createAnalyticsStore, NOTICE } = require('../analytics-store');
+  const analytics = createAnalyticsStore(store.db, { enabled: true, clock: () => timestamp });
+  const first = store.createUser({ username: 'first-cohort', isGuest: false });
+  const second = store.createUser({ username: 'second-cohort', isGuest: false });
+  for (const user of [first, second]) analytics.setPreference(user.id, true, NOTICE);
+  const started = Date.parse('2032-02-28T00:00:00Z');
+  timestamp = Date.parse('2032-03-06T12:00:00Z');
+  analytics.activity(first.id, false);
+  timestamp = Date.parse('2032-03-07T12:00:00Z');
+  analytics.activity(second.id, false);
+  store.db.prepare('DELETE FROM analytics_coverage').run();
+  store.db.prepare('INSERT INTO analytics_coverage(start,finish) VALUES(?,?)').run(started, timestamp);
+  const report = analytics.summary(30);
+  const cohort = report.cohorts[0];
+  assert.equal(cohort.d7.eligible, 2);
+  assert.equal(cohort.d7.returned, 1);
+  assert.equal(cohort.d30.pending, 2);
+  assert.equal(report.activation.eligible, 2);
+  assert.equal(report.trend.find(day => day.date === '2032-02-27').users, null);
+  assert.equal(report.trend.find(day => day.date === '2032-03-01').users, 0);
+  store.db.prepare('DELETE FROM analytics_coverage').run();
+  assert.equal(analytics.summary(30).cohorts[0].d7.unknown, 2);
+  assert.equal(analytics.summary(30).cohorts[0].d7.eligible, 0);
+  assert.throws(() => analytics.summary(365), /7, 30, or 90/);
+});
+
+test('analytics ignores imports and failed saves, and collection failures cannot block course saves', context => {
+  const store = memoryStore(context);
+  const { NOTICE } = require('../analytics-store');
+  store.analytics.configure(true);
+  const user = store.createUser({ username: 'analytics-actions', isGuest: false });
+  store.analytics.setPreference(user.id, true, NOTICE);
+  const course = { id: 'test-course', videos: [{ id: 'abcdefghijk' }] };
+  const initial = store.getUserData(user.id);
+  assert.equal(store.saveUserData(user.id, { courses: { imported: course } }, initial.revision, true), 1);
+  assert.equal(store.analytics.summary().features.find(item => item.name === 'course').users, 0);
+  assert.equal(store.saveUserData(user.id, { courses: { saved: course } }, 0), null);
+  assert.equal(store.analytics.summary().features.find(item => item.name === 'course').users, 0);
+  assert.equal(store.saveUserData(user.id, { courses: { imported: course, saved: course } }, 1), 2);
+  assert.equal(store.analytics.summary().features.find(item => item.name === 'course').users, 1);
+  store.db.prepare('DROP TABLE analytics_daily').run();
+  assert.equal(store.saveUserData(user.id, { courses: { another: course } }, 2), 3);
+});
+
+test('analytics retention cleanup and exclusions remove data without restoring previous consent', context => {
+  const store = memoryStore(context);
+  const { createAnalyticsStore, NOTICE } = require('../analytics-store');
+  const day = 86400000;
+  let timestamp = Date.parse('2030-01-01T00:00:00Z');
+  const analytics = createAnalyticsStore(store.db, { enabled: true, clock: () => timestamp });
+  const user = store.createUser({ username: 'analytics-retention', isGuest: false });
+  analytics.setPreference(user.id, true, NOTICE);
+  analytics.activity(user.id, true);
+  const start = analytics.summary().collectionStart;
+  timestamp += 91 * day;
+  analytics.cleanup();
+  assert.equal(analytics.summary().collectionStart, start);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM analytics_daily').get().count, 0);
+  analytics.exclude(user.id, true);
+  analytics.exclude(user.id, false);
+  assert.equal(analytics.preference(user.id).consent, false);
+  analytics.feature(user.id, 'notes');
+  assert.equal(analytics.summary().dau, 0);
+  analytics.setPreference(user.id, true, NOTICE);
+  analytics.feature(user.id, 'notes');
+  store.db.prepare('DELETE FROM users WHERE id=?').run(user.id);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM analytics_preferences').get().count, 0);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM analytics_daily').get().count, 0);
+});
+
+test('audience survey remains optional and editable without post-signup prompting', context => {
+  const store = memoryStore(context);
+  const { NOTICE, AUDIENCE_NOTICE } = require('../analytics-store');
+  store.analytics.configure(true);
+  const user = store.createUser({ username: 'audience-member', isGuest: false });
+  assert.equal(store.analytics.audience(user.id).available, false);
+  store.analytics.setPreference(user.id, true, NOTICE);
+  const initial = store.analytics.audience(user.id);
+  assert.equal(initial.canOffer, false);
+  store.db.prepare('INSERT INTO analytics_daily(user_id,date,watch_seconds) VALUES(?,?,300)').run(user.id, new Date().toISOString().slice(0, 10));
+  assert.equal(store.analytics.audience(user.id).canOffer, false);
+  assert.throws(() => store.analytics.saveAudience(user.id, { action: 'offer', revision: initial.revision, notice: AUDIENCE_NOTICE }), /not due/);
+  const skipped = store.analytics.saveAudience(user.id, { action: 'skip', revision: initial.revision, notice: AUDIENCE_NOTICE });
+  assert.equal(skipped.canOffer, false);
+  const saved = store.analytics.saveAudience(user.id, { action: 'save', revision: skipped.revision, notice: AUDIENCE_NOTICE, answers: { role: 'student', goal: 'prefer-not' } });
+  assert.deepEqual(saved.answers, { role: 'student', goal: 'prefer-not', source: null });
+  for (const answers of [{ age: 25 }, { role: 'inferred' }, { goal: ['upskilling'] }]) {
+    assert.throws(() => store.analytics.saveAudience(user.id, { action: 'save', revision: saved.revision, notice: AUDIENCE_NOTICE, answers }), /valid audience/);
+  }
+  const removed = store.analytics.saveAudience(user.id, { action: 'remove', revision: saved.revision, notice: AUDIENCE_NOTICE });
+  assert.deepEqual(removed.answers, { role: null, goal: null, source: null });
+  assert.equal(removed.canOffer, false);
+  store.analytics.setPreference(user.id, false, NOTICE);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM analytics_audience').get().count, 0);
+  store.analytics.setPreference(user.id, true, NOTICE);
+  assert.throws(() => store.analytics.saveAudience(user.id, { action: 'save', revision: saved.revision, notice: AUDIENCE_NOTICE, answers: { role: 'student' } }), { code: 'AUDIENCE_CHANGED' });
+});
+
+test('audience aggregates suppress small and complementary groups and expose no member rows', context => {
+  const store = memoryStore(context);
+  const { createAnalyticsStore, NOTICE, AUDIENCE_NOTICE } = require('../analytics-store');
+  const timestamp = Date.parse('2030-03-20T12:00:00Z');
+  const analytics = createAnalyticsStore(store.db, { enabled: true, clock: () => timestamp });
+  const members = [];
+  for (let index = 0; index < 20; index++) {
+    const user = store.createUser({ username: `audience-test-${index}`, isGuest: false });
+    members.push(user);
+    analytics.setPreference(user.id, true, NOTICE);
+    store.db.prepare('INSERT INTO analytics_daily(user_id,date) VALUES(?,?)').run(user.id, '2030-03-19');
+    const audience = analytics.audience(user.id);
+    analytics.saveAudience(user.id, { action: 'save', notice: AUDIENCE_NOTICE, revision: audience.revision,
+      answers: { role: index < 10 ? 'student' : 'professional', goal: 'upskilling' } });
+  }
+  let report = analytics.audienceSummary();
+  assert.equal(report.eligible, 20);
+  assert.equal(report.respondents, 20);
+  assert.equal(report.dimensions.find(item => item.name === 'role').suppressed, false);
+  assert.deepEqual(report.dimensions.find(item => item.name === 'role').buckets.filter(item => item.count).map(item => item.count), [10, 10]);
+  assert.doesNotMatch(JSON.stringify(report), /audience-test|user_id|revision|enrolled_at/);
+  const first = analytics.audience(members[0].id);
+  analytics.saveAudience(members[0].id, { action: 'save', notice: AUDIENCE_NOTICE, revision: first.revision, answers: { role: 'job-seeker', goal: 'upskilling' } });
+  report = analytics.audienceSummary();
+  assert.equal(report.dimensions.find(item => item.name === 'role').suppressed, true);
+  assert.deepEqual(report.dimensions.find(item => item.name === 'role').buckets, []);
+  assert.equal(report.dimensions.find(item => item.name === 'goal').suppressed, false);
+  const latest = analytics.audience(members[0].id);
+  analytics.saveAudience(members[0].id, { action: 'remove', notice: AUDIENCE_NOTICE, revision: latest.revision });
+  report = analytics.audienceSummary();
+  assert.equal(report.respondents, null);
+  assert.equal(report.responsePercent, null);
+  assert.equal(report.dimensions.find(item => item.name === 'goal').suppressed, true);
+});
+
+test('audience HTTP enforces ownership, version conflicts, optional fields, and fixed aggregate windows', async context => {
+  const { store, request } = await httpFixture(context, { PRODUCT_ANALYTICS_ENABLED: '1' });
+  const { NOTICE } = require('../analytics-store');
+  const user = store.createUser({ username: 'survey-owner', isGuest: false });
+  const other = store.createUser({ username: 'survey-other', isGuest: false });
+  const admin = store.createUser({ username: 'survey-admin', isGuest: false });
+  store.db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(admin.id);
+  const headersFor = account => {
+    const token = crypto.randomBytes(32).toString('base64url');
+    store.createSession(digest(token), account.id, new Date(Date.now() + 86400000).toISOString());
+    return { Cookie: `ft_session=${token}`, 'X-Analytics-Account': String(account.id) };
+  };
+  const headers = headersFor(user);
+  const otherHeaders = headersFor(other);
+  const adminHeaders = headersFor(admin);
+  store.analytics.setPreference(user.id, true, NOTICE);
+  const own = await (await request('/api/analytics/audience', { headers })).json();
+  const update = { action: 'save', notice: own.notice, revision: own.revision, answers: { role: 'student' } };
+  assert.equal((await request('/api/analytics/audience')).status, 401);
+  assert.equal((await request('/api/analytics/audience', { method: 'PUT', headers: { ...otherHeaders, 'X-Analytics-Account': String(user.id) }, body: update })).status, 409);
+  assert.equal((await request('/api/analytics/audience', { method: 'PUT', headers, body: { ...update, answers: { age: 20 } } })).status, 400);
+  assert.equal((await request('/api/analytics/audience', { method: 'PUT', headers, body: update })).status, 200);
+  const stale = await request('/api/analytics/audience', { method: 'PUT', headers, body: update });
+  assert.equal(stale.status, 409);
+  assert.equal((await stale.json()).code, 'AUDIENCE_CHANGED');
+  const exported = await (await request('/api/analytics/export', { headers })).json();
+  assert.equal(exported.audience.answers.role, 'student');
+  assert.equal((await (await request('/api/analytics/export', { headers: otherHeaders })).json()).audience.answers.role, null);
+  assert.equal((await request('/api/admin/analytics/audience', { headers })).status, 403);
+  const report = await request('/api/admin/analytics/audience', { headers: adminHeaders });
+  assert.equal(report.status, 200);
+  assert.equal(report.headers.get('cache-control'), 'private, no-store');
+  for (const query of ['days=7', 'role=student', 'userId=1']) assert.equal((await request(`/api/admin/analytics/audience?${query}`, { headers: adminHeaders })).status, 400);
+  assert.equal((await request('/api/analytics/audience', { method: 'PUT', headers, body: { action: 'remove', notice: own.notice, revision: exported.audience.revision } })).status, 200);
+  assert.equal((await (await request('/api/analytics/audience', { headers })).json()).answers.role, null);
+});
+
+test('audience comparison rates require mature coverage and safe numerators and complements', context => {
+  const store = memoryStore(context);
+  const { createAnalyticsStore, NOTICE, AUDIENCE_NOTICE } = require('../analytics-store');
+  const start = Date.parse('2030-03-01T12:00:00Z');
+  let timestamp = start;
+  const analytics = createAnalyticsStore(store.db, { enabled: true, clock: () => timestamp });
+  const ids = [];
+  for (let index = 0; index < 40; index++) {
+    const user = store.createUser({ username: `compare-${index}`, isGuest: false });
+    ids.push(user.id);
+    analytics.setPreference(user.id, true, NOTICE);
+    const current = analytics.audience(user.id);
+    analytics.saveAudience(user.id, { action: 'save', notice: AUDIENCE_NOTICE, revision: current.revision,
+      answers: { role: index < 20 ? 'student' : 'professional', goal: 'upskilling' } });
+    store.db.prepare('INSERT INTO analytics_daily(user_id,date) VALUES(?,?)').run(user.id, '2030-03-02');
+    if (index % 20 < 10) {
+      store.db.prepare('INSERT INTO analytics_daily(user_id,date) VALUES(?,?)').run(user.id, '2030-03-08');
+      store.db.prepare('UPDATE analytics_members SET activated_at=? WHERE user_id=?').run(start + 600000, user.id);
+    }
+  }
+  timestamp = Date.parse('2030-03-20T12:00:00Z');
+  store.db.prepare('INSERT INTO analytics_coverage(start,finish) VALUES(?,?)').run(start, timestamp);
+  let groups = analytics.audienceSummary().dimensions.find(item => item.name === 'role').buckets.filter(item => item.count);
+  assert.equal(groups.every(group => group.activation.percent === 50 && group.d7.percent === 50), true);
+  store.db.prepare('DELETE FROM analytics_daily WHERE user_id=? AND date=?').run(ids[0], '2030-03-08');
+  groups = analytics.audienceSummary().dimensions.find(item => item.name === 'role').buckets.filter(item => item.count);
+  assert.equal(groups.every(group => group.d7 === null), true);
+  timestamp += 91 * 86400000;
+  analytics.cleanup();
+  assert.equal(analytics.audience(ids[0]).answers.role, null);
+  assert.equal(analytics.audience(ids[0]).canOffer, false);
+});
+
+test('audience discovery options migrate existing answers without losing revisions or ownership', context => {
+  const store = memoryStore(context);
+  const { createAnalyticsStore, NOTICE, AUDIENCE_NOTICE } = require('../analytics-store');
+  store.analytics.configure(true);
+  const user = store.createUser({ username: 'platform-migration', isGuest: false });
+  store.analytics.setPreference(user.id, true, NOTICE);
+  const original = store.analytics.audience(user.id);
+  const saved = store.analytics.saveAudience(user.id, { action: 'save', notice: AUDIENCE_NOTICE, revision: original.revision, answers: { role: 'student', source: 'linkedin' } });
+  const schema = store.db.prepare("SELECT sql FROM sqlite_master WHERE name='analytics_audience'").get().sql;
+  store.db.exec(schema.replace('analytics_audience', 'old_audience').replace("'twitter','reddit','instagram',", ''));
+  store.db.exec('INSERT INTO old_audience SELECT * FROM analytics_audience; DROP TABLE analytics_audience; ALTER TABLE old_audience RENAME TO analytics_audience');
+  const analytics = createAnalyticsStore(store.db, { enabled: true });
+  assert.equal(analytics.audience(user.id).revision, saved.revision);
+  assert.deepEqual(analytics.audience(user.id).answers, saved.answers);
+  for (const source of ['twitter', 'reddit', 'instagram']) {
+    const current = analytics.audience(user.id);
+    analytics.saveAudience(user.id, { action: 'save', notice: AUDIENCE_NOTICE, revision: current.revision, answers: { source } });
+    assert.equal(analytics.audience(user.id).answers.source, source);
+  }
+  assert.equal(store.db.pragma('foreign_key_check').length, 0);
+});
+
+test('signup onboarding saves consent and self-reported answers atomically with invitation redemption', context => {
+  const store = memoryStore(context);
+  const { NOTICE, AUDIENCE_NOTICE } = require('../analytics-store');
+  store.analytics.configure(true);
+  invitation(store, 'onboarding-bootstrap');
+  const admin = registration(store, 'onboarding-bootstrap', 'onboarding-admin@example.test');
+  store.redeemInvitation(admin);
+  const onboarding = { consent: true, notice: NOTICE, audienceNotice: AUDIENCE_NOTICE, answers: { role: 'professional', goal: 'upskilling', source: 'reddit' } };
+  invitation(store, 'onboarding-member', admin.sessionHash);
+  const member = store.redeemInvitation(registration(store, 'onboarding-member', 'onboarding-member@example.test', { onboarding })).user;
+  assert.equal(store.analytics.preference(member.id).consent, true);
+  assert.deepEqual(store.analytics.audience(member.id).answers, onboarding.answers);
+  assert.equal(store.analytics.audience(member.id).canOffer, false);
+  invitation(store, 'onboarding-failure', admin.sessionHash);
+  const before = store.db.prepare('SELECT COUNT(*) AS count FROM users').get().count;
+  const bad = registration(store, 'onboarding-failure', 'bad-onboarding@example.test', { onboarding: { ...onboarding, answers: { source: 'inferred-platform' } } });
+  assert.throws(() => store.redeemInvitation(bad), { code: 'INVALID_REQUEST' });
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS count FROM users').get().count, before);
+  assert.equal(store.invitationAvailable(digest('onboarding-failure')), true);
+  assert.equal(store.getSessionUser(bad.sessionHash), undefined);
+  assert.equal(store.db.prepare('SELECT consumed_at FROM email_verifications WHERE token_hash=?').get(bad.verificationHash).consumed_at, null);
+  const skipped = store.redeemInvitation({ ...bad, onboarding: undefined }).user;
+  assert.equal(store.analytics.preference(skipped.id).consent, false);
+  assert.equal(store.analytics.audience(skipped.id).revision, null);
+});
+
+test('signup onboarding client sends only expressly shared choices and clears them on reset', () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const nodes = new Map();
+  const element = id => { if (!nodes.has(id)) nodes.set(id, { value: '', checked: false, classList: { toggle() {} } }); return nodes.get(id); };
+  const context = vm.createContext({ $: element, authMode: 'register', authSignupStep: 'about', authBusy: false,
+    window: { FocusTubeInvite: { has: () => true } }, authConfiguration: { onboarding: { available: true, notice: 'notice', audienceNotice: 'audience' } } });
+  vm.runInContext(source.slice(source.indexOf('function resetAuthOnboarding()'), source.indexOf('function setAuthBusy(')), context);
+  element('#authDiscoverySource').value = 'instagram';
+  assert.equal(context.authOnboardingBody(), undefined);
+  element('#authAnalyticsConsent').checked = true;
+  assert.equal(context.authOnboardingBody().answers.source, 'instagram');
+  context.authBusy = true;
+  context.syncAuthOnboarding();
+  assert.equal(element('#authDiscoverySource').disabled, true);
+  context.resetAuthOnboarding();
+  assert.equal(element('#authDiscoverySource').value, '');
+  assert.equal(context.authOnboardingBody(), undefined);
+  assert.equal(source.includes('maybeOfferSurvey'), false);
+});
+
+test('signup code correction retains masked passwords while failed sign-in clears them', async () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const submit = source.slice(source.indexOf("$('#authForm').addEventListener('submit',"), source.indexOf("$('#emailEnrollmentForm').addEventListener('submit',"));
+  for (const mode of ['register', 'login']) {
+    const nodes = new Map();
+    let handler;
+    let masked = false;
+    const element = selector => {
+      if (!nodes.has(selector)) nodes.set(selector, { value: '', classList: { add() {}, remove() {} }, setCustomValidity() {},
+        addEventListener(event, listener) { if (event === 'submit') handler = listener; } });
+      return nodes.get(selector);
+    };
+    const context = vm.createContext({ $: element, authMode: mode, authSignupStep: 'verify', authBusy: false, authRetryUntil: 0, authTransition: 0,
+      emailChallenges: { auth: { token: 'synthetic-proof' } }, authView: { classList: { contains: () => false } },
+      setAuthBusy() {}, resetAuthPasswordVisibility() { masked = true; }, checkAuthHandle: async () => true,
+      emailCodeBody: () => ({ verificationCode: '000042' }), authOnboardingBody() {}, captchaToken() {},
+      resetCaptcha() {}, syncAuthPasswordFeedback() {}, showAccountError() {},
+      api: async () => { throw Object.assign(new Error('Try again.'), { status: 400, data: { code: mode === 'register' ? 'INVALID_VERIFICATION' : 'INVALID_CREDENTIALS' } }); },
+    });
+    element('#authPassword').value = element('#authPasswordConfirmation').value = 'synthetic-test-passphrase';
+    vm.runInContext(submit, context);
+    await handler({ preventDefault() {} });
+    assert.equal(masked, true);
+    assert.equal(element('#authPassword').value.length > 0, mode === 'register');
+    assert.equal(element('#authPasswordConfirmation').value.length > 0, mode === 'register');
+  }
+});
+
+test('signup stages isolate required fields, optional consent, and verification without losing drafts', () => {
+  const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+  const nodes = new Map();
+  const element = selector => {
+    if (!nodes.has(selector)) {
+      const classes = new Set();
+      nodes.set(selector, { value: '', checked: false, dataset: {}, attributes: {},
+        classList: { toggle(name, enabled) { if (enabled) classes.add(name); else classes.delete(name); }, contains: name => classes.has(name) },
+        setAttribute(name, value) { this.attributes[name] = value; }, removeAttribute(name) { delete this.attributes[name]; } });
+    }
+    return nodes.get(selector);
+  };
+  const captcha = [];
+  const context = vm.createContext({ $: element, authMode: 'register', authSignupStep: 'account', authBusy: false, authUser: null,
+    emailChallenges: { auth: null }, authView: element('#authView'), document: {}, syncCaptcha: (kind, action) => captcha.push(action),
+    window: { FocusTubeInvite: { has: () => true } }, authConfiguration: { onboarding: { available: true } } });
+  vm.runInContext(source.slice(source.indexOf('function resetAuthOnboarding()'), source.indexOf('function setAuthBusy(')), context);
+  context.syncAuthSignup();
+  assert.equal(element('#authAccountFields').disabled, false);
+  assert.equal(element('#authOnboarding').disabled, true);
+  assert.equal(element('#authOnboardingSkip').classList.contains('hidden'), true);
+  assert.equal(element('#authSubmit').textContent, 'Continue');
+  assert.equal(captcha.at(-1), null);
+  context.authSignupStep = 'about';
+  context.syncAuthSignup();
+  assert.equal(element('#authAccountFields').disabled, true);
+  assert.equal(element('#authOnboarding').disabled, false);
+  assert.equal(element('#authAnalyticsConsent').checked, false);
+  assert.equal(element('#authSubmit').textContent, 'Send verification code');
+  element('#authDiscoverySource').value = 'reddit';
+  context.emailChallenges.auth = { token: 'synthetic-proof' };
+  context.authSignupStep = 'verify';
+  context.syncAuthSignup();
+  assert.equal(element('#authOnboarding').disabled, true);
+  assert.equal(element('#authStepVerify').attributes['aria-current'], 'step');
+  assert.equal(element('#authDiscoverySource').value, 'reddit');
+  assert.equal(element('#authSubmit').textContent, 'Verify and create account');
+  context.authSignupStep = 'about';
+  context.syncAuthSignup();
+  assert.equal(element('#authSubmit').textContent, 'Continue');
+  assert.equal(element('#authDiscoverySource').value, 'reddit');
+  context.resetAuthOnboarding();
+  assert.equal(context.authOnboardingBody(), undefined);
+  context.authConfiguration.onboarding.available = false;
+  context.emailChallenges.auth = null;
+  context.syncAuthSignup();
+  assert.equal(context.authSignupStep, 'account');
+  assert.equal(element('#authStepAbout').classList.contains('hidden'), true);
+  assert.equal(element('#authStepVerify').dataset.number, '2');
+  assert.equal(element('#authWelcome').textContent, 'Step 1 of 2');
+  context.authMode = 'login';
+  context.syncAuthSignup();
+  assert.equal(element('#authSteps').classList.contains('hidden'), true);
+  assert.equal(element('#authAccountFields').disabled, false);
+  assert.equal(element('#authSubmit').textContent, 'Sign in');
+});
+
+test('invitation signup and guest upgrade accept optional onboarding only with explicit sharing', async context => {
+  const { store, request, verify } = await httpFixture(context, { PRODUCT_ANALYTICS_ENABLED: '1' });
+  const config = (await (await request('/api/auth/status')).json()).onboarding;
+  assert.equal(config.available, true);
+  const admin = store.createUser({ username: 'signup-survey-admin', isGuest: false });
+  store.db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(admin.id);
+  const adminToken = crypto.randomBytes(32).toString('base64url');
+  store.createSession(digest(adminToken), admin.id, new Date(Date.now() + 86400000).toISOString());
+  const inviteToken = crypto.randomBytes(32).toString('base64url');
+  store.issueInvitation({ tokenHash: digest(inviteToken), actorSessionHash: digest(adminToken), maxUses: 10 });
+  const onboarding = { consent: true, notice: config.notice, audienceNotice: config.audienceNotice,
+    answers: { role: 'job-seeker', goal: 'interview', source: 'twitter' } };
+  const verified = await verify({ ...joinBody(inviteToken), email: 'onboarding-http@example.test', username: 'onboarding_http' });
+  assert.equal((await request('/api/auth/register', { method: 'POST', body: { ...verified, onboarding: { ...onboarding, consent: false } } })).status, 400);
+  assert.equal(store.getUserByEmail(verified.email), undefined);
+  const registered = await request('/api/auth/register', { method: 'POST', body: { ...verified, onboarding } });
+  assert.equal(registered.status, 201);
+  const user = (await registered.json()).user;
+  assert.equal(store.analytics.audience(user.id).answers.source, 'twitter');
+  assert.equal(store.analytics.preference(user.id).consent, true);
+  const skipped = await request('/api/auth/register', { method: 'POST', body: await verify({ ...joinBody(inviteToken), email: 'skip-http@example.test', username: 'skip_http' }) });
+  assert.equal(skipped.status, 201);
+  assert.equal(store.analytics.preference((await skipped.json()).user.id).consent, false);
+  const guest = store.createUser({ isGuest: true });
+  const guestToken = crypto.randomBytes(32).toString('base64url');
+  store.createSession(digest(guestToken), guest.id, new Date(Date.now() + 86400000).toISOString());
+  const headers = { Cookie: `ft_session=${guestToken}` };
+  store.saveUserData(guest.id, { courses: { keep: { id: 'keep', videos: [] } } }, store.getUserData(guest.id).revision);
+  const upgradeBody = await verify({ ...joinBody(inviteToken), email: 'upgrade-survey@example.test', username: 'upgrade_survey' }, headers);
+  const upgrade = await request('/api/auth/upgrade', { method: 'POST', headers, body: { ...upgradeBody, onboarding: { ...onboarding, answers: { source: 'instagram' } } } });
+  assert.equal(upgrade.status, 200);
+  assert.equal((await upgrade.json()).user.id, guest.id);
+  assert.equal(store.analytics.audience(guest.id).answers.source, 'instagram');
+  assert.ok(store.getUserData(guest.id).courses.keep);
+  store.analytics.configure(false);
+  assert.equal((await (await request('/api/auth/status')).json()).onboarding.available, false);
+  assert.equal((await request('/api/auth/register', { method: 'POST', body: { ...verified, onboarding } })).status, 400);
+});
+
+test('analytics HTTP requires own-account binding, explicit opt-in, admin access and validated filters', async context => {
+  const { store, request } = await httpFixture(context, { PRODUCT_ANALYTICS_ENABLED: '1' });
+  const { NOTICE } = require('../analytics-store');
+  const member = store.createUser({ username: 'analytics-http-member', isGuest: false });
+  const admin = store.createUser({ username: 'analytics-http-admin', isGuest: false });
+  store.db.prepare('UPDATE users SET is_admin=1 WHERE id=?').run(admin.id);
+  const header = user => {
+    const token = crypto.randomBytes(32).toString('base64url');
+    store.createSession(digest(token), user.id, new Date(Date.now() + 86400000).toISOString());
+    return { Cookie: `ft_session=${token}`, 'X-Analytics-Account': String(user.id) };
+  };
+  const headers = header(member);
+  const adminHeaders = header(admin);
+  assert.equal((await request('/api/analytics/preferences')).status, 401);
+  assert.equal((await request('/api/admin/analytics', { headers })).status, 403);
+  assert.equal((await request('/api/analytics/preferences', { headers: { ...headers, 'X-Analytics-Account': String(admin.id) } })).status, 409);
+  const initial = await (await request('/api/analytics/preferences', { headers })).json();
+  assert.equal(initial.available, true);
+  assert.equal(initial.consent, false);
+  for (const body of [{ consent: 'yes', notice: NOTICE }, { consent: true, notice: 'old' }, { consent: true, notice: NOTICE, userId: admin.id }]) {
+    assert.equal((await request('/api/analytics/preferences', { method: 'PUT', headers, body })).status, 400);
+  }
+  assert.equal((await request('/api/analytics/preferences', { method: 'PUT', headers: { ...headers, Origin: 'https://foreign.example' }, body: { consent: true, notice: NOTICE } })).status, 403);
+  assert.equal((await request('/api/analytics/preferences', { method: 'PUT', headers, body: { consent: true, notice: NOTICE } })).status, 200);
+  const tabId = crypto.randomUUID();
+  const issued = await (await request('/api/presence', { method: 'POST', headers, body: { tabId } })).json();
+  assert.equal((await request('/api/presence', { method: 'PUT', headers, body: { tabId, challenge: issued.challenge, watching: 'true' } })).status, 400);
+  assert.equal((await request('/api/presence', { method: 'PUT', headers, body: { tabId, challenge: issued.challenge, watching: true } })).status, 204);
+  assert.equal((await request('/api/presence', { method: 'PUT', headers, body: { tabId, challenge: issued.challenge, watching: true } })).status, 400);
+  const response = await request('/api/admin/analytics?days=30', { headers: adminHeaders });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('cache-control'), 'private, no-store');
+  const summary = await response.json();
+  assert.equal(summary.participants, 1);
+  assert.equal(summary.dau, 1);
+  assert.equal(JSON.stringify(summary).includes(member.username), false);
+  assert.equal(JSON.stringify(summary).includes('user_id'), false);
+  for (const query of ['days=365', 'days=7&days=30', 'userId=1']) assert.equal((await request(`/api/admin/analytics?${query}`, { headers: adminHeaders })).status, 400);
+  assert.equal((await request('/api/analytics/preferences', { method: 'PUT', headers, body: { consent: false, notice: NOTICE } })).status, 200);
+  const exported = await (await request('/api/analytics/export', { headers })).json();
+  assert.equal(exported.daily.length, 0);
+  assert.equal(exported.enrollment, null);
+  assert.equal((await request(`/api/admin/analytics/exclusions/${member.id}`, { method: 'PUT', headers: adminHeaders, body: { excluded: true } })).status, 200);
+  assert.equal((await (await request('/api/analytics/preferences', { headers })).json()).excluded, true);
+});
+
 test('invite redemption atomically creates a member, profile, session, and one-time consumption', context => {
   const store = memoryStore(context);
   invitation(store);
@@ -508,7 +984,7 @@ test('password reveal controls preserve values and reset to masked input', () =>
   assert.equal(input.type, 'password');
   assert.equal(button['aria-label'], 'Show password');
   assert.equal(button['aria-pressed'], 'false');
-  assert.match(source, /window\.addEventListener\('pagehide', \(\) => \{ resetAuthHandleCheck\(\); resetAuthPasswordVisibility\(\); \}\)/);
+  assert.match(source, /window\.addEventListener\('pagehide', \(\) => \{ resetAuthHandleCheck\(\); resetAuthPasswordVisibility\(\); resetAuthOnboarding\(\); \}\)/);
 });
 
 test('password feedback is local and synchronous for every input character and confirmation edit', () => {
@@ -830,6 +1306,39 @@ test('admin invitation listing uses a bounded descending ID cursor without repea
     assert.equal(response.status, 400, query);
     assert.equal((await response.json()).code, 'INVALID_REQUEST');
   }
+});
+
+test('admin invitation status filters apply before pagination and preserve lifecycle precedence', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const actorSessionHash = digest(headers.Cookie.split('=')[1]);
+  const expired = [invitation(store, 'expired-first', actorSessionHash), invitation(store, 'expired-second', actorSessionHash)];
+  const revoked = invitation(store, 'revoked-filter', actorSessionHash);
+  const exhausted = invitation(store, 'exhausted-filter', actorSessionHash);
+  const earlier = new Date(Date.now() - 60000).toISOString();
+  const expiry = new Date(Date.now() - 10000).toISOString();
+  for (const item of [...expired, revoked, exhausted]) store.db.prepare('UPDATE invitations SET created_at = ?, expires_at = ? WHERE id = ?').run(earlier, expiry, item.id);
+  store.db.prepare('UPDATE invitations SET revoked_at = ?, consumed_at = ?, use_count = max_uses WHERE id = ?').run(expiry, earlier, revoked.id);
+  store.db.prepare('UPDATE invitations SET consumed_at = ?, use_count = max_uses WHERE id = ?').run(earlier, exhausted.id);
+  for (let index = 0; index < 53; index++) invitation(store, `active-filter-${index}`, actorSessionHash);
+  const first = await (await request('/api/invites?status=expired&limit=1', { headers })).json();
+  assert.deepEqual(first.invitations.map(item => item.id), [expired[1].id]);
+  assert.equal(first.nextCursor, expired[1].id);
+  const second = await (await request(`/api/invites?status=expired&limit=1&before=${first.nextCursor}`, { headers })).json();
+  assert.deepEqual(second.invitations.map(item => item.id), [expired[0].id]);
+  assert.equal(second.nextCursor, null);
+  for (const [status, item] of [['revoked', revoked], ['exhausted', exhausted]]) {
+    const result = await (await request(`/api/invites?status=${status}`, { headers })).json();
+    assert.deepEqual(result.invitations.map(row => [row.id, row.status]), [[item.id, status]]);
+  }
+  const active = await (await request('/api/invites?status=active', { headers })).json();
+  assert.equal(active.invitations.length, 50);
+  assert.equal(active.invitations.every(item => item.status === 'active'), true);
+  const remaining = await (await request(`/api/invites?status=active&before=${active.nextCursor}`, { headers })).json();
+  assert.equal(remaining.invitations.length, 3);
+  assert.equal(remaining.nextCursor, null);
+  for (const query of ['status=', 'status=unknown', 'status=active&status=expired']) assert.equal((await request(`/api/invites?${query}`, { headers })).status, 400);
 });
 
 test('invitation HTTP validation rejects invalid expiry, revisions, IDs and attempts to add signup slots', async context => {
@@ -1677,7 +2186,7 @@ test('admin invitation form sends the chosen signup limit and discards stale res
   const { ui, account, element, requests, respond, ready } = invitationUiHarness();
   await ready;
   const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
-  const administration = html.slice(html.indexOf('<section id="settingsAdmin"'), html.indexOf('</section>', html.indexOf('<section id="settingsAdmin"')));
+  const administration = html.slice(html.indexOf('<section id="settingsAdmin"'), html.indexOf('<footer class="settings-footer"'));
   assert.match(administration, /<form id="inviteForm"[^>]*>[\s\S]*<label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required/);
   assert.match(administration, /id="createInvite"[^>]*type="submit"/);
   assert.match(administration, /id="profileMonitoring"[^>]*type="button"/);
@@ -1837,6 +2346,42 @@ test('invitation UI lists only on Administration activation and paginates with s
   assert.equal(requests.length, 5, 'Entering Administration again refreshes its current page');
   respond(requests[4], { invitations: rows, nextCursor: 51 });
   await reentered;
+});
+
+test('invitation UI status filtering resets cursors, persists across pages, and protects edit drafts', async () => {
+  const { ui, element, requests, respond, ready } = invitationUiHarness({ autoList: false });
+  respond(requests[0], { invitations: [invitationUiItem()], nextCursor: 100 });
+  await ready;
+  element('inviteCreateSection').open = true;
+  element('inviteMaxUses').value = '12';
+  element('inviteStatusFilter').value = 'expired';
+  const filtered = element('inviteStatusFilter').fire('change');
+  assert.equal(requests[1].url, '/api/invites?limit=50&status=expired');
+  assert.equal(element('inviteStatusFilter').disabled, true);
+  const expired = id => invitationUiItem(id, { status: 'expired', createdAt: '2029-12-01T12:00:00.000Z', expiresAt: '2029-12-08T12:00:00.000Z' });
+  respond(requests[1], { invitations: [expired(40)], nextCursor: 40 });
+  await filtered;
+  const next = element('inviteNext').fire('click');
+  assert.equal(requests[2].url, '/api/invites?limit=50&before=40&status=expired');
+  respond(requests[2], { invitations: [expired(20)], nextCursor: null });
+  await next;
+  ui.beginEdit(20, 'edit');
+  element('inviteEditExpiry').value = '2030-02-01T12:00:00';
+  assert.equal(element('inviteFilterClear').disabled, true);
+  await ui.setFilter('all');
+  assert.equal(requests.length, 3);
+  assert.equal(element('inviteEditExpiry').value, '2030-02-01T12:00:00');
+  ui.cancelEdit();
+  const cleared = element('inviteFilterClear').fire('click');
+  assert.equal(requests[3].url, '/api/invites?limit=50');
+  respond(requests[3], { invitations: [], nextCursor: null });
+  await cleared;
+  assert.equal(ui.page, 0);
+  assert.equal(element('inviteMaxUses').value, '12');
+  assert.equal(element('inviteCreateSection').open, true);
+  ui.close();
+  assert.equal(element('inviteStatusFilter').value, 'all');
+  assert.equal(element('inviteCreateSection').open, false);
 });
 
 test('invitation UI labels unavailable unused slots and rejects other-account data before reading it', async () => {
@@ -2120,7 +2665,7 @@ test('invitation settings hooks preserve rejected-close drafts and bind the curr
   assert.equal(context.dialog.confirmClose(), true);
   assert.equal(invitationsCleared, 1);
   assert.equal(passwordsCleared, 1);
-  const wiring = source.slice(source.indexOf('window.invitationSettings = new window.InvitationSettings('), source.indexOf("$('#profileModal').addEventListener('close', () => { if"));
+  const wiring = source.match(/window\.invitationSettings = new window\.InvitationSettings\(\{[\s\S]*?\n\}\);/)[0];
   vm.runInContext(wiring, context);
   const first = window.invitationSettings.getAccount();
   context.authUser = { id: 22, isAdmin: false };
@@ -2561,7 +3106,7 @@ test('enabled CAPTCHA is required for code delivery, registration and login and 
   assert.match(status.headers.get('content-security-policy'), /https:\/\/challenges\.cloudflare\.com/);
 });
 
-test('hidden authentication forms remove CAPTCHA and future providers remain disabled', () => {
+test('hidden authentication forms remove CAPTCHA and unavailable providers are not offered', () => {
   const source = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
   const block = source.slice(source.indexOf('function resetCaptcha(kind)'), source.indexOf('function syncEmailCode(kind)'));
   const removed = [];
@@ -2578,7 +3123,15 @@ test('hidden authentication forms remove CAPTCHA and future providers remain dis
   const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   assert.match(html, /id="authPasswordConfirmation"[^>]+type="password"/);
   assert.match(html, /id="authHandle"/);
-  assert.equal((html.match(/class="btn ghost auth-provider" type="button" aria-disabled="true"/g) || []).length, 2);
+  assert.doesNotMatch(html, /class="btn ghost auth-provider"/);
+  assert.ok(html.indexOf('id="authError"') < html.indexOf('id="authForm"'));
+  vm.runInNewContext(block + '\nresetCaptcha("auth");', {
+    authView: { classList: { contains: () => false } },
+    $: () => ({ classList: { contains: () => false } }),
+    authMode: 'register', authSignupStep: 'account', authSignupSteps: () => ['account', 'about', 'verify'],
+    syncCaptcha: (kind, action) => removed.push([kind, action]),
+  });
+  assert.deepEqual(removed.at(-1), ['auth', null]);
 });
 
 test('live activity requires a fresh single-use challenge, deduplicates tabs and expires on logout or inactivity', context => {
@@ -2623,6 +3176,59 @@ test('ordinary API touches and delayed learning batches never mark a user curren
   store.issuePresenceChallenge(values.sessionHash, 'tab', digest('presence'));
   store.db.prepare("UPDATE users SET account_state = 'disabled' WHERE id = ?").run(user.id);
   assert.throws(() => store.confirmPresence(values.sessionHash, 'tab', digest('presence')), { code: 'UNAUTHENTICATED' });
+});
+
+test('monitoring member and event filters precede limits, combine safely, and keep overview totals global', async context => {
+  const { store, request, verify } = await httpFixture(context);
+  const admin = await request('/api/auth/register', { method: 'POST', body: await verify(joinBody(bootstrapToken(store))) });
+  const headers = { Cookie: cookieOf(admin) };
+  const members = Array.from({ length: 32 }, (_, index) => store.createUser({ username: `team_${String(index).padStart(2, '0')}`, isGuest: false }));
+  store.db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(members[0].id);
+  store.db.prepare("UPDATE users SET account_state = 'disabled' WHERE id = ?").run(members[1].id);
+  const guest = store.createUser({ username: 'team_guest', isGuest: true });
+  const deleted = store.createUser({ username: 'team_deleted', isGuest: false });
+  store.db.prepare("UPDATE users SET account_state = 'deleted' WHERE id = ?").run(deleted.id);
+  const sessionHash = digest('filtered-member-session');
+  store.createSession(sessionHash, members[2].id, new Date(Date.now() + 86400000).toISOString());
+  store.issuePresenceChallenge(sessionHash, 'filter-tab', digest('filter-presence'));
+  store.confirmPresence(sessionHash, 'filter-tab', digest('filter-presence'));
+  const audit = store.db.prepare('INSERT INTO auth_audit (user_id, event, created_at) VALUES (?, ?, ?)');
+  audit.run(members[0].id, 'logout', new Date(Date.now() - 2 * 86400000).toISOString());
+  audit.run(members[1].id, 'logout', new Date(Date.now() - 3600000).toISOString());
+  for (let index = 0; index < 32; index++) audit.run(members[2].id, 'login', new Date().toISOString());
+  const get = async query => {
+    const response = await request(`/api/admin/monitoring?${query}`, { headers });
+    assert.equal(response.status, 200);
+    return (await response.json()).usage;
+  };
+  const first = await get('query=TEAM_&sort=name');
+  assert.equal(first.filteredUsers, 32);
+  assert.equal(first.totalUsers, 33);
+  assert.equal(first.users.length, 25);
+  assert.equal(first.users[0].username, 'team_00');
+  const second = await get('query=team_&sort=name&page=2');
+  assert.equal(second.users.length, 7);
+  const seen = [...first.users, ...second.users].map(user => user.id);
+  assert.equal(new Set(seen).size, 32);
+  assert.equal(seen.includes(guest.id) || seen.includes(deleted.id), false);
+  for (const [filter, expected] of [['role=admin', [members[0].id]], ['activity=active', [members[2].id]], ['role=member&activity=disabled', [members[1].id]]]) {
+    const usage = await get(`query=team_&${filter}&page=2`);
+    assert.deepEqual(usage.users.map(user => user.id), expected);
+    assert.equal(usage.page, 1);
+    assert.equal(usage.pages, 1);
+    for (const key of ['activeNow', 'activeToday', 'activeWeek', 'members', 'totalUsers']) assert.equal(usage[key], first[key]);
+  }
+  assert.equal((await get('query=team_&activity=idle')).filteredUsers, 30);
+  assert.equal((await get('query=team_&sort=newest')).users[0].id, members.at(-1).id);
+  assert.equal((await get('query=%25')).filteredUsers, 0);
+  const recent = await get('event=logout&days=1');
+  assert.deepEqual(recent.events.map(event => event.userId), [members[1].id]);
+  assert.equal((await get('event=logout&days=7')).events.length, 2);
+  assert.equal((await get('event=login&days=30')).events.length, 30);
+  for (const query of ['query=' + 'a'.repeat(101), 'query=one&query=two', 'role=owner', 'activity=unknown', 'sort=id',
+    'event=password', 'days=2', 'days=01', 'days=1&days=7', 'page=1&page=2', 'page=1e2', 'unknown=1']) {
+    assert.equal((await request(`/api/admin/monitoring?${query}`, { headers })).status, 400, query);
+  }
 });
 
 test('monitoring API is admin-only and presence uses server-owned sessions instead of supplied user IDs', async context => {

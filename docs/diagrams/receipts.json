@@ -1,0 +1,191 @@
+{
+  "version": 1,
+  "generator": {
+    "repository": "https://github.com/tt-a1i/archify",
+    "revision": "9e35d2b0b39b155553ba9fcfe0b4f2a5198dd993",
+    "version": "2.17",
+    "packageSha256": "d2296515b0091fb8f00580ea9e0b665d91ca5839fde651abe3ecd57a3ca178ec"
+  },
+  "diagrams": [
+    {
+      "id": "system",
+      "type": "architecture",
+      "specification": {
+        "sha256": "7d04254badac700b55d571290aa8627e3f44502866ca2124518572010856ea88",
+        "bytes": 4332
+      },
+      "artifact": {
+        "sha256": "6bf5e6c3cb3ff674d675e8d9e34ec459a261d81978179badaeebd32b84f33f74",
+        "bytes": 814119
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "account",
+      "type": "workflow",
+      "specification": {
+        "sha256": "ad56ccd1f2ac7d31df7fa1b96b9a56b468458ebbd27e1064b575e30368089466",
+        "bytes": 3004
+      },
+      "artifact": {
+        "sha256": "28c5895494b4417c6c5b36531b6115a5648b44b7b4b1f0d1e8ec117870e4bec6",
+        "bytes": 805806
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "learning",
+      "type": "workflow",
+      "specification": {
+        "sha256": "525825276bba604904dda638b86a7f6fa04c419cb96f49372cb1e13ca9ee8a2d",
+        "bytes": 2922
+      },
+      "artifact": {
+        "sha256": "cab895282ad5d6f23544d66ca342c1e595bcc3c5f1c05b1090f5ccea077b4c21",
+        "bytes": 804965
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "notes",
+      "type": "workflow",
+      "specification": {
+        "sha256": "600f4192d058a53574112f065cf5c7429eb313d24f68815e75098e9eed85e44f",
+        "bytes": 3168
+      },
+      "artifact": {
+        "sha256": "ff56748a3285b4d8ccb1d0dffe28b296448c236183b0a663783ca8dd0df530c8",
+        "bytes": 807322
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "chat",
+      "type": "workflow",
+      "specification": {
+        "sha256": "bcf6731636884a10174ab3b0f05600135c0f30339164798dc8da3ddcf4f86452",
+        "bytes": 3063
+      },
+      "artifact": {
+        "sha256": "2e191e94022a8fc9b015f185cac8970f4c1048a1b81f7b824c969fad036a785d",
+        "bytes": 806084
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "capture",
+      "type": "workflow",
+      "specification": {
+        "sha256": "57432521da2748269aa7bce056cd850e46c667106304435ecb1f097f9a670d82",
+        "bytes": 3018
+      },
+      "artifact": {
+        "sha256": "12fcbcc7d36d1f5dc09e529d64907d2aded50b3d320dec927f70d0d8c78375f4",
+        "bytes": 805633
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "feedback",
+      "type": "workflow",
+      "specification": {
+        "sha256": "4373ebb2de3983d4bb99e32795974ab09eaf565886cfdad934d952bd006ec40f",
+        "bytes": 2703
+      },
+      "artifact": {
+        "sha256": "acb57cd62244de2f8f249ab11069c11b00ceb56828a9311d9d41e2924dbe8fc6",
+        "bytes": 803215
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "deployment",
+      "type": "workflow",
+      "specification": {
+        "sha256": "3655c40d2fa078d038ede12c9def0aeed467ed565b9e36d46f0ef2e41e13b40a",
+        "bytes": 2594
+      },
+      "artifact": {
+        "sha256": "13b06c2c7ef8816d64b4c8e3bb2086382c429b7b9e65bcd2971aa5b8ef78e7d3",
+        "bytes": 802719
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    },
+    {
+      "id": "release-draft",
+      "type": "workflow",
+      "specification": {
+        "sha256": "4df54fb00bed44e9b445e5a51852d133db4111091acf25d512fd60679ca10b8f",
+        "bytes": 2828
+      },
+      "artifact": {
+        "sha256": "28a0c2c626e1e430d4e9640f9a76d19fe98868216d4f3a2202d2298b947fd117",
+        "bytes": 805398
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    }
+  ]
+}

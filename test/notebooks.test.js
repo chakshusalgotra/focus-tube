@@ -535,7 +535,7 @@ test('full backups round-trip notebooks and reject stale restores without overwr
   const user = profile(store);
   store.saveNote(user.id, 'course1', 'aqz-KE-bpKQ', note('Original', 760), 0);
   const exported = store.getExportData(user.id);
-  assert.equal(exported.schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 4);
   const imported = { ...exported, dailyActivity: [], watchHistory: [] };
   store.saveNote(user.id, 'course1', 'aqz-KE-bpKQ', note('Newer', 800), 1);
   assert.equal(store.importUserData(user.id, imported, 1, 1), null);
@@ -590,7 +590,7 @@ test('notebook HTTP endpoints enforce authentication, validation, ownership, and
   assert.equal((await request(endpoint, { method: 'PUT', body: { document: note('Invalid', -10), revision: 1 } })).status, 400);
   assert.equal((await request(endpoint, { method: 'PUT', body: { document: note('x'.repeat(310 * 1024)), revision: 1 } })).status, 413);
   const exported = await (await request('/api/export')).json();
-  assert.equal(exported.schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 4);
   assert.equal((await request('/api/import?revision=1&notesRevision=0', { method: 'POST', body: exported })).status, 409);
   assert.equal((await request('/api/import?revision=1&notesRevision=1', { method: 'POST', body: exported })).status, 200);
   assert.equal((await request('/api/notebooks/course1?notesRevision=1', { method: 'DELETE' })).status, 409);

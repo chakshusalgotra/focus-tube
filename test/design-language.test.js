@@ -12,10 +12,26 @@ require('node:test').test('chat and notes share one study pane with explicit con
   assert.match(markup, /id="studyNotesTab"[^>]*role="tab"[^>]*aria-controls="courseNotesHost"/);
   assert.match(markup, /id="chatMessages"[^>]*aria-live="off"/);
   assert.match(markup, /id="chatStatus"[^>]*aria-live="polite"/);
-  assert.match(markup, /id="chatScope"/);
+  assert.doesNotMatch(markup, /id="chat(?:Scope|Upload|Consent|Rights|Options|LoadCaptions)"|class="chat-model"/);
   assert.match(markup, /aria-label="Stop answer"/);
+  assert.match(markup, /id="chatHistory"[^>]*aria-label="Chat history"/);
+  assert.match(markup, /id="chatNew"[^>]*aria-label="New chat"/);
+  assert.match(markup, /id="chatQuestion"[^>]*aria-label="Chat message"/);
+  assert.ok(markup.indexOf('id="chatMessages"') < markup.indexOf('id="chatForm"'));
+  assert.match(markup, /id="chatFollowUps"[^>]*aria-label="Suggested follow-up questions"/);
+  assert.match(chat, /empty\.id = 'chatStarters'/);
+  assert.match(chat, /Summarize video/);
+  assert.match(chat, /chat-turn chat-user/);
+  assert.match(chat, /chat-turn chat-assistant/);
+  assert.doesNotMatch(chat, /chat-exchange|'AI answer'/);
   assert.match(styles, /\.study-tabs button \{[^}]*min-height: 44px/);
   assert.match(styles, /\.study-pane \{ grid-column: 1;/);
+  assert.match(styles, /\.video-chat-panel \.chat-citations button \{[^}]*background: transparent;[^}]*min-height: 26px;[^}]*font-size: calc\(11px/);
+  assert.match(styles, /\.video-chat-panel \.chat-add-note\.btn \{[^}]*min-height: 26px;[^}]*border: 0;[^}]*background: transparent;/);
+  assert.match(styles, /\.video-chat-panel \.btn\.slim \{[^}]*min-height: 28px;[^}]*font-size: calc\(12px/);
+  assert.match(styles, /\.chat-citations \{ display: inline-flex;/);
+  assert.match(styles, /\.chat-suggestion \{[^}]*flex: 0 1 auto;/);
+  assert.match(styles, /@media \(max-width: 700px\), \(any-pointer: coarse\) \{[\s\S]*\.video-chat-panel \.chat-citations button \{ min-width: 44px; min-height: 44px;/);
   assert.match(chat, /this\.options\.appendGeneratedNote\(preview\.proposal/);
   assert.doesNotMatch(chat, /pauseVideo\(|setContents\(|\.load\(.*document/);
 });
@@ -27,6 +43,20 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const read = file => fs.readFileSync(path.join(__dirname, '..', file), 'utf8');
+
+test('signup steps reflow at enlarged text sizes without shrinking controls or hiding overflow', () => {
+  const styles = read('public/styles.css');
+  const markup = read('public/index.html');
+  assert.match(styles, /\.auth-view \{[^}]*grid-template-columns: minmax\(0, 1fr\)/);
+  for (const selector of ['auth-steps', 'auth-tabs', 'auth-step-actions']) {
+    assert.match(styles, new RegExp(`\\.${selector} \\{[^}]*flex-wrap: wrap`));
+  }
+  assert.match(styles, /\.auth-step-actions \.btn \{[^}]*min-height: 44px/);
+  assert.match(styles, /\.auth-steps li > span \{[^}]*overflow-wrap: anywhere/);
+  assert.match(markup, /id="authHeading" tabindex="-1"/);
+  assert.match(markup, /id="authAccountFields"[^>]*aria-label="Account details"/);
+  assert.match(markup, /id="authSteps"[^>]*aria-label="Signup progress"/);
+});
 
 test('email code boxes preserve six digits, leading zeroes, and native input semantics', () => {
   const source = read('public/app.js');
@@ -707,7 +737,8 @@ test('Notes and opt-in Ask sit beside completion with accessible icons', () => {
   assert.match(html, /class="coming-soon">Coming soon/);
   assert.match(source, /videoChat = new VideoChat\(/);
   assert.match(html, /id="videoChatPanel"[^>]*role="tabpanel"[^>]*aria-labelledby="studyChatTab"/);
-  assert.match(html, /id="chatConsent"[^>]*type="checkbox"/);
+  assert.doesNotMatch(html, /id="chatConsent"/);
+  assert.match(read('public/video-chat.js'), /if \(!confirm\('Use AI chat for this video\?/);
   assert.doesNotMatch(source, /fetch\([^\n]*(?:transcript|\/chat)/);
   assert.match(html, /id="workspaceTooltip"[^>]*role="tooltip"/);
   assert.match(css, /\.lesson-actions \.icon-btn::after \{ content: attr\(title\);/);
@@ -1032,6 +1063,27 @@ test('course layout defaults are closed and explicit choices persist per account
   assert.equal(vm.runInContext('courseLayout("python").notesOpen', context), true);
 });
 
+test('account settings group existing forms into native collapsed sections without discarding drafts', () => {
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '../public/styles.css'), 'utf8');
+  for (const [id, form] of [['accountDetails', 'accountForm'], ['passwordSettings', 'passwordForm'], ['accountEmailSettings', 'emailEnrollmentForm']]) {
+    const section = html.match(new RegExp(`<details id="${id}" class="account-disclosure">([\\s\\S]*?)</details>`));
+    assert.ok(section, `${id} starts collapsed`);
+    assert.ok(section[1].includes(`<form id="${form}"`), `${form} keeps its existing handler`);
+    assert.match(section[1], /<summary>[\s\S]*data-ui-icon="ChevronDown"/);
+  }
+  assert.match(css, /\.account-disclosure > summary\s*\{[^}]*min-height: 56px/);
+  const opening = source.slice(source.indexOf('async function openProfile('), source.indexOf('function setupAccountSettings('));
+  assert.match(opening, /section\.open = false/);
+  assert.match(opening, /\$\('#accountDetails'\)\.open = true/);
+  const setup = source.slice(source.indexOf('function setupAccountSettings('), source.indexOf('function passwordDirty('));
+  assert.match(setup, /accountEmailSettings'\)\.addEventListener\('toggle'/);
+  assert.match(setup, /addEventListener\('invalid'/);
+  assert.match(source, /section === 'account' && \$\('#accountEmailSettings'\)\.open/);
+  assert.match(source, /\$\('#accountEmailSummary'\)\.textContent/);
+});
+
 test('settings account drafts survive section changes and block accidental dismissal', () => {
   const source = read('public/app.js');
   const fields = { '#accountDisplayName': { value: 'Learner' }, '#accountUsername': { value: 'first.user' } };
@@ -1065,7 +1117,10 @@ test('settings account drafts survive section changes and block accidental dismi
 test('public policies have separate terms and privacy sections without loading workspace or video scripts', () => {
   const html = read('public/policies.html');
   for (const section of ['terms', 'privacy', 'contact']) assert.match(html, new RegExp(`<section id="${section}"`));
-  assert.match(html, /datetime="2026-09-25"/);
+  assert.match(html, /datetime="2026-09-28"/);
+  assert.match(read('public/index.html'), /Effective 28 September 2026/);
+  assert.match(html, /Optional product analytics/);
+  assert.match(html, /conversation IDs, names and timestamps/);
   assert.match(html, /send Google Gemini your question/);
   assert.match(html, /Existing notebook contents, account credentials, and other videos are not automatically included/);
   assert.match(html, /it contains no transcript or conversation text/);

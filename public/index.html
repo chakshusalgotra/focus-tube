@@ -58,7 +58,7 @@
   <main id="authView" class="auth-view">
     <section class="auth-shell">
       <div class="auth-brand"><span class="brand-symbol" data-ui-icon="BookOpen"></span><span>focustube<span class="brand-dot">.</span></span></div>
-      <h1 id="authHeading">Your learning workspace.</h1>
+      <h1 id="authHeading" tabindex="-1">Your learning workspace.</h1>
       <p id="authWelcome">Welcome back.</p>
       <div id="authTabs" class="auth-tabs" role="group" aria-label="Account access">
         <button id="loginTab" class="active" type="button" aria-pressed="true">Sign in</button>
@@ -69,7 +69,14 @@
         <p id="inviteAccountName" class="auth-notice"></p>
         <div class="auth-actions"><button id="inviteContinue" class="btn" type="button">Continue to account</button><button id="inviteSignOut" class="btn ghost" type="button">Sign out</button></div>
       </div>
+      <ol id="authSteps" class="auth-steps hidden" aria-label="Signup progress">
+        <li id="authStepAccount" data-number="1"><span>Account</span></li>
+        <li id="authStepAbout" data-number="2"><span>About you<small>Optional</small></span></li>
+        <li id="authStepVerify" data-number="3"><span>Verify email</span></li>
+      </ol>
+      <div id="authError" class="add-error hidden" role="alert"></div>
       <form id="authForm" class="auth-form">
+        <fieldset id="authAccountFields" class="auth-account-fields" aria-label="Account details">
         <label><span id="authIdentityLabel">Email or username</span><input id="authUsername" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" required /></label>
         <label id="authDisplayNameField" class="hidden">Display name<input id="authDisplayName" type="text" autocomplete="name" maxlength="80" /></label>
         <div id="authHandleField" class="hidden"><label for="authHandle">Username</label><input id="authHandle" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" title="3-32 letters, numbers, dots, dashes, or underscores" aria-describedby="authHandleStatus" /><p id="authHandleStatus" class="field-feedback" role="status" aria-live="polite" aria-atomic="true">3-32 letters, numbers, dots, dashes, or underscores.</p></div>
@@ -77,6 +84,17 @@
           <div id="authPasswordFeedback" class="password-feedback hidden" role="status" aria-live="polite" aria-atomic="true"><span id="authPasswordLength"></span><div class="password-strength"><meter id="authPasswordMeter" min="0" max="4" low="2" high="3" optimum="4" value="0" aria-label="Estimated password strength"></meter><span id="authPasswordStrength"></span></div><span id="authPasswordAdvice"></span></div>
         </div>
         <div id="authConfirmField" class="hidden"><label for="authPasswordConfirmation">Confirm password</label><div class="password-control"><input id="authPasswordConfirmation" type="password" autocomplete="new-password" minlength="8" maxlength="128" aria-describedby="authPasswordMatch" /><button type="button" class="icon-btn password-toggle" data-password-for="authPasswordConfirmation" data-password-label="password confirmation" aria-controls="authPasswordConfirmation" aria-label="Show password confirmation" aria-pressed="false" title="Show password confirmation"><span data-ui-icon="Eye" aria-hidden="true"></span></button></div><p id="authPasswordMatch" class="field-feedback" role="status" aria-live="polite" aria-atomic="true"></p></div>
+        </fieldset>
+        <fieldset id="authOnboarding" class="auth-onboarding hidden" aria-describedby="authOnboardingNotice">
+          <legend>Optional learning profile</legend>
+          <p id="authOnboardingNotice" class="muted">Share only what you choose. These answers are not taken from your social accounts and are not required for signup.</p>
+          <label>What best describes you?<select id="authLearningRole" disabled><option value="">Not answered</option><option value="student">Student</option><option value="professional">Working professional</option><option value="job-seeker">Job seeker</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+          <label>What are you learning for?<select id="authLearningGoal" disabled><option value="">Not answered</option><option value="coursework">Coursework</option><option value="upskilling">Upskilling</option><option value="interview">Interview preparation</option><option value="interest">General interest</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+          <label>Where did you first hear about FocusTube?<select id="authDiscoverySource" disabled><option value="">Not answered</option><option value="friend">Friend or invitation</option><option value="linkedin">LinkedIn</option><option value="twitter">X / Twitter</option><option value="reddit">Reddit</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="search">Search engine</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+          <label class="auth-checkbox"><input id="authAnalyticsConsent" type="checkbox" disabled />Share these optional answers and usage analytics</label>
+          <p class="field-hint">Off by default. If selected, shares activity dates, approximate watch time, and successful feature use, as well as any answers above. No note or chat content. Daily records and saved answers expire after 90 days; you can turn sharing off and delete them in Settings.</p>
+          <p id="authOnboardingStatus" class="muted" role="status"></p>
+        </fieldset>
         <div id="authCodeBlock" class="verification-fields hidden">
           <p id="authCodeSent" class="muted" role="status"></p>
           <label for="authCode">6-digit email code</label>
@@ -85,14 +103,13 @@
         </div>
         <div id="authCaptcha" class="captcha-container hidden"></div>
         <p id="authCaptchaError" class="add-error hidden" role="alert"></p>
-        <button id="authSubmit" class="btn" type="submit">Sign in</button>
+        <div class="auth-step-actions">
+          <button id="authBack" class="btn ghost hidden" type="button"><span data-ui-icon="ArrowLeft" aria-hidden="true"></span>Back</button>
+          <button id="authSubmit" class="btn" type="submit">Sign in</button>
+        </div>
+        <button id="authOnboardingSkip" class="btn ghost hidden" type="button">Skip optional questions</button>
       </form>
       <p id="authEmailUnavailable" class="auth-notice hidden" role="status">Email verification is not configured. Contact the administrator.</p>
-      <div id="authError" class="add-error hidden" role="alert"></div>
-      <div id="socialAuthOptions" class="auth-providers" role="group" aria-label="Future sign-in options">
-        <button class="btn ghost auth-provider" type="button" aria-disabled="true" title="Google sign-in is not available yet"><span data-ui-icon="LogIn"></span><span>Google<small>Coming soon</small></span></button>
-        <button class="btn ghost auth-provider" type="button" aria-disabled="true" title="GitHub sign-in is not available yet"><span data-ui-icon="LogIn"></span><span>GitHub<small>Coming soon</small></span></button>
-      </div>
       <nav class="auth-policies" aria-label="Legal information"><a href="/policies.html#terms" target="_blank" rel="noopener noreferrer">Terms and conditions</a><a href="/policies.html#privacy" target="_blank" rel="noopener noreferrer">Privacy policy</a></nav>
       <nav class="auth-policies" aria-label="Feedback"><a href="/feedback" target="_blank" rel="noopener noreferrer">Feedback</a></nav>
       <div id="guestMigration" class="auth-actions hidden">
@@ -306,24 +323,41 @@
         </div>
       </details>
       <section id="videoChatPanel" class="video-chat-panel hidden" role="tabpanel" aria-labelledby="studyChatTab">
-        <div class="chat-heading"><h3 id="chatVideoTitle">Video chat</h3><button id="chatClose" class="icon-btn" type="button" title="Close video chat" aria-label="Close video chat"><span data-ui-icon="X"></span></button></div>
-        <div class="chat-status-row"><span id="chatStatus" role="status" aria-live="polite"></span><span class="muted">Transcript only</span><button id="chatReload" class="icon-btn" type="button" title="Reload chat" aria-label="Reload chat"><span data-ui-icon="RefreshCw"></span></button><button id="chatClear" class="icon-btn" type="button" title="Clear chat" aria-label="Clear chat"><span data-ui-icon="Trash2"></span></button></div>
+        <div class="chat-heading">
+          <h3 id="chatVideoTitle">Video chat</h3>
+          <button id="chatNew" class="icon-btn" type="button" title="New chat" aria-label="New chat"><span data-ui-icon="Plus" aria-hidden="true"></span></button>
+          <details id="chatMenu" class="chat-menu">
+            <summary id="chatMenuToggle" class="icon-btn" title="Chat actions" aria-label="Chat actions"><span data-ui-icon="Ellipsis" aria-hidden="true"></span></summary>
+            <div class="chat-menu-items">
+              <button id="chatRename" type="button"><span data-ui-icon="Pencil" aria-hidden="true"></span>Rename chat</button>
+              <button id="chatReload" type="button"><span data-ui-icon="RefreshCw" aria-hidden="true"></span>Reload chat</button>
+              <button id="chatClear" type="button"><span data-ui-icon="Eraser" aria-hidden="true"></span>Clear messages</button>
+              <button id="chatPrivacy" type="button"><span data-ui-icon="Shield" aria-hidden="true"></span>Reset AI permission</button>
+              <button id="chatDelete" type="button"><span data-ui-icon="Trash2" aria-hidden="true"></span>Delete chat</button>
+            </div>
+          </details>
+          <button id="chatClose" class="icon-btn" type="button" title="Close video chat" aria-label="Close video chat"><span data-ui-icon="X" aria-hidden="true"></span></button>
+        </div>
+        <select id="chatHistory" class="chat-history" aria-label="Chat history"><option value="">New chat</option></select>
+        <form id="chatRenameForm" class="chat-rename hidden">
+          <input id="chatName" aria-label="Chat name" maxlength="80" required />
+          <button id="chatRenameSave" class="icon-btn" type="submit" title="Save chat name" aria-label="Save chat name"><span data-ui-icon="Check" aria-hidden="true"></span></button>
+          <button id="chatRenameCancel" class="icon-btn" type="button" title="Cancel rename" aria-label="Cancel rename"><span data-ui-icon="X" aria-hidden="true"></span></button>
+        </form>
         <p id="chatError" class="chat-error" role="alert"></p>
-        <p id="chatSourceInfo" class="chat-source-info muted">No transcript loaded</p>
-        <details id="chatSource" class="chat-source" open>
-          <summary>Transcript</summary>
-          <label class="chat-language">Language<input id="chatLanguage" value="und" maxlength="35" placeholder="en, hi, or und" aria-label="Caption language code" /></label>
-          <label class="chat-consent"><input id="chatRights" type="checkbox" />I have permission to use these captions.</label>
-          <div class="chat-source-actions"><button id="chatLoadCaptions" class="btn ghost slim" type="button">Load captions</button><label class="chat-file-label" for="chatUpload">Upload SRT/VTT</label><input id="chatUpload" type="file" accept=".srt,.vtt" aria-label="Upload SRT or VTT transcript" /><button id="chatRemoveTranscript" class="btn ghost slim" type="button">Remove transcript</button></div>
-        </details>
-        <div id="chatMessages" class="chat-messages" role="region" aria-label="Conversation" aria-live="off" tabindex="0"></div>
-        <button id="chatLatest" class="icon-btn chat-latest hidden" type="button" title="Latest message" aria-label="Latest message"><span data-ui-icon="ArrowDown" aria-hidden="true"></span></button>
+        <div class="chat-log">
+          <div id="chatMessages" class="chat-messages" role="log" aria-label="Conversation" aria-live="off" tabindex="0"></div>
+          <button id="chatLatest" class="icon-btn chat-latest hidden" type="button" title="Latest message" aria-label="Latest message"><span data-ui-icon="ArrowDown" aria-hidden="true"></span></button>
+        </div>
+        <div id="chatFollowUps" class="chat-suggestions hidden" role="group" aria-label="Suggested follow-up questions"></div>
         <form id="chatForm" class="chat-form">
-          <div class="chat-context-controls"><label for="chatScope">Context<select id="chatScope"><option value="moment">Current moment</option><option value="video">Whole video</option><option value="discussion">Discussion</option></select></label><button id="chatSummarize" class="btn ghost slim" type="button" title="Summarize selected context"><span data-ui-icon="NotebookPen" aria-hidden="true"></span>Summarize</button></div>
-          <p id="chatContextTime" class="chat-context-label"></p>
-          <label for="chatQuestion">Question</label><textarea id="chatQuestion" rows="3" maxlength="2000" placeholder="Ask about this video" required></textarea>
-          <label class="chat-consent"><input id="chatConsent" type="checkbox" />Send this transcript and my questions to Google.</label>
-          <div class="chat-compose-actions"><button id="chatCancel" class="icon-btn hidden" type="button" title="Stop answer" aria-label="Stop answer"><span data-ui-icon="Square" aria-hidden="true"></span></button><button id="chatSend" class="icon-btn" type="submit" title="Send question" aria-label="Send question" disabled><span data-ui-icon="Send" aria-hidden="true"></span></button></div>
+          <div class="chat-composer">
+            <textarea id="chatQuestion" rows="2" maxlength="2000" placeholder="Ask about this video" aria-label="Chat message" required></textarea>
+            <div class="chat-compose-actions"><button id="chatCancel" class="icon-btn hidden" type="button" title="Stop answer" aria-label="Stop answer"><span data-ui-icon="Square" aria-hidden="true"></span></button><button id="chatSend" class="icon-btn" type="submit" title="Send message" aria-label="Send message" disabled><span data-ui-icon="ArrowUp" aria-hidden="true"></span></button></div>
+          </div>
+          <div class="chat-footer">
+            <span id="chatStatus" role="status" aria-live="polite"></span>
+          </div>
         </form>
       </section>
       <div id="notesHeightHandle" class="note-resize-handle notes-height-handle" role="separator" tabindex="0" aria-label="Study pane height" aria-orientation="horizontal" aria-controls="courseNotesContent videoChatPanel" aria-valuemin="240" aria-valuemax="1600" aria-valuenow="600" title="Resize study pane height. Arrow keys to adjust; Enter or double-click to reset."><span data-ui-icon="GripHorizontal" aria-hidden="true"></span></div>
@@ -444,15 +478,59 @@
     </section>
   </main>
 
+  <dialog id="analyticsModal" class="modal-backdrop hidden" aria-labelledby="analyticsTitle">
+    <div class="modal monitoring-modal">
+      <button class="modal-close" data-close="analyticsModal" type="button">Close</button>
+      <header class="monitoring-heading"><div><p class="eyebrow">Administration</p><h2 id="analyticsTitle">Product analytics</h2><p id="analyticsUpdated" class="muted"></p></div></header>
+      <div class="admin-filters"><label>Date range<select id="analyticsRange"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></label><button id="analyticsRefresh" class="icon-btn" type="button" title="Refresh analytics" aria-label="Refresh analytics"><span data-ui-icon="RefreshCw"></span></button></div>
+      <nav id="analyticsTabs" class="admin-tabs" role="tablist" aria-label="Analytics sections">
+        <button id="analyticsOverviewTab" data-analytics-tab="overview" role="tab" type="button" aria-selected="true" aria-controls="analyticsOverview"><span data-ui-icon="ChartNoAxesCombined"></span>Overview</button>
+        <button id="analyticsEngagementTab" data-analytics-tab="engagement" role="tab" type="button" aria-selected="false" aria-controls="analyticsEngagement" tabindex="-1"><span data-ui-icon="Activity"></span>Engagement</button>
+        <button id="analyticsRetentionTab" data-analytics-tab="retention" role="tab" type="button" aria-selected="false" aria-controls="analyticsRetention" tabindex="-1"><span data-ui-icon="CalendarDays"></span>Retention</button>
+        <button id="analyticsAudienceTab" data-analytics-tab="audience" role="tab" type="button" aria-selected="false" aria-controls="analyticsAudience" tabindex="-1"><span data-ui-icon="UsersRound"></span>Audience</button>
+      </nav>
+      <p id="analyticsStatus" class="muted" role="status"></p><p id="analyticsError" class="add-error" role="alert"></p>
+      <div id="analyticsContent" class="hidden">
+        <section id="analyticsOverview" role="tabpanel" aria-labelledby="analyticsOverviewTab" tabindex="0">
+          <div class="monitoring-summary"><div><strong id="analyticsDaily">0</strong><span>Active today</span></div><div><strong id="analyticsWeekly">0</strong><span>Active in 7 days</span></div><div><strong id="analyticsMonthly">0</strong><span>Active in 30 days</span></div><div><strong id="analyticsLearners">0</strong><span>5-minute learners / 7 days</span></div></div>
+          <p id="analyticsCoverage" class="muted"></p>
+          <div class="analytics-chart"><canvas id="analyticsTrendChart" role="img" aria-label="Recorded active members by UTC day" aria-describedby="analyticsTrendData"></canvas></div>
+          <details class="chart-data"><summary>Activity data</summary><div id="analyticsTrendData" class="chart-data-table" tabindex="0" role="region" aria-label="Activity data"></div></details>
+        </section>
+        <section id="analyticsEngagement" class="hidden" role="tabpanel" aria-labelledby="analyticsEngagementTab" tabindex="0">
+          <div class="analytics-stats"><div><strong id="analyticsMedian">0</strong><span>Median watch minutes / active member</span></div><div><strong id="analyticsPeriodActive">0</strong><span>Active members in selected range</span></div></div>
+          <div class="analytics-chart"><canvas id="analyticsFeatureChart" role="img" aria-label="Unique members using each feature" aria-describedby="analyticsFeatureData"></canvas></div>
+          <details class="chart-data"><summary>Feature data</summary><div id="analyticsFeatureData" class="chart-data-table" tabindex="0" role="region" aria-label="Feature data"></div></details>
+          <section class="monitoring-section"><h3>7-day activation since opt-in</h3><ol id="analyticsFunnel" class="analytics-funnel"></ol><p id="analyticsActivationStatus" class="muted"></p></section>
+        </section>
+        <section id="analyticsRetention" class="hidden" role="tabpanel" aria-labelledby="analyticsRetentionTab" tabindex="0"><h3>Return on day 7 and day 30</h3><p class="muted">Return means recorded activity on that exact UTC day after opt-in. Pending cohorts and collection gaps are excluded from the denominator.</p><div id="analyticsCohorts" class="chart-data-table" tabindex="0" role="region" aria-label="Retention cohorts"></div></section>
+        <section id="analyticsAudience" class="hidden" role="tabpanel" aria-labelledby="analyticsAudienceTab" tabindex="0">
+          <h3>Learning audience</h3><p id="audienceCoverage" class="muted"></p>
+          <p class="muted">Current self-reported answers from opted-in members active in the previous 30 complete UTC days. Unknown includes unanswered questions. Small groups and sparse comparisons are withheld. Early invitation cohorts and voluntary responses may not represent your wider audience.</p>
+          <section class="monitoring-section"><h3>Learning role</h3><p id="audienceRoleStatus" class="muted"></p><div id="audienceRolePlot" class="analytics-chart"><canvas id="audienceRoleChart" role="img" aria-label="Learning role breakdown" aria-describedby="audienceRoleData"></canvas></div><div id="audienceRoleData" class="chart-data-table" tabindex="0" role="region" aria-label="Learning role data"></div></section>
+          <section class="monitoring-section"><h3>Learning goal</h3><p id="audienceGoalStatus" class="muted"></p><div id="audienceGoalPlot" class="analytics-chart"><canvas id="audienceGoalChart" role="img" aria-label="Learning goal breakdown" aria-describedby="audienceGoalData"></canvas></div><div id="audienceGoalData" class="chart-data-table" tabindex="0" role="region" aria-label="Learning goal data"></div></section>
+          <section class="monitoring-section"><h3>Discovery source</h3><p id="audienceSourceStatus" class="muted"></p><div id="audienceSourcePlot" class="analytics-chart"><canvas id="audienceSourceChart" role="img" aria-label="Discovery source breakdown" aria-describedby="audienceSourceData"></canvas></div><div id="audienceSourceData" class="chart-data-table" tabindex="0" role="region" aria-label="Discovery source data"></div></section>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="monitoringModal" class="modal-backdrop hidden" aria-labelledby="monitoringTitle">
     <div class="modal monitoring-modal">
       <button class="modal-close" data-close="monitoringModal" type="button">Close</button>
       <header class="monitoring-heading"><div><p class="eyebrow">Administration</p><h2 id="monitoringTitle">Site monitoring</h2><p id="monitoringUpdated" class="muted" role="status"></p></div>
         <button id="monitoringRefresh" class="icon-btn" type="button" title="Refresh monitoring" aria-label="Refresh monitoring"><span data-ui-icon="RefreshCw"></span></button>
       </header>
+      <nav id="monitoringTabs" class="admin-tabs" role="tablist" aria-label="Monitoring sections">
+        <button id="monitoringOverviewTab" type="button" role="tab" aria-selected="true" aria-controls="monitoringOverview" data-monitoring-section="overview"><span data-ui-icon="ChartNoAxesCombined" aria-hidden="true"></span>Overview</button>
+        <button id="monitoringMembersTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringMembersPanel" data-monitoring-section="members" tabindex="-1"><span data-ui-icon="UsersRound" aria-hidden="true"></span>Members</button>
+        <button id="monitoringEventsTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringEventsPanel" data-monitoring-section="events" tabindex="-1"><span data-ui-icon="History" aria-hidden="true"></span>Events</button>
+        <button id="monitoringSystemTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringSystem" data-monitoring-section="system" tabindex="-1"><span data-ui-icon="Server" aria-hidden="true"></span>System</button>
+      </nav>
       <p id="monitoringError" class="add-error hidden" role="alert"></p>
       <p id="monitoringLoading" class="muted" role="status">Loading monitoring data...</p>
       <div id="monitoringContent" class="hidden">
+        <section id="monitoringOverview" role="tabpanel" aria-labelledby="monitoringOverviewTab" tabindex="0">
         <div class="monitoring-summary">
           <div><strong id="monitoringActive">0</strong><span>Active now (5 min)</span></div>
           <div><strong id="monitoringToday">0</strong><span>Active today (UTC)</span></div>
@@ -463,19 +541,39 @@
           <section><div class="panel-heading"><h3>Origin traffic</h3><span>Last hour</span></div><div class="monitoring-chart"><canvas id="monitoringTrafficChart" aria-label="Origin requests and server errors per minute" role="img" aria-describedby="monitoringTrafficData"></canvas></div><p id="monitoringSince" class="muted"></p><details class="chart-data"><summary>Traffic data</summary><div id="monitoringTrafficData" class="chart-data-table" tabindex="0" role="region" aria-label="Traffic data"></div></details></section>
           <section><div class="panel-heading"><h3>Member activity</h3><span>Last 30 days</span></div><div class="monitoring-chart"><canvas id="monitoringUsersChart" aria-label="Active members per UTC day" role="img" aria-describedby="monitoringUsersData"></canvas></div><details class="chart-data"><summary>Member activity data</summary><div id="monitoringUsersData" class="chart-data-table" tabindex="0" role="region" aria-label="Member activity data"></div></details></section>
         </div>
-        <section class="monitoring-section"><h3>Application process and volume</h3><dl class="monitoring-system">
+        </section>
+        <section id="monitoringMembersPanel" class="monitoring-section hidden" role="tabpanel" aria-labelledby="monitoringMembersTab" tabindex="0">
+          <div class="panel-heading"><h3>Members</h3><span id="monitoringMemberCount" role="status"></span></div>
+          <form id="monitoringMemberFilters" class="admin-filters" role="search" aria-label="Filter members">
+            <label class="admin-search">Search members<input id="monitoringSearch" name="query" data-monitoring-filter type="search" placeholder="Username or member ID" maxlength="100" autocomplete="off" spellcheck="false" /></label>
+            <label>Role<select id="monitoringRole" name="role" data-monitoring-filter><option value="all">All roles</option><option value="admin">Administrators</option><option value="member">Members</option></select></label>
+            <label>Activity<select id="monitoringActivity" name="activity" data-monitoring-filter><option value="all">All activity</option><option value="active">Active now</option><option value="idle">Idle</option><option value="disabled">Disabled</option></select></label>
+            <label>Sort by<select id="monitoringSort" name="sort" data-monitoring-filter><option value="activity">Recent activity</option><option value="name">Username A-Z</option><option value="newest">Newest member</option></select></label>
+            <button class="icon-btn" type="submit" title="Search members" aria-label="Search members"><span data-ui-icon="Search"></span></button>
+            <button id="monitoringMemberClear" class="icon-btn hidden" type="button" title="Clear member filters" aria-label="Clear member filters"><span data-ui-icon="RotateCcw"></span></button>
+          </form>
+          <div class="monitoring-table-wrap" tabindex="0" role="region" aria-label="Member activity table"><table class="monitoring-table"><thead><tr><th scope="col">Username</th><th scope="col">Activity</th><th scope="col">Role</th><th scope="col">Last sign-in</th><th scope="col">Last active</th></tr></thead><tbody id="monitoringUsers"></tbody></table></div>
+          <div class="monitoring-paging"><span id="monitoringPage" class="muted" role="status"></span><div class="monitoring-page-actions"><button id="monitoringPrevious" class="icon-btn" type="button" title="Previous member page" aria-label="Previous member page"><span data-ui-icon="ChevronLeft"></span></button><button id="monitoringNext" class="icon-btn" type="button" title="Next member page" aria-label="Next member page"><span data-ui-icon="ChevronRight"></span></button></div></div>
+        </section>
+        <section id="monitoringEventsPanel" class="monitoring-section hidden" role="tabpanel" aria-labelledby="monitoringEventsTab" tabindex="0">
+          <div class="panel-heading"><h3>Account events</h3><span id="monitoringEventCount" role="status"></span></div>
+          <form id="monitoringEventFilters" class="admin-filters" aria-label="Filter account events">
+            <label>Event type<select id="monitoringEventType" name="event" data-monitoring-filter><option value="all">All events</option><option value="login">Signed in</option><option value="logout">Signed out</option><option value="register">Account created</option><option value="upgrade">Guest converted</option><option value="email">Email verified</option></select></label>
+            <label>Time range<select id="monitoringEventDays" name="days" data-monitoring-filter><option value="30">Last 30 days</option><option value="7">Last 7 days</option><option value="1">Last 24 hours</option></select></label>
+            <button id="monitoringEventClear" class="icon-btn hidden" type="button" title="Clear event filters" aria-label="Clear event filters"><span data-ui-icon="RotateCcw"></span></button>
+          </form>
+          <ul id="monitoringEvents" class="monitoring-events"></ul>
+        </section>
+        <section id="monitoringSystem" class="monitoring-section hidden" role="tabpanel" aria-labelledby="monitoringSystemTab" tabindex="0">
+        <h3>Application process and storage</h3><dl class="monitoring-system">
           <div><dt>Process uptime</dt><dd id="monitoringUptime"></dd></div><div><dt>Process memory</dt><dd id="monitoringMemory"></dd></div>
           <div><dt>Heap used</dt><dd id="monitoringHeap"></dd></div><div><dt>Volume space</dt><dd id="monitoringDisk"></dd></div>
           <div><dt>Database size</dt><dd id="monitoringDatabase"></dd></div><div><dt>Write-ahead log</dt><dd id="monitoringWal"></dd></div>
-        </dl></section>
-        <section class="monitoring-section"><div class="panel-heading"><h3>Members</h3><span id="monitoringPage"></span></div>
-          <div class="monitoring-table-wrap" tabindex="0" role="region" aria-label="Member activity table"><table class="monitoring-table"><thead><tr><th>Username</th><th>Activity</th><th>Role</th><th>Last sign-in</th><th>Last active</th></tr></thead><tbody id="monitoringUsers"></tbody></table></div>
-          <div class="monitoring-paging"><button id="monitoringPrevious" class="icon-btn" type="button" title="Previous member page" aria-label="Previous member page"><span data-ui-icon="ChevronLeft"></span></button><button id="monitoringNext" class="icon-btn" type="button" title="Next member page" aria-label="Next member page"><span data-ui-icon="ChevronRight"></span></button></div>
-        </section>
-        <section class="monitoring-section"><div class="panel-heading"><h3>Recent account events</h3><span>30-day retention</span></div><ul id="monitoringEvents" class="monitoring-events"></ul></section>
+        </dl>
         <footer class="monitoring-section monitoring-links"><div><span id="monitoringCollector" class="muted"></span><a id="monitoringGrafana" class="btn ghost slim hidden" target="_blank" rel="noopener noreferrer"><span data-ui-icon="ExternalLink"></span>Grafana</a></div>
           <div><span id="monitoringOutageState" class="muted"></span><a id="monitoringUptimeLink" class="btn ghost slim hidden" target="_blank" rel="noopener noreferrer"><span data-ui-icon="ExternalLink"></span>Uptime history</a></div>
         </footer>
+        </section>
       </div>
     </div>
   </dialog>
@@ -521,8 +619,11 @@
       </nav>
       <div class="settings-content">
       <section id="settingsAccount" role="tabpanel" aria-labelledby="settingsAccountTab" tabindex="0">
-        <h3>Account details</h3>
+        <h3>Account</h3>
         <p id="accountJoined" class="muted"></p>
+        <details id="accountDetails" class="account-disclosure">
+        <summary><span data-ui-icon="UserRound" aria-hidden="true"></span><span>Account details</span><span data-ui-icon="ChevronDown" aria-hidden="true"></span></summary>
+        <div class="account-section-body">
         <form id="accountForm" class="auth-form">
           <label>Display name<input id="accountDisplayName" type="text" autocomplete="name" maxlength="80" required /></label>
           <label>Username<input id="accountUsername" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" pattern="[A-Za-z0-9_.\-]{3,32}" aria-describedby="accountUsernameHint accountUsernameError" /></label>
@@ -532,8 +633,11 @@
           <p id="accountError" class="add-error hidden" role="alert"></p>
           <div class="settings-save"><button id="accountCancel" class="btn ghost" type="button">Cancel</button><button id="accountSave" class="btn" type="submit" disabled>Save changes</button><span id="accountSaveStatus" class="muted" role="status"></span></div>
         </form>
-      <div id="passwordSettings" class="profile-data-block">
-        <h3 id="passwordHeading">Change password</h3>
+        </div>
+        </details>
+      <details id="passwordSettings" class="account-disclosure">
+        <summary><span data-ui-icon="LockKeyhole" aria-hidden="true"></span><span id="passwordHeading">Change password</span><span data-ui-icon="ChevronDown" aria-hidden="true"></span></summary>
+        <div class="account-section-body">
         <p id="passwordSessionNotice">Other sessions will be signed out. This browser stays signed in.</p>
         <form id="passwordForm" class="auth-form" aria-labelledby="passwordHeading" aria-describedby="passwordSessionNotice">
           <label>Current password<input id="passwordCurrent" type="password" autocomplete="current-password" minlength="8" maxlength="128" required aria-describedby="passwordError" /></label>
@@ -543,9 +647,13 @@
           <p id="passwordError" class="add-error hidden" role="alert" tabindex="-1"></p>
           <div class="settings-save"><button id="passwordCancel" class="btn ghost" type="button">Clear</button><button id="passwordSubmit" class="btn" type="submit">Change password</button><span id="passwordStatus" class="muted" role="status"></span></div>
         </form>
-      </div>
-      <div id="emailEnrollment" class="profile-data-block hidden">
-        <h3>Account email</h3>
+        </div>
+      </details>
+      <details id="accountEmailSettings" class="account-disclosure">
+        <summary><span data-ui-icon="Mail" aria-hidden="true"></span><span>Account email</span><span data-ui-icon="ChevronDown" aria-hidden="true"></span></summary>
+        <div class="account-section-body">
+        <p id="accountEmailSummary" class="muted"></p>
+      <div id="emailEnrollment" class="hidden">
         <form id="emailEnrollmentForm" class="auth-form compact">
           <label>Email<input id="enrollmentEmail" type="email" autocomplete="email" maxlength="254" required /></label>
           <label>Current password<input id="enrollmentPassword" type="password" autocomplete="current-password" minlength="8" maxlength="128" required /></label>
@@ -562,6 +670,21 @@
         <p id="enrollmentEmailUnavailable" class="auth-notice hidden" role="status">Email verification is not configured. Contact the administrator.</p>
         <div id="enrollmentError" class="add-error hidden" role="alert"></div>
       </div>
+        </div>
+      </details>
+      <details id="accountLearningProfile" class="account-disclosure">
+        <summary><span data-ui-icon="ListChecks" aria-hidden="true"></span><span>Learning profile</span><span data-ui-icon="ChevronDown" aria-hidden="true"></span></summary>
+        <div class="account-section-body">
+          <p id="surveyNotice" class="muted">Optional. Share your current role, goal, and how you found FocusTube for aggregate audience reports. No age or location is requested. Answers expire after 90 days and can be removed sooner. Requires optional analytics to be on.</p>
+          <form id="surveyForm" class="auth-form" aria-describedby="surveyNotice surveyStatus">
+            <label>Current role<select id="surveyRole" disabled><option value="">Not answered</option><option value="student">Student</option><option value="professional">Working professional</option><option value="job-seeker">Job seeker</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+            <label>Learning goal<select id="surveyGoal" disabled><option value="">Not answered</option><option value="coursework">Coursework</option><option value="upskilling">Upskilling</option><option value="interview">Interview preparation</option><option value="interest">General interest</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+            <label>Where did you first hear about FocusTube?<select id="surveySource" disabled><option value="">Not answered</option><option value="friend">Friend or invitation</option><option value="linkedin">LinkedIn</option><option value="twitter">X / Twitter</option><option value="reddit">Reddit</option><option value="instagram">Instagram</option><option value="youtube">YouTube</option><option value="search">Search engine</option><option value="other">Other</option><option value="prefer-not">Prefer not to say</option></select></label>
+            <div class="settings-save"><button id="surveySave" class="btn" type="submit" disabled>Save answers</button><button id="surveyRemove" class="btn ghost" type="button" disabled>Remove answers</button><button id="surveyRefresh" class="icon-btn" type="button" title="Refresh learning profile" aria-label="Refresh learning profile"><span data-ui-icon="RefreshCw"></span></button></div>
+          </form>
+          <p id="surveyStatus" class="muted" role="status"></p><p id="surveyError" class="add-error hidden" role="alert"></p>
+        </div>
+      </details>
       </section>
       <section id="settingsAppearance" class="hidden" role="tabpanel" aria-labelledby="settingsAppearanceTab" tabindex="0">
         <h3>Appearance</h3>
@@ -570,6 +693,13 @@
       </section>
       <section id="settingsData" class="hidden" role="tabpanel" aria-labelledby="settingsDataTab" tabindex="0">
         <h3>Your data</h3>
+        <section class="analytics-privacy" aria-labelledby="analyticsPrivacyHeading">
+          <h3 id="analyticsPrivacyHeading">Optional product analytics</h3>
+          <p id="analyticsPrivacyNotice" class="muted">Share activity dates, approximate watch time, and successful feature use to improve FocusTube. Activity tracking does not collect note text, chat content, course titles, age, or location. The learning profile is a separate optional survey. Daily records expire after 90 days. Turning this off deletes your analytics records and survey answers; core features remain available.</p>
+          <label class="settings-option"><span>Share optional usage analytics</span><input id="analyticsConsent" type="checkbox" role="switch" aria-describedby="analyticsPrivacyNotice analyticsPreferenceStatus" disabled /></label>
+          <p id="analyticsPreferenceStatus" class="muted" role="status"></p>
+          <div class="profile-data-actions"><button id="analyticsPreferenceRefresh" class="icon-btn" type="button" title="Refresh analytics preference" aria-label="Refresh analytics preference"><span data-ui-icon="RefreshCw"></span></button><button id="analyticsExport" class="btn ghost" type="button"><span data-ui-icon="Download"></span>Export my analytics</button></div>
+        </section>
         <p class="muted">Importing replaces this profile's courses, progress, notes, settings, and history. Account credentials are unchanged.</p>
         <div class="profile-data-actions">
           <button id="exportDataBtn" class="btn ghost" type="button"><span data-ui-icon="Download"></span>Export data (JSON)</button>
@@ -579,13 +709,20 @@
       </section>
       <section id="settingsPolicies" class="hidden" role="tabpanel" aria-labelledby="settingsPoliciesTab" tabindex="0">
         <h3>Terms &amp; Privacy</h3>
-        <p class="muted">Effective 25 September 2026</p>
+        <p class="muted">Effective 28 September 2026</p>
         <a class="policy-status" href="/policies.html#terms" target="_blank" rel="noopener noreferrer" aria-label="Terms and conditions (opens in a new tab)"><strong>Terms and conditions</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
         <a class="policy-status" href="/policies.html#privacy" target="_blank" rel="noopener noreferrer" aria-label="Privacy policy (opens in a new tab)"><strong>Privacy policy</strong><span data-ui-icon="ExternalLink" aria-hidden="true"></span></a>
       </section>
       <section id="settingsAdmin" class="hidden" role="tabpanel" aria-labelledby="settingsAdminTab" tabindex="0">
+      <section class="profile-data-block admin-monitoring-entry" aria-labelledby="adminAnalyticsHeading"><h3 id="adminAnalyticsHeading">Product analytics</h3><button id="profileAnalytics" class="btn ghost" type="button"><span data-ui-icon="ChartNoAxesCombined"></span>Open analytics</button></section>
+      <section class="profile-data-block admin-monitoring-entry" aria-labelledby="adminMonitoringHeading">
+        <h3 id="adminMonitoringHeading">Site monitoring</h3>
+        <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Open monitoring</button>
+      </section>
       <div id="inviteAdmin" class="profile-data-block hidden">
         <h3>Member invitations</h3>
+        <details id="inviteCreateSection" class="admin-disclosure">
+        <summary><span data-ui-icon="UserPlus" aria-hidden="true"></span>New invitation<span data-ui-icon="ChevronDown" aria-hidden="true"></span></summary>
         <form id="inviteForm" class="auth-form compact">
           <label>Allowed signups<input id="inviteMaxUses" type="number" min="1" max="1000" step="1" value="1" inputmode="numeric" required /></label>
           <label>Expires after<select id="inviteLifetime" aria-describedby="inviteTimezone">
@@ -597,10 +734,10 @@
           <label id="inviteCustomField" class="hidden">Expiry date and time<input id="inviteCustomExpiry" type="datetime-local" step="1" aria-describedby="inviteTimezone inviteError" disabled /></label>
           <p id="inviteTimezone" class="field-hint"></p>
           <div class="auth-actions">
-            <button id="profileMonitoring" class="btn ghost" type="button"><span data-ui-icon="Activity"></span>Site monitoring</button>
-            <button id="createInvite" class="btn ghost" type="submit"><span data-ui-icon="UserPlus"></span>Create invitation</button>
+            <button id="createInvite" class="btn" type="submit"><span data-ui-icon="UserPlus"></span>Create invitation</button>
           </div>
         </form>
+        </details>
         <div id="inviteResult" class="auth-form compact hidden">
           <label>Invitation link<input id="issuedInviteLink" type="text" readonly autocomplete="off" spellcheck="false" /></label>
           <div class="invite-result-actions"><span id="inviteExpiry" class="muted"></span><button id="copyInvite" class="icon-btn" type="button" title="Copy invitation link" aria-label="Copy invitation link"><span data-ui-icon="Copy"></span></button></div>
@@ -610,6 +747,16 @@
         <div class="invitation-list-heading">
           <h4 id="inviteListHeading">Issued invitations</h4>
           <button id="inviteRefresh" class="icon-btn" type="button" title="Refresh invitations" aria-label="Refresh invitations"><span data-ui-icon="RefreshCw"></span></button>
+        </div>
+        <div class="admin-filters">
+          <label>Status<select id="inviteStatusFilter">
+            <option value="all">All invitations</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="exhausted">Fully used</option>
+            <option value="revoked">Revoked</option>
+          </select></label>
+          <button id="inviteFilterClear" class="icon-btn hidden" type="button" title="Clear invitation filter" aria-label="Clear invitation filter"><span data-ui-icon="RotateCcw"></span></button>
         </div>
         <p id="inviteListStatus" class="muted" role="status"></p>
         <div id="inviteListError" class="add-error hidden" role="alert" tabindex="-1"></div>
@@ -735,6 +882,7 @@
   <script src="notebooks.js" defer></script>
   <script src="video-chat.js" defer></script>
   <script src="invitations.js" defer></script>
+  <script src="analytics.js" defer></script>
   <script src="extension-connect.js" defer></script>
   <script src="app.js" defer></script>
 </body>

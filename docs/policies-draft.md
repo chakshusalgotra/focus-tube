@@ -1,5 +1,7 @@
 # FocusTube Policy Drafts
 
+The current technical data paths are documented in [architecture.md](architecture.md#data-ownership) and [flows.md](flows.md), including video-chat processing, explicit note append, extension grants and public/private screenshots. This historical draft does not supersede those implementation facts or the published notice; operator/legal review must account for all enabled features.
+
 Status: historical working draft and operator review checklist. Basic terms and privacy notices were published on 15 September 2026 in [public/policies.html](../public/policies.html), linked from Settings and sign-in. The page supports signed-in password changes; it does not provide forgotten-password recovery or account deletion. This document is not the published policy, legal advice, or a compliance certification. The deployment-specific details below still need operator/legal review and should be reflected in the published notices when supplied.
 
 ## Information Required Before Publication

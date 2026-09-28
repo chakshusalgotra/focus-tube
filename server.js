@@ -14,6 +14,7 @@ const { createVideoChat } = require('./video-chat');
 const { validateChatBackup } = require('./video-chat-store');
 const { createExtension } = require('./extension');
 const { createObservability } = require('./observability');
+const { createAnalytics } = require('./analytics');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -102,6 +103,7 @@ app.use(['/api/auth', '/api/invites'], (req, res, next) => {
   next();
 }, express.json({ limit: '8kb' }));
 app.use('/api/extension', express.json({ limit: '8kb' }));
+app.use(['/api/analytics', '/api/admin/analytics'], express.json({ limit: '8kb' }));
 app.use('/api/import', express.json({ limit: '25mb' }));
 app.use('/api/notebooks', express.json({ limit: '300kb' }));
 app.use('/api/video-chat', express.json({ limit: '2mb' }));
@@ -113,6 +115,9 @@ const extension = createExtension(store, auth, { environment: process.env, fetch
 app.use('/api/auth', auth.router);
 app.use('/api/invites', auth.invitesRouter);
 app.use('/api', auth.optionalAuth);
+const analytics = createAnalytics(store, auth, process.env);
+app.use('/api/analytics', analytics.router);
+app.use('/api/admin/analytics', analytics.adminRouter);
 app.use('/api/extension', extension.router);
 app.use('/api/video-chat', createVideoChat(store, auth).router);
 const feedback = createFeedback(store, auth, { environment: process.env, observe: monitoring.observe });
@@ -142,12 +147,18 @@ function monitoringLink(value) {
 
 app.get('/api/admin/monitoring', auth.requireAdmin, (req, res) => {
   const page = Number(req.query.page || 1);
-  if (!Number.isSafeInteger(page) || page < 1 || page > 100000) return res.status(400).json({ error: 'Invalid page.' });
+  if (!Number.isSafeInteger(page) || page < 1 || page > 100000 ||
+    (req.query.page !== undefined && (typeof req.query.page !== 'string' || !/^[1-9]\d*$/.test(req.query.page)))) return res.status(400).json({ error: 'Invalid page.' });
+  if (Object.keys(req.query).some(key => !['page', 'query', 'role', 'activity', 'sort', 'event', 'days'].includes(key)) ||
+    (req.query.days !== undefined && !['1', '7', '30'].includes(req.query.days))) return res.status(400).json({ error: 'Invalid monitoring filters.' });
   try {
-    res.json({ ...monitoring.snapshot(), usage: store.getAdminUsage(page),
+    const filters = { query: req.query.query, role: req.query.role, activity: req.query.activity, sort: req.query.sort,
+      event: req.query.event, days: req.query.days === undefined ? 30 : Number(req.query.days) };
+    res.json({ ...monitoring.snapshot(), usage: store.getAdminUsage(page, Date.now(), filters),
       links: { grafana: monitoringLink(process.env.GRAFANA_DASHBOARD_URL), uptime: monitoringLink(process.env.UPTIME_DASHBOARD_URL) },
       collection: { metricsEnabled: !!process.env.METRICS_TOKEN, environment: process.env.APP_ENV || 'local' } });
   } catch (error) {
+    if (error.code === 'INVALID_REQUEST') return res.status(400).json({ error: 'Invalid monitoring filters.' });
     monitoring.reportError(error);
     res.status(503).json({ error: 'Monitoring is temporarily unavailable.' });
   }
@@ -156,7 +167,7 @@ app.get('/api/admin/monitoring', auth.requireAdmin, (req, res) => {
 app.all('/api/presence', auth.requireAuth, (req, res) => {
   const body = req.body;
   const tabId = body?.tabId;
-  const fields = req.method === 'PUT' ? ['tabId', 'challenge'] : ['tabId'];
+  const fields = req.method === 'PUT' ? ['tabId', 'challenge', 'watching'] : ['tabId'];
   if (!['POST', 'PUT', 'DELETE'].includes(req.method)) return res.status(405).set('Allow', 'POST, PUT, DELETE').end();
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !fields.includes(key)) ||
       typeof tabId !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(tabId)) {
@@ -169,8 +180,9 @@ app.all('/api/presence', auth.requireAuth, (req, res) => {
       return res.json({ challenge, ...result });
     }
     if (req.method === 'PUT') {
+      if (body.watching !== undefined && typeof body.watching !== 'boolean') return res.status(400).json({ error: 'Invalid activity signal.' });
       if (typeof body.challenge !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(body.challenge)) return res.status(400).json({ error: 'Invalid activity signal.' });
-      store.confirmPresence(req.sessionHash, tabId, crypto.createHash('sha256').update(body.challenge).digest('hex'));
+      store.confirmPresence(req.sessionHash, tabId, crypto.createHash('sha256').update(body.challenge).digest('hex'), Date.now(), body.watching === true);
     } else store.clearPresence(req.sessionHash, tabId);
     res.status(204).end();
   } catch (error) {
@@ -660,8 +672,8 @@ function profileSnapshot(value) {
 }
 
 function importedExport(value) {
-  if (value?.schema !== 'focustube-user-export' || ![1, 2, 3].includes(value?.schemaVersion)) {
-    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1, 2 or 3).');
+  if (value?.schema !== 'focustube-user-export' || ![1, 2, 3, 4].includes(value?.schemaVersion)) {
+    throw new HttpError(400, 'Choose a FocusTube user export (schema version 1, 2, 3 or 4).');
   }
   const snapshot = profileSnapshot(value);
   let notebooks;
@@ -977,6 +989,8 @@ app.use((err, req, res, next) => {
 
 const cleanupTimer = setInterval(() => store.cleanup(), 6 * 60 * 60_000);
 cleanupTimer.unref();
+const analyticsTimer = setInterval(() => store.analytics.capture('coverage'), 30000);
+analyticsTimer.unref();
 
 const server = app.listen(PORT, HOST, () => {
   monitoring.observe('startup', 'success');

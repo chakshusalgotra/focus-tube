@@ -1,5 +1,7 @@
 # Maintaining the Change Timeline
 
+For the current system rather than its chronological history, use the [architecture atlas](diagrams/index.html), [architecture guide](architecture.md) and [website flows](flows.md). Diagram regeneration does not alter timeline dates, commit membership or deployment claims.
+
 [../timeline.html](../timeline.html) is a standalone, newest-first engineering record. Open it directly in a browser from the repository checkout; it does not need a server, sign-in, or an API key. The HTML contains its styles, renderer, and generated data. The historical library screenshot is loaded from the checkout's existing screenshot directory.
 
 ## What It Records

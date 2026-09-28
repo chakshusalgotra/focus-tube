@@ -1,6 +1,6 @@
 # FocusTube Invite-Only Authentication Specification
 
-Status: the earlier account baseline was verified locally on port 3002. The 2026-09-25 member-invitation lifecycle is implemented with 84 focused authentication/invitation checks reported passed by the implementation handoff; it is not claimed deployed or browser-verified here. Email delivery and optional CAPTCHA require configuration for each installation. Current V1 release evidence and remaining gates live in [v1-release.md](v1-release.md).
+Status: current-source contract reviewed on **2026-09-28**. The account/admin organization and member-invitation lifecycle are present in the current implementation; dated local verification and rollout evidence live in [v1-release.md](v1-release.md), not in this document's older design sections. Email delivery and optional CAPTCHA still require per-installation configuration. Start with [the account flow](flows.md#accounts-and-invitations), [interactive signup chart](diagrams/account.html), and [API reference](api.md#authentication).
 
 ## Current Release
 
@@ -17,6 +17,8 @@ Status: the earlier account baseline was verified locally on port 3002. The 2026
 | Configure protection | Exact origins, persistent rate limits, and per-user data checks apply on the backend. SMTP is required for new registration; Turnstile is optional for the operator. |
 
 Forgotten-password recovery, arbitrary email changes, self-service account deletion, and Google/GitHub OAuth are not implemented. Public Terms and Privacy are baseline notices that still need operator review.
+
+The current signup UI separates **Account**, **About you (optional)**, and **Verify email**. The optional step appears only when product analytics is available, with sharing unchecked; Skip clears the optional choices and advances. Back retains page-local drafts, while incorrect codes keep masked passwords and focus on verification. Hidden steps are excluded from native form validation, not from server validation. Required invitation, email-proof, account and consent transactions are unchanged. Unavailable social sign-in buttons are no longer offered; historical sections below describe their earlier placeholders. Reload still clears invitation secrets and requires reopening the original private invitation link.
 
 For installation, use the [administrator setup](../README.md#administrator-setup), [email configuration](../README.md#email-verification-and-optional-captcha), and [deployment prerequisites](../README.md#review-and-deployment). Sections 14-17 record the email, account, invitation, and input-feedback extensions; section 17 is the current invitation lifecycle contract. Sections 1-13 retain the original inspection/design history, and section 15 describes the earlier reusable-link implementation. Their old 24-hour member expiry and no-revocation statements are historical, not current behavior. Ordinary auth/invitation routes retain same-origin protection; the separate, narrow extension-origin contract is documented in [v1-release.md](v1-release.md).
 

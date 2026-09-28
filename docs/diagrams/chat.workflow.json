@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Caption-grounded video chat",
+    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "views": [
+      { "id": "permission", "label": "Permission and captions", "focus": ["question", "captions"], "note": "Opening a video does not call Gemini. The first question asks permission and prepares permitted captions." },
+      { "id": "generation", "label": "Bounded generation", "focus": ["reservation", "provider", "final", "answer"], "note": "One active generation per account; only a validated, committed final answer offers citations or note actions." }
+    ]
+  },
+  "lanes": [
+    { "id": "browser", "label": "Ask panel" },
+    { "id": "service", "label": "Video chat API / SQLite" },
+    { "id": "external", "label": "Google provider" }
+  ],
+  "mainPath": ["question", "captions", "reservation", "provider", "final", "answer"],
+  "nodes": [
+    { "id": "question", "lane": "browser", "col": 0, "type": "frontend", "label": "Question + consent", "sublabel": "Selected video and history", "width": 180 },
+    { "id": "captions", "lane": "service", "col": 1, "type": "security", "label": "Prepare captions", "sublabel": "Fetch, bound and cache", "width": 170 },
+    { "id": "reservation", "lane": "service", "col": 2, "type": "database", "label": "Reserve request", "sublabel": "Replay, quota, account lock", "width": 180 },
+    { "id": "provider", "lane": "external", "col": 3, "type": "external", "label": "Count and generate", "sublabel": "Gemini structured stream", "width": 180 },
+    { "id": "final", "lane": "service", "col": 4, "type": "backend", "label": "Validate and commit", "sublabel": "Answer, citations, usage", "width": 180 },
+    { "id": "answer", "lane": "browser", "col": 5, "type": "frontend", "label": "Read final answer", "sublabel": "Optional note preview", "width": 180 }
+  ],
+  "edges": [
+    { "id": "source-permission", "from": "question", "to": "captions", "label": "Permission", "variant": "security" },
+    { "id": "request-bound", "from": "captions", "to": "reservation", "label": "POST message", "variant": "emphasis" },
+    { "id": "invoke", "from": "reservation", "to": "provider", "label": "Bounded context", "variant": "security" },
+    { "id": "structured-response", "from": "provider", "to": "final", "label": "Structured result", "variant": "emphasis" },
+    { "id": "final-response", "from": "final", "to": "answer", "label": "NDJSON final", "variant": "emphasis" }
+  ]
+}

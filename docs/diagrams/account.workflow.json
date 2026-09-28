@@ -1,0 +1,35 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Join FocusTube with an invitation",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "email-proof", "label": "Invitation and email proof", "focus": ["invite", "verification", "email", "registration"], "note": "The invitation fragment is scrubbed; a bounded code request proves access to the email address." },
+      { "id": "admission", "label": "Atomic admission", "focus": ["registration", "admission", "workspace"], "note": "Account, profile, invitation use and session commit together before the browser receives its cookie." }
+    ]
+  },
+  "lanes": [
+    { "id": "person", "label": "Member browser" },
+    { "id": "service", "label": "Auth service / SQLite" },
+    { "id": "provider", "label": "Email provider" }
+  ],
+  "mainPath": ["invite", "verification", "email", "registration", "admission", "workspace"],
+  "nodes": [
+    { "id": "invite", "lane": "person", "col": 0, "type": "frontend", "label": "Open invitation", "sublabel": "Scrub the URL fragment", "width": 160 },
+    { "id": "verification", "lane": "service", "col": 1, "type": "security", "label": "Request code", "sublabel": "Origin, budgets, invite" },
+    { "id": "email", "lane": "provider", "col": 2, "type": "external", "label": "Verification email", "sublabel": "Six digits; ten minutes", "width": 170 },
+    { "id": "registration", "lane": "person", "col": 3, "type": "frontend", "label": "Submit registration", "sublabel": "Invite, code, credentials", "width": 175 },
+    { "id": "admission", "lane": "service", "col": 4, "type": "database", "label": "Recheck and commit", "sublabel": "Identity, capacity, invite", "width": 175 },
+    { "id": "workspace", "lane": "person", "col": 5, "type": "frontend", "label": "Open Library", "sublabel": "Current session and profile", "width": 170 }
+  ],
+  "edges": [
+    { "id": "request-proof", "from": "invite", "to": "verification", "label": "Request proof", "variant": "emphasis" },
+    { "id": "send-proof", "from": "verification", "to": "email", "label": "SMTP", "variant": "security" },
+    { "id": "enter-proof", "from": "email", "to": "registration", "label": "Enter code", "variant": "emphasis" },
+    { "id": "redeem", "from": "registration", "to": "admission", "label": "POST register", "variant": "security" },
+    { "id": "admitted", "from": "admission", "to": "workspace", "label": "Session cookie", "variant": "emphasis" }
+  ]
+}

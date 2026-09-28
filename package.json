@@ -7,6 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
+    "docs:build": "node scripts/update-architecture.js build",
+    "docs:check": "node scripts/update-architecture.js check",
+    "docs:preview": "node scripts/update-architecture.js preview",
     "extension:package": "node scripts/package-extension.js",
     "timeline:update": "node scripts/update-timeline.js"
   },

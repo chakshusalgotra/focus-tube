@@ -9,7 +9,7 @@ const pino = require('pino');
 const client = require('@prometheus-io/client');
 
 const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
-const routerPrefixes = new Set(['', '/api/auth', '/api/invites', '/api/downloads', '/api/feedback', '/api/admin/feedback']);
+const routerPrefixes = new Set(['', '/api/auth', '/api/invites', '/api/downloads', '/api/feedback', '/api/admin/feedback', '/api/analytics', '/api/admin/analytics']);
 const assets = new Set(['/', '/index.html', '/policies.html', '/feedback.html', '/feedback.js', '/app.js', '/styles.css', '/auth-entry.js', '/theme.js', '/notebooks.js', '/notebook-model.js', '/notebook-editor.js']);
 const operations = new Set(['login', 'register', 'upgrade', 'logout', 'email', 'profile', 'password', 'verification', 'invite', 'sqlite', 'smtp', 'captcha', 'health', 'startup', 'shutdown', 'application', 'download', 'feedback']);
 const outcomes = new Set(['success', 'rejected', 'unavailable', 'failed', 'busy', 'accepted', 'limited']);

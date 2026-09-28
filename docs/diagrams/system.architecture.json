@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FocusTube system map",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      { "id": "workspace", "label": "Learning workspace", "focus": ["browser", "http", "features", "sqlite"], "note": "Same-origin requests reach one Node service; SQLite owns durable account and learning records." },
+      { "id": "capture", "label": "Browser capture", "focus": ["extension", "http", "features", "sqlite"], "note": "Optional extension capture uses exact origins, current-account checks and idempotent receipts." },
+      { "id": "providers", "label": "External providers", "focus": ["youtube", "mail", "gemini"], "note": "Playback, verification mail and opted-in AI have separate external data boundaries." },
+      { "id": "operations", "label": "Observability", "focus": ["features", "monitoring", "collector"], "note": "Sanitized metrics and logs support operators; they do not contain notes, prompts or credentials." }
+    ]
+  },
+  "components": [
+    { "id": "youtube", "type": "external", "label": "YouTube", "sublabel": "Official embedded player", "pos": [30, 35], "size": [180, 70] },
+    { "id": "mail", "type": "external", "label": "Mail / CAPTCHA", "sublabel": "Configured auth services", "pos": [345, 35], "size": [180, 70] },
+    { "id": "gemini", "type": "external", "label": "Google Gemini", "sublabel": "Opt-in caption-grounded AI", "pos": [660, 35], "size": [180, 70] },
+    { "id": "browser", "type": "frontend", "label": "Web workspace", "sublabel": "Player, Notes, Ask, Settings", "pos": [30, 250], "size": [180, 70] },
+    { "id": "http", "type": "security", "label": "Express + guards", "sublabel": "Host, Origin, session, role", "pos": [345, 250], "size": [180, 70] },
+    { "id": "features", "type": "backend", "label": "Feature handlers", "sublabel": "Library, notes, chat, forum", "pos": [660, 250], "size": [180, 70] },
+    { "id": "sqlite", "type": "database", "label": "SQLite + WAL", "sublabel": "Accounts and durable state", "pos": [975, 250], "size": [180, 70] },
+    { "id": "extension", "type": "frontend", "label": "MV3 extension", "sublabel": "Optional video capture", "pos": [30, 470], "size": [180, 70] },
+    { "id": "monitoring", "type": "backend", "label": "Observability", "sublabel": "Pino + private metrics", "pos": [660, 470], "size": [180, 70] },
+    { "id": "collector", "type": "external", "label": "Operator tools", "sublabel": "Optional Alloy / Grafana", "pos": [975, 470], "size": [180, 70] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "One FocusTube instance: Node process and its persistent data", "wraps": ["http", "features", "sqlite", "monitoring"], "pad": 25 }
+  ],
+  "connections": [
+    { "id": "workspace-api", "from": "browser", "to": "http", "label": "HTTP / JSON", "variant": "emphasis" },
+    { "id": "authorized-handlers", "from": "http", "to": "features", "label": "Authorize", "variant": "emphasis" },
+    { "id": "durable-state", "from": "features", "to": "sqlite", "label": "Transactions", "variant": "emphasis" },
+    { "id": "embedded-playback", "from": "browser", "to": "youtube", "label": "IFrame API" },
+    { "id": "auth-services", "from": "http", "to": "mail", "label": "SMTP / HTTPS", "variant": "security", "labelAt": [435, 165] },
+    { "id": "caption-question", "from": "features", "to": "gemini", "label": "Google SDK", "variant": "dashed" },
+    { "id": "extension-capture", "from": "extension", "to": "http", "label": "Capture API", "variant": "security" },
+    { "id": "sanitized-events", "from": "features", "to": "monitoring", "label": "Sanitized events", "labelAt": [750, 395] },
+    { "id": "operator-export", "from": "monitoring", "to": "collector", "label": "Opt-in export", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Source-backed model", "items": ["server.js mounts the handlers; db.js and feature stores own persistence.", "Metadata and permitted captions also come from public YouTube endpoints; playback stays in the browser."] },
+    { "dot": "amber", "title": "Capability is not activation", "items": ["Chat and extension flags default off; runtime settings decide availability.", "Animated paths illustrate authored flows, not live traffic or production health."] }
+  ]
+}

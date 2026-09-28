@@ -1,0 +1,33 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Extension capture without profile replacement",
+    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "views": [
+      { "id": "connect", "label": "Bind the destination", "focus": ["select", "connect"], "note": "Host permission and a current account are required; production, development and Local do not share writes." },
+      { "id": "save", "label": "Capture and receipt", "focus": ["pending", "metadata", "commit", "receipt"], "note": "A bounded request saves one video additively, or returns the existing receipt on an identical retry." }
+    ]
+  },
+  "lanes": [
+    { "id": "extension", "label": "MV3 popup / worker" },
+    { "id": "service", "label": "Extension API" },
+    { "id": "storage", "label": "SQLite transaction" }
+  ],
+  "mainPath": ["select", "connect", "pending", "metadata", "commit", "receipt"],
+  "nodes": [
+    { "id": "select", "lane": "extension", "col": 0, "type": "frontend", "label": "Choose destination", "sublabel": "Grant optional host access", "width": 180 },
+    { "id": "connect", "lane": "service", "col": 1, "type": "security", "label": "Check connection", "sublabel": "Session or PKCE grant", "width": 175 },
+    { "id": "pending", "lane": "extension", "col": 2, "type": "frontend", "label": "Queue one video", "sublabel": "Bound account and request ID", "width": 180 },
+    { "id": "metadata", "lane": "service", "col": 3, "type": "backend", "label": "Validate and fetch", "sublabel": "Canonical video metadata", "width": 180 },
+    { "id": "commit", "lane": "storage", "col": 4, "type": "database", "label": "Add course + receipt", "sublabel": "Recheck owner; atomic save", "width": 185 },
+    { "id": "receipt", "lane": "extension", "col": 5, "type": "frontend", "label": "Confirm saved item", "sublabel": "Open course is optional", "width": 180 }
+  ],
+  "edges": [
+    { "id": "connect-account", "from": "select", "to": "connect", "label": "Current identity", "variant": "security" },
+    { "id": "bind-operation", "from": "connect", "to": "pending", "label": "Bind destination", "variant": "emphasis" },
+    { "id": "capture-video", "from": "pending", "to": "metadata", "label": "POST videos", "variant": "emphasis" },
+    { "id": "capture-commit", "from": "metadata", "to": "commit", "label": "Additive capture", "variant": "security" },
+    { "id": "capture-receipt", "from": "commit", "to": "receipt", "label": "Server receipt", "variant": "emphasis" }
+  ]
+}
