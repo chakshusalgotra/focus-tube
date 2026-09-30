@@ -18,6 +18,8 @@ window.InvitationSettings = class InvitationSettings {
     this.get('inviteMaxUses').addEventListener('input', () => this.get('inviteMaxUses').setCustomValidity(''));
     this.get('copyInvite').addEventListener('click', () => this.copy());
     this.get('inviteRefresh').addEventListener('click', () => this.loadPage(this.cursors[this.page], this.page));
+    this.get('inviteStatusFilter').addEventListener('change', () => this.setFilter(this.get('inviteStatusFilter').value));
+    this.get('inviteFilterClear').addEventListener('click', () => this.setFilter('all'));
     this.get('invitePrevious').addEventListener('click', () => {
       if (this.page > 0) return this.loadPage(this.cursors[this.page - 1], this.page - 1);
     });
@@ -97,6 +99,9 @@ window.InvitationSettings = class InvitationSettings {
     this.page = 0;
     this.nextCursor = null;
     this.loaded = false;
+    this.filter = 'all';
+    this.get('inviteStatusFilter').value = 'all';
+    this.get('inviteCreateSection').open = false;
     this.get('inviteList').replaceChildren();
     this.get('invitePage').textContent = '';
     this.message('inviteListStatus', '');
@@ -178,6 +183,9 @@ window.InvitationSettings = class InvitationSettings {
     const readBlocked = unavailable || !!this.loading || !!this.reviewing || Date.now() < this.listRetryUntil;
     this.get('inviteList').setAttribute('aria-busy', String(!!this.loading));
     this.get('inviteRefresh').disabled = readBlocked;
+    this.get('inviteStatusFilter').disabled = readBlocked || !!this.editing;
+    this.get('inviteFilterClear').disabled = readBlocked || !!this.editing;
+    this.get('inviteFilterClear').classList.toggle('hidden', this.filter === 'all');
     this.get('invitePrevious').disabled = readBlocked || !!this.editing || this.page === 0;
     this.get('inviteNext').disabled = readBlocked || !!this.editing || this.nextCursor === null;
     for (const button of this.rowButtons) button.disabled = unavailable || !!this.loading || !!this.editing;
@@ -246,6 +254,21 @@ window.InvitationSettings = class InvitationSettings {
     this.message(target, message);
   }
 
+  setFilter(status) {
+    if (!this.accept(this.snapshot()) || !this.active || this.busy || this.loading || this.reviewing || this.editing || Date.now() < this.listRetryUntil ||
+      !['all', 'active', 'expired', 'exhausted', 'revoked'].includes(status)) return;
+    this.filter = status;
+    this.get('inviteStatusFilter').value = status;
+    this.items = [];
+    this.cursors = [null];
+    this.page = 0;
+    this.nextCursor = null;
+    this.loaded = false;
+    this.renderList();
+    this.get('inviteStatusFilter').focus();
+    return this.loadPage();
+  }
+
   async loadPage(before = null, page = 0) {
     const snapshot = this.snapshot();
     if (!this.accept(snapshot) || !this.active || this.loading || this.busy || this.reviewing || this.editing && page !== this.page || Date.now() < this.listRetryUntil) return;
@@ -255,7 +278,7 @@ window.InvitationSettings = class InvitationSettings {
     this.message('inviteListStatus', 'Loading invitations...');
     this.sync();
     try {
-      const data = await this.request(`/api/invites?limit=50${before === null ? '' : `&before=${before}`}`, snapshot);
+      const data = await this.request(`/api/invites?limit=50${before === null ? '' : `&before=${before}`}${this.filter === 'all' ? '' : `&status=${this.filter}`}`, snapshot);
       if (!this.accept(snapshot) || this.loading !== loading || !this.active) return;
       const { items, nextCursor } = InvitationSettings.pageData(data, before);
       this.items = items;
@@ -270,7 +293,8 @@ window.InvitationSettings = class InvitationSettings {
         this.message('inviteEditError', 'This invitation changed. Your date is kept. Refresh its details before saving again.');
       }
       this.message('inviteListStatus', items.length ? `Updated ${this.date(new Date().toISOString())}.` :
-        page === 0 ? 'No member invitations yet.' : 'No older invitations remain on this page. Previous pages are still available.');
+        page === 0 ? this.filter === 'all' ? 'No member invitations yet.' : 'No invitations match this status.' :
+          'No older invitations remain on this page. Previous pages are still available.');
     } catch (error) {
       if (!this.accept(snapshot) || this.loading !== loading || !this.active) return;
       this.message('inviteListStatus', '');
@@ -283,7 +307,8 @@ window.InvitationSettings = class InvitationSettings {
   renderList() {
     this.rowButtons = [];
     const snapshot = this.snapshot();
-    this.get('inviteList').replaceChildren(...this.items.map(item => {
+    const items = this.items.filter(item => this.filter === 'all' || this.status(item) === this.filter);
+    this.get('inviteList').replaceChildren(...items.map(item => {
       const status = this.status(item);
       const actions = this.el('div', { class: 'invitation-row-actions' });
       if (['active', 'expired'].includes(status)) {
@@ -303,7 +328,7 @@ window.InvitationSettings = class InvitationSettings {
           this.el('span', {}, 'Expires ', this.el('time', { datetime: item.expiresAt, title: item.expiresAt }, this.date(item.expiresAt))),
           this.el('span', {}, 'Created ', this.el('time', { datetime: item.createdAt, title: item.createdAt }, this.date(item.createdAt)))), actions);
     }));
-    this.get('invitePage').textContent = `Page ${this.page + 1}. ${this.items.length} invitations shown.${this.nextCursor === null ? ' End of list.' : ''}`;
+    this.get('invitePage').textContent = `Page ${this.page + 1}. ${items.length} invitations shown.${this.nextCursor === null ? ' End of list.' : ''}`;
     const issued = this.items.find(item => item.id === this.issuedItem?.id);
     if (issued && issued.revision >= this.issuedItem.revision) this.renderIssued(issued);
   }
@@ -363,7 +388,7 @@ window.InvitationSettings = class InvitationSettings {
     this.message('inviteEditStatus', '');
     this.message('inviteEditWarning', '');
     this.sync();
-    if (focus && this.active && editor) this.get(`invitation-heading-${editor.item.id}`)?.focus();
+    if (focus && this.active && editor) (this.get(`invitation-heading-${editor.item.id}`) || this.get('inviteStatusFilter')).focus();
   }
 
   async refreshEdit() {

@@ -71,6 +71,11 @@
       this.needsReload = false;
       this.drafts = new Map();
       this.previews = new Map();
+      this.permissions = new Set();
+      this.selected = new Map();
+      this.newChatRequests = new Map();
+      this.renaming = false;
+      this.composing = false;
       this.preview = null;
       this.config = { available: false, reason: 'Video chat is not configured.' };
       this.data = { revision: 0, transcript: null, messages: [] };
@@ -81,6 +86,19 @@
       find('#chatClose').addEventListener('click', () => { this.hide(); find('#videoChatBtn').focus(); });
       find('#chatReload').addEventListener('click', () => this.load());
       find('#chatCancel').addEventListener('click', () => this.cancel());
+      find('#chatNew').addEventListener('click', () => this.newConversation());
+      find('#chatHistory').addEventListener('change', event => this.load(event.target.value));
+      find('#chatRename').addEventListener('click', () => {
+        if (this.pending || !this.data.conversationId) return;
+        this.renaming = true;
+        find('#chatMenu').open = false;
+        find('#chatName').value = this.data.title || 'New chat';
+        this.controls();
+        find('#chatName').focus();
+      });
+      find('#chatRenameForm').addEventListener('submit', event => { event.preventDefault(); this.renameConversation(); });
+      find('#chatRenameCancel').addEventListener('click', () => { this.renaming = false; this.controls(); find('#chatHistory').focus(); });
+      find('#chatDelete').addEventListener('click', () => this.deleteConversation());
       find('#studyChatTab').addEventListener('click', () => this.selectTab('chat'));
       find('#studyNotesTab').addEventListener('click', () => this.selectTab('notes'));
       find('#studyTabs').addEventListener('keydown', event => {
@@ -93,24 +111,31 @@
       });
       find('#chatLatest').addEventListener('click', () => this.follow(true));
       find('#chatMessages').addEventListener('scroll', () => { if (this.atBottom()) find('#chatLatest').classList.add('hidden'); }, { passive: true });
-      find('#chatScope').addEventListener('change', () => this.controls());
-      find('#chatSummarize').addEventListener('click', () => {
-        const scope = find('#chatScope').value;
-        this.ask({ scope, mode: 'note_draft', question: `Summarize ${scope === 'moment' ? 'this moment' : scope === 'discussion' ? 'the completed discussion' : 'this video'} for a note preview.` });
-      });
-      find('#chatLoadCaptions').addEventListener('click', () => this.prepare('youtube'));
-      find('#chatUpload').addEventListener('change', event => this.prepare('upload', event.target.files[0]));
       find('#chatClear').addEventListener('click', () => this.clear(false));
-      find('#chatRemoveTranscript').addEventListener('click', () => this.clear(true));
+      find('#chatPrivacy').addEventListener('click', () => {
+        if (!this.identity || this.pending) return;
+        this.permissions.delete(this.identity.key);
+        find('#chatMenu').open = false;
+        find('#chatStatus').textContent = 'AI permission reset';
+      });
       find('#chatForm').addEventListener('submit', event => { event.preventDefault(); this.ask(); });
+      find('#chatQuestion').addEventListener('compositionstart', () => { this.composing = true; });
+      find('#chatQuestion').addEventListener('compositionend', () => { this.composing = false; });
+      find('#chatQuestion').addEventListener('keydown', event => {
+        if (event.key !== 'Enter' || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || this.composing || event.keyCode === 229) return;
+        event.preventDefault();
+        if (!event.repeat) this.ask();
+      });
       find('#chatQuestion').addEventListener('input', () => {
-        if (this.identity) this.drafts.set(this.identity.key, find('#chatQuestion').value);
+        if (this.identity) this.drafts.set(this.threadKey(), find('#chatQuestion').value);
         this.controls();
       });
-      for (const id of ['chatConsent', 'chatRights']) find('#' + id).addEventListener('change', () => this.controls());
       find('#videoChatPanel').addEventListener('keydown', event => {
         if (event.key !== 'Escape' || event.isComposing) return;
-        event.preventDefault(); event.stopPropagation(); this.hide(); find('#videoChatBtn').focus();
+        event.preventDefault(); event.stopPropagation();
+        if (this.renaming) { this.renaming = false; this.controls(); find('#chatHistory').focus(); }
+        else if (find('#chatMenu').open) { find('#chatMenu').open = false; find('#chatMenuToggle').focus(); }
+        else { this.hide(); find('#videoChatBtn').focus(); }
       });
       window.addEventListener('pagehide', () => this.cancel());
     }
@@ -134,18 +159,20 @@
     showVideo(courseId, videoId, title) {
       const key = courseId + '/' + videoId;
       if (this.identity?.key === key) return;
+      if (this.identity) this.drafts.set(this.threadKey(), find('#chatQuestion').value);
       this.cancel();
       this.generation++;
       this.pending = null;
       this.provisional = null;
       this.needsReload = false;
-      this.identity = { courseId, videoId, title, key, path: '/api/video-chat/' + encodeURIComponent(courseId) + '/videos/' + encodeURIComponent(videoId) };
-      this.preview = this.previews?.get(key) || null;
-      this.data = { revision: 0, transcript: null, messages: [] };
-      find('#chatQuestion').value = this.drafts.get(key) || '';
-      find('#chatConsent').checked = false;
-      find('#chatRights').checked = false;
-      find('#chatUpload').value = '';
+      this.identity = { courseId, videoId, title, key, conversationId: this.selected?.get(key) || null,
+        path: '/api/video-chat/' + encodeURIComponent(courseId) + '/videos/' + encodeURIComponent(videoId) };
+      this.preview = this.previews?.get(this.threadKey()) || null;
+      this.data = { revision: 0, transcript: null, messages: [], conversations: [], conversationId: this.identity.conversationId };
+      this.renaming = false;
+      this.composing = false;
+      this.historySignature = '';
+      find('#chatQuestion').value = this.drafts.get(this.threadKey()) || '';
       find('#chatStatus').textContent = '';
       find('#chatError').textContent = '';
       this.render();
@@ -185,6 +212,7 @@
     }
 
     leave() {
+      if (this.identity) this.drafts.set(this.threadKey(), find('#chatQuestion').value);
       this.cancel();
       this.generation++;
       this.pending = null;
@@ -199,11 +227,14 @@
       this.leave();
       this.drafts.clear();
       this.previews?.clear();
+      this.permissions?.clear();
+      this.selected?.clear();
+      this.newChatRequests?.clear();
+      this.renaming = false;
       this.preview = null;
       this.data = { revision: 0, transcript: null, messages: [] };
       this.config = { available: false, reason: 'Video chat is not configured.' };
       find('#chatQuestion').value = '';
-      find('#chatConsent').checked = false;
       this.render();
     }
 
@@ -212,7 +243,7 @@
       if (!pending) return;
       pending.controller.abort();
       if (pending.requestId) fetch(pending.path + '/cancel', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requestId: pending.requestId }), keepalive: true,
+        body: JSON.stringify({ requestId: pending.requestId, conversationId: pending.conversationId || undefined }), keepalive: true,
         ...(pending.owner ? { headers: { 'Content-Type': 'application/json', 'X-Video-Chat-Account': String(pending.owner) } } : {}) }).catch(() => {});
     }
 
@@ -223,18 +254,20 @@
       const owner = this.options.getUser?.()?.id;
       const identity = { ...this.identity };
       const controller = new AbortController();
-      const pending = { controller, path: identity.path, requestId, owner };
+      const pending = { controller, path: identity.path, conversationId: identity.conversationId, requestId, owner, dispatched: false };
       this.pending = pending;
       find('#chatStatus').textContent = label;
       find('#chatError').textContent = '';
       this.controls();
       const timer = setTimeout(() => controller.abort(), 75000);
-      const current = () => generation === this.generation && session === this.session && owner === this.options.getUser?.()?.id && this.identity?.key === identity.key;
+      const current = () => generation === this.generation && session === this.session && owner === this.options.getUser?.()?.id &&
+        this.identity?.key === identity.key && this.identity?.conversationId === identity.conversationId;
       const request = async (suffix = '', body, method = body ? 'POST' : 'GET', onEvent) => {
         controller.signal.throwIfAborted();
         const response = await fetch(identity.path + suffix, { method, signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Accept: onEvent ? 'application/x-ndjson, application/json' : 'application/json',
-            ...(owner ? { 'X-Video-Chat-Account': String(owner) } : {}) }, body: body ? JSON.stringify(body) : undefined });
+            ...(owner ? { 'X-Video-Chat-Account': String(owner) } : {}) },
+          body: body ? JSON.stringify({ conversationId: identity.conversationId || undefined, ...body }) : undefined });
         const streaming = response.ok && response.headers?.get('content-type')?.split(';')[0] === 'application/x-ndjson';
         const result = streaming ? await readChatStream(response, controller.signal, async event => {
           if (!current()) throw new DOMException('Chat changed', 'AbortError');
@@ -248,8 +281,10 @@
         const result = await operation(request, identity, controller.signal);
         if (!current() || controller.signal.aborted) return;
         if (result) {
-          this.data = result;
+          this.applyData(result);
           this.reconcilePreview();
+          const completed = requestId && result.messages?.find(message => message.id === requestId);
+          if (completed?.proposal?.suggested) this.offerPreview(completed, false);
         }
         find('#chatStatus').textContent = 'Ready';
         this.render();
@@ -262,47 +297,105 @@
           return;
         }
         if (requestId) {
-          this.needsReload = true;
-          if (this.provisional) this.provisional.interrupted = true;
+          this.needsReload = pending.dispatched;
+          if (!pending.dispatched) this.provisional = null;
+          else if (this.provisional) this.provisional.interrupted = true;
           this.render();
         }
+        if (error.code === 'CHAT_NOT_FOUND' && !requestId) {
+          this.selected?.delete(identity.key);
+          this.applyData({ ...this.data, conversationId: null, title: 'New chat', messages: [], generation: '' });
+        }
         find('#chatStatus').textContent = controller.signal.aborted ? 'Canceled' : 'Unavailable';
-        find('#chatError').textContent = controller.signal.aborted ? 'Request canceled. Reload chat before continuing; a submitted request may still incur charges.' : error.message;
+        find('#chatError').textContent = controller.signal.aborted
+          ? pending.dispatched ? 'Request canceled. Reload chat before continuing; a submitted request may still incur charges.' : 'Canceled. Your message has not been sent.'
+          : error.message;
       } finally {
         clearTimeout(timer);
         if (this.pending === pending) { this.pending = null; this.render(); }
       }
     }
 
-    load() {
+    threadKey(conversationId = this.identity?.conversationId) {
+      return (this.identity?.key || '') + '/' + (conversationId || 'draft');
+    }
+
+    applyData(data) {
+      const conversationId = data.conversationId ?? null;
+      const previousKey = this.threadKey();
+      if ((this.identity?.conversationId || null) !== conversationId) {
+        this.drafts.set(previousKey, find('#chatQuestion').value);
+        this.generation++;
+        this.renaming = false;
+        this.needsReload = false;
+        this.provisional = null;
+        if (this.identity) this.identity.conversationId = conversationId;
+        find('#chatQuestion').value = this.drafts.get(this.threadKey()) || '';
+        this.preview = this.previews?.get(this.threadKey()) || null;
+      }
+      this.data = { ...data, conversationId, conversations: data.conversations || [] };
+      if (data.config) this.config = data.config;
+      if (this.identity && conversationId) this.selected?.set(this.identity.key, conversationId);
+    }
+
+    load(conversationId = this.identity?.conversationId) {
+      find('#chatMenu').open = false;
       return this.perform('Loading chat...', async request => {
-        const data = await request();
+        let data;
+        try { data = await request(conversationId ? '?conversationId=' + encodeURIComponent(conversationId) : ''); }
+        catch (error) {
+          if (error.code !== 'CHAT_NOT_FOUND' || !conversationId) throw error;
+          data = await request();
+        }
         this.needsReload = false;
         this.provisional = null;
         return data;
       });
     }
 
-    async prepare(source, file) {
-      if (!this.identity || this.pending || (source === 'upload' && !file)) return;
-      if (!find('#chatRights').checked) { find('#chatError').textContent = 'Confirm permission to use these captions.'; return; }
-      if (file && file.size > 1024 * 1024) { find('#chatError').textContent = 'Choose an SRT or VTT file up to 1 MB.'; find('#chatUpload').value = ''; return; }
-      const replace = !!this.data.transcript;
-      if (replace && !confirm('Replace this transcript and clear its chat history?')) { find('#chatUpload').value = ''; return; }
+    newConversation() {
+      if (!this.identity || this.pending || this.preview?.busy) return;
+      find('#chatMenu').open = false;
+      const key = this.identity.key;
+      const id = this.newChatRequests.get(key) || crypto.randomUUID();
+      this.newChatRequests.set(key, id);
       const revision = this.data.revision;
-      const language = find('#chatLanguage').value.trim() || 'und';
-      return this.perform('Preparing transcript...', async (request, identity, signal) => {
-        const text = file ? await file.text() : undefined;
-        if (!(await this.options.ensureCourseSaved())) throw new Error('Save the course before loading captions.');
+      return this.perform('Creating chat...', async (request, identity, signal) => {
+        if (!(await this.options.ensureCourseSaved())) throw new Error('Save the course before starting a chat.');
         signal.throwIfAborted();
-        const data = await request('/transcript', { source, text, language, rightsConfirmed: true, replace, revision }, 'PUT');
+        const data = await request('/conversations', { id, revision });
+        this.newChatRequests.delete(key);
+        this.needsReload = false;
         return data;
       });
     }
 
-    ask({ scope = find('#chatScope')?.value || 'video', mode = 'answer', question = find('#chatQuestion').value.trim() } = {}) {
-      if (!this.identity || this.pending || this.needsReload || !question || !this.data.transcript || !find('#chatConsent').checked) return;
-      const revision = this.data.revision;
+    renameConversation() {
+      if (!this.data.conversationId || this.pending) return;
+      const title = find('#chatName').value.trim();
+      if (!title || title.length > 80) { find('#chatError').textContent = 'Use a chat name between 1 and 80 characters.'; return; }
+      return this.perform('Renaming chat...', async request => {
+        const data = await request('/conversations/' + this.data.conversationId, { title, revision: this.data.revision }, 'PATCH');
+        this.renaming = false;
+        return data;
+      });
+    }
+
+    deleteConversation() {
+      if (!this.data.conversationId || this.pending || this.preview?.busy || !confirm('Delete this conversation? Other chats and the video transcript will remain.')) return;
+      find('#chatMenu').open = false;
+      const key = this.threadKey();
+      return this.perform('Deleting chat...', async request => {
+        const data = await request('/conversations/' + this.data.conversationId, { revision: this.data.revision }, 'DELETE');
+        this.drafts.delete(key);
+        this.previews.delete(key);
+        find('#chatQuestion').value = '';
+        return data;
+      });
+    }
+
+    ask({ scope = 'video', mode = 'answer', question = find('#chatQuestion').value.trim() } = {}) {
+      if (!this.identity || this.pending || this.composing || this.needsReload || !question || !this.config.available) return;
       const requestId = crypto.randomUUID();
       const playhead = this.options.getTime(this.identity.courseId, this.identity.videoId);
       if (scope === 'moment' && !Number.isSafeInteger(playhead)) {
@@ -310,16 +403,45 @@
         return;
       }
       const messages = this.data.messages;
-      const transcript = this.data.transcript;
-      const sourceGeneration = this.data.generation;
       const messageIds = scope === 'discussion' ? messages.map(message => message.id) : undefined;
       if (scope === 'discussion' && !messageIds.length) { find('#chatError').textContent = 'There are no completed messages to summarize.'; return; }
+      if (!this.permissions.has(this.identity.key)) {
+        if (!confirm('Use AI chat for this video? Captions and this conversation will be sent to Google. Continue only if you have permission to use and share this content.')) return;
+        this.permissions.add(this.identity.key);
+      }
       this.provisional = { question, answer: '', context: { scope, playhead, mode } };
       this.render();
       return this.perform('Preparing answer...', async (request, identity, signal) => {
-        const result = await request('/messages', { question, playhead, requestId, revision, consent: true, scope, mode, sourceHash: transcript.hash, messageIds }, 'POST', event => {
+        let data = this.data;
+        if (!data.transcript) data = await request(identity.conversationId ? '?conversationId=' + encodeURIComponent(identity.conversationId) : '');
+        if (!data.transcript) {
+          if (!this.config.autoCaptions) throw new Error('AI chat cannot access this video yet. Please try another video.');
+          find('#chatStatus').textContent = 'Preparing video...';
+          if (!(await this.options.ensureCourseSaved())) throw new Error('Save the video before starting a conversation.');
+          signal.throwIfAborted();
+          try { data = await request('/transcript', { source: 'youtube', rightsConfirmed: true, revision: data.revision }, 'PUT'); }
+          catch (error) {
+            if (['CAPTIONS_UNAVAILABLE', 'AUTO_CAPTIONS_DISABLED', 'CAPTIONS_TOO_LARGE'].includes(error.code)) {
+              error.message = 'I could not access captions for this video. Please try another video.';
+            }
+            if (error.code === 'RATE_LIMITED') error.message = 'Please wait a moment before trying this video again.';
+            throw error;
+          }
+        }
+        if (!data.conversationId) {
+          const id = this.newChatRequests.get(identity.key) || crypto.randomUUID();
+          this.newChatRequests.set(identity.key, id);
+          data = await request('/conversations', { id, revision: data.revision });
+          this.newChatRequests.delete(identity.key);
+        }
+        const { transcript, revision, generation: sourceGeneration, conversationId } = data;
+        if (!transcript?.hash || !conversationId || !Number.isSafeInteger(revision)) throw new Error('This video could not be prepared for chat. Please try again.');
+        this.pending.conversationId = conversationId;
+        this.pending.dispatched = true;
+        const result = await request('/messages', { question, playhead, requestId, revision, conversationId, consent: true, scope, mode, sourceHash: transcript.hash, messageIds }, 'POST', event => {
           if (event.type === 'start') {
-            if (event.requestId !== requestId || (!event.replay && (event.sourceHash !== transcript.hash || event.generation !== sourceGeneration))) {
+            if (event.requestId !== requestId || event.conversationId !== conversationId ||
+                (!event.replay && (event.sourceHash !== transcript.hash || event.generation !== sourceGeneration))) {
               throw new Error('The video source changed. Reload chat.');
             }
           } else if (event.type === 'text') {
@@ -332,30 +454,35 @@
         });
         signal.throwIfAborted();
         const message = result?.message;
-        if (!message || message.id !== requestId || message.question !== question.trim() || typeof message.answer !== 'string' || !message.answer.trim() || message.answer.length > 16000 ||
+        if (!message || message.id !== requestId || result.conversationId !== conversationId || message.question !== question.trim() || typeof message.answer !== 'string' || !message.answer.trim() || message.answer.length > 16000 ||
             typeof message.supported !== 'boolean' || !Array.isArray(message.citations) || message.citations.length > 8 ||
             message.citations.some(citation => !/^s[1-9]\d{0,4}$/.test(citation.id) || !Number.isSafeInteger(citation.seconds) || citation.seconds < 0 || citation.seconds > 14400) ||
+            (message.followUps !== undefined && (!Array.isArray(message.followUps) || message.followUps.length > 2 ||
+              message.followUps.some(question => typeof question !== 'string' || !question.trim() || question.length > 160 || question.includes('\u0000')))) ||
             (message.supported && !message.citations.length) || (!message.supported && (message.citations.length || message.proposal)) ||
             !Number.isSafeInteger(result.revision) || result.revision <= revision) {
           throw new Error('The completed answer could not be verified. Reload chat.');
         }
         if (message.proposal) {
             if (message.proposal.id !== `p_${requestId}` || message.proposal.courseId !== identity.courseId || message.proposal.videoId !== identity.videoId ||
-              message.proposal.sourceHash !== transcript.hash || typeof message.proposal.suggested !== 'boolean') throw new Error('The note destination changed.');
+              message.proposal.conversationId !== conversationId || message.proposal.sourceHash !== transcript.hash || typeof message.proposal.suggested !== 'boolean') throw new Error('The note destination changed.');
           window.NotebookModel.generatedBlocks(message.proposal);
-          if (message.proposal.suggested) this.offerPreview(message, false);
         }
         this.provisional = null;
         if (this.identity?.key === identity.key && mode === 'answer' && find('#chatQuestion').value.trim() === question.trim()) {
           find('#chatQuestion').value = '';
-          this.drafts.delete(identity.key);
+          this.drafts.delete(this.threadKey());
         }
-        return { ...this.data, revision: result.revision, messages: messages.some(message => message.id === result.message.id) ? messages : [...messages, result.message] };
+        return { ...data, revision: result.revision, title: result.title || data.title,
+          conversations: data.conversations.map(conversation => conversation.id === result.conversationId
+            ? { ...conversation, title: result.title || conversation.title, messageCount: messages.length + 1 } : conversation),
+          messages: messages.some(message => message.id === result.message.id) ? messages : [...messages, result.message] };
       }, requestId);
     }
 
     clear(removeTranscript) {
-      if (this.pending || !confirm(removeTranscript ? 'Remove this transcript and its chat history?' : 'Clear the chat history for this video? The transcript will remain.')) return;
+      if (this.pending || !confirm(removeTranscript ? 'Remove this transcript and all conversations for this video?' : 'Clear this conversation? Other chats and the transcript will remain.')) return;
+      find('#chatMenu').open = false;
       const revision = this.data.revision;
       return this.perform('Clearing chat...', request => request('', { revision, removeTranscript }, 'DELETE'));
     }
@@ -363,17 +490,19 @@
     offerPreview(message, render = true) {
       if (!message.supported || !message.proposal || !this.identity || !this.data.transcript) return;
       const ownerId = this.options.getUser?.()?.id;
-      if (!ownerId || message.proposal.sourceHash !== this.data.transcript.hash || message.proposal.courseId !== this.identity.courseId || message.proposal.videoId !== this.identity.videoId) return;
+        if (!ownerId || message.proposal.sourceHash !== this.data.transcript.hash || message.proposal.courseId !== this.identity.courseId || message.proposal.videoId !== this.identity.videoId ||
+          (message.proposal.conversationId || 'default') !== (this.data.conversationId || 'default')) return;
       window.NotebookModel.generatedBlocks(message.proposal);
       if (this.preview?.busy) return;
-      const existing = this.previews.get(this.identity.key);
+      const key = this.threadKey();
+      const existing = this.previews.get(key);
         if (existing && existing.proposal.id !== message.proposal.id && !existing.saved &&
           (!render || !confirm('Replace your current note preview and its edits?'))) return;
       if (existing?.proposal.id === message.proposal.id && existing.sourceGeneration === this.data.generation) this.preview = existing;
       else {
-        this.preview = { proposal: structuredClone(message.proposal), identity: { ...this.identity }, ownerId, sourceGeneration: this.data.generation,
+        this.preview = { proposal: structuredClone(message.proposal), identity: { ...this.identity }, key, ownerId, sourceGeneration: this.data.generation,
           courseTitle: this.options.getCourseTitle?.(this.identity.courseId) || this.identity.courseId, status: 'Preview', busy: false, saved: false, appended: false };
-        this.previews.set(this.identity.key, this.preview);
+        this.previews.set(key, this.preview);
       }
       if (render) this.render();
     }
@@ -381,9 +510,9 @@
     reconcilePreview() {
       const preview = this.preview;
       if (!preview) return;
-      if (preview.ownerId !== this.options.getUser?.()?.id || preview.sourceGeneration !== this.data.generation ||
+      if (preview.ownerId !== this.options.getUser?.()?.id || preview.key !== this.threadKey() || preview.sourceGeneration !== this.data.generation ||
           preview.proposal.sourceHash !== this.data.transcript?.hash || !this.data.messages.some(message => `p_${message.id}` === preview.proposal.id)) {
-        this.previews.delete(preview.identity.key);
+        this.previews.delete(preview.key);
         this.preview = null;
         find('#chatError').textContent = 'The source or discussion changed. The previous preview is no longer available.';
       }
@@ -391,7 +520,7 @@
 
     cancelPreview() {
       if (!this.preview || this.preview.busy) return;
-      this.previews.delete(this.preview.identity.key);
+      this.previews.delete(this.preview.key);
       this.preview = null;
       this.render();
     }
@@ -403,6 +532,7 @@
       const generation = this.generation;
       const current = () => this.preview === preview && session === this.session && generation === this.generation &&
         preview.ownerId === this.options.getUser?.()?.id && preview.identity.key === this.identity?.key &&
+        preview.key === this.threadKey() &&
         preview.proposal.sourceHash === this.data.transcript?.hash && preview.sourceGeneration === this.data.generation;
       preview.busy = true;
       preview.status = preview.appended ? 'Saving...' : 'Checking destination...';
@@ -431,9 +561,8 @@
       const section = textNode('section', '', 'chat-preview');
       section.setAttribute('aria-label', 'Note preview');
       const title = textNode('h4', 'Note preview');
-      const destination = textNode('p', `${preview.courseTitle} / ${preview.identity.title} / ${preview.identity.videoId}`, 'chat-preview-destination');
-      const source = textNode('p', `${this.data.transcript.source === 'youtube' ? 'YouTube captions' : 'Uploaded captions'} / ${this.data.transcript.language} / ${preview.proposal.sourceHash.slice(0, 12)}`, 'chat-context-label');
-      section.append(title, destination, source);
+      const destination = textNode('p', `${preview.courseTitle} / ${preview.identity.title}`, 'chat-preview-destination');
+      section.append(title, destination);
       preview.proposal.blocks.forEach((block, index) => {
         const label = textNode('label', block.kind === 'heading' ? 'Heading' : `Note block ${index + 1}`);
         const input = document.createElement('textarea');
@@ -445,8 +574,7 @@
         label.append(input);
         section.append(label);
         const references = textNode('p', '', 'chat-context-label');
-        references.textContent = block.segmentIds.length ? `${block.segmentIds.join(', ')}${block.seconds !== null ? ' / ' + this.options.formatTime(block.seconds) : ''}` :
-          block.messageIds.length ? `Discussion / ${block.messageIds.length} completed message${block.messageIds.length === 1 ? '' : 's'}` : 'Heading';
+        references.textContent = block.seconds !== null ? 'Source ' + this.options.formatTime(block.seconds) : block.messageIds.length ? 'From this conversation' : '';
         section.append(references);
       });
       const status = textNode('p', preview.status, 'chat-preview-status');
@@ -479,16 +607,19 @@
       toggle.setAttribute('aria-expanded', String(this.opened));
       toggle.title = available ? this.opened ? 'Hide video chat' : 'Ask about video' : this.config.reason;
       toggle.setAttribute('aria-label', available ? 'Ask about video' : this.config.reason);
-      find('#chatSend').disabled = busy || this.needsReload || !available || !this.data.transcript || !find('#chatConsent').checked || !find('#chatQuestion').value.trim();
-      find('#chatQuestion').disabled = busy || !available || !this.data.transcript;
-      find('#chatScope').disabled = busy;
-      find('#chatSummarize').disabled = busy || this.needsReload || !available || !this.data.transcript || !find('#chatConsent').checked ||
-        (find('#chatScope').value === 'discussion' && !this.data.messages.length);
-      find('#chatLoadCaptions').disabled = busy || !available || !this.config.autoCaptions || !find('#chatRights').checked;
-      find('#chatUpload').disabled = busy || !available || !find('#chatRights').checked;
-      find('#chatLanguage').disabled = busy;
+      find('#chatSend').disabled = busy || this.needsReload || !available || !find('#chatQuestion').value.trim();
+      find('#chatQuestion').disabled = busy || !available;
+      find('#chatHistory').disabled = busy || !this.data.conversations?.length;
+      find('#chatHistory').value = this.data.conversationId || '';
+      find('#chatNew').disabled = busy || !available || (this.data.conversations?.length || 0) >= (this.config.maxConversations || 20);
+      find('#chatRename').disabled = busy || !this.data.conversationId;
+      find('#chatDelete').disabled = busy || !this.data.conversationId;
+      find('#chatRenameForm').classList.toggle('hidden', !this.renaming);
+      find('#chatName').disabled = busy;
+      find('#chatRenameSave').disabled = busy;
+      find('#chatRenameCancel').disabled = busy;
+      find('#chatPrivacy').disabled = busy;
       find('#chatClear').disabled = busy || !this.data.messages.length;
-      find('#chatRemoveTranscript').disabled = busy || !this.data.transcript;
       find('#chatReload').disabled = busy;
       find('#chatCancel').classList.toggle('hidden', !this.pending?.requestId);
       find('#chatMessages').setAttribute('aria-busy', String(busy));
@@ -497,14 +628,6 @@
         tab.setAttribute('aria-selected', String(selected));
         tab.tabIndex = selected ? 0 : -1;
       }
-      find('#chatContextTime').textContent = this.provisional ? this.contextLabel(this.provisional.context) :
-        find('#chatScope').value === 'moment' ? '120s before / 60s after the sent playhead' : find('#chatScope').value === 'discussion' ? `${this.data.messages.length} completed exchanges` : 'Full permitted transcript';
-    }
-
-    contextLabel(context) {
-      if (!context) return 'Whole video';
-      return (context.scope === 'moment' ? `Current moment${Number.isSafeInteger(context.playhead) ? ' / ' + this.options.formatTime(context.playhead) : ''}` :
-        context.scope === 'discussion' ? 'Completed discussion' : 'Whole video') + (context.mode === 'note_draft' ? ' / Note preview' : '');
     }
 
     atBottom() {
@@ -519,17 +642,30 @@
 
     render() {
       find('#chatVideoTitle').textContent = this.identity?.title || 'Video chat';
-      const transcript = this.data.transcript;
-      find('#chatSourceInfo').textContent = transcript ? `${transcript.source === 'youtube' ? 'YouTube captions' : 'Uploaded captions'} / ${transcript.language} / ${transcript.segmentCount} segments` : 'No transcript loaded';
-      find('#chatSource').open = !transcript;
+      find('#chatVideoTitle').title = this.identity?.title || 'Video chat';
+      const histories = this.data.conversations || [];
+      const signature = JSON.stringify(histories.map(conversation => [conversation.id, conversation.title]));
+      if (signature !== this.historySignature) {
+        const options = histories.map(conversation => {
+          const option = textNode('option', conversation.title);
+          option.value = conversation.id;
+          return option;
+        });
+        if (!options.length) { const option = textNode('option', 'New chat'); option.value = ''; options.push(option); }
+        find('#chatHistory').replaceChildren(...options);
+        this.historySignature = signature;
+      }
       const messages = find('#chatMessages');
       const atBottom = this.atBottom();
       const scrollTop = messages.scrollTop;
       messages.replaceChildren();
       for (const message of this.data.messages) {
-        const article = document.createElement('article');
-        article.className = 'chat-exchange';
-        article.append(textNode('p', this.contextLabel(message.context), 'chat-context-label'), textNode('h4', 'You'), textNode('p', message.question, 'chat-question'), textNode('h4', 'AI answer'), textNode('p', message.answer, 'chat-answer'));
+        const question = textNode('article', '', 'chat-turn chat-user');
+        question.setAttribute('aria-label', 'Your message');
+        question.append(textNode('h4', 'You', 'chat-author'), textNode('p', message.question, 'chat-question'));
+        const article = textNode('article', '', 'chat-turn chat-assistant');
+        article.setAttribute('aria-label', 'AI response');
+        article.append(textNode('h4', 'Assistant', 'chat-author'), textNode('p', message.answer, 'chat-answer'));
         const citations = document.createElement('div');
         citations.className = 'chat-citations';
         const identity = { ...this.identity };
@@ -549,19 +685,48 @@
           add.addEventListener('click', () => this.offerPreview(message));
           article.append(add);
         }
-        messages.append(article);
+        messages.append(question, article);
         if (this.preview?.proposal.id === `p_${message.id}`) messages.append(this.renderPreview(this.preview));
       }
       if (this.provisional) {
-        const article = textNode('article', '', 'chat-exchange chat-provisional');
+        const question = textNode('article', '', 'chat-turn chat-user');
+        question.setAttribute('aria-label', 'Your message');
+        question.append(textNode('h4', 'You', 'chat-author'), textNode('p', this.provisional.question, 'chat-question'));
+        const article = textNode('article', '', 'chat-turn chat-assistant chat-provisional');
         article.setAttribute('aria-live', 'off');
-        const answer = textNode('p', this.provisional.answer, 'chat-answer');
+        const answer = textNode('p', this.provisional.answer || (this.provisional.interrupted ? 'Response interrupted.' : 'Thinking...'), 'chat-answer');
         answer.id = 'chatLiveAnswer';
-        article.append(textNode('h4', 'You'), textNode('p', this.provisional.question, 'chat-question'),
-          textNode('h4', this.provisional.interrupted ? 'Interrupted answer' : 'Answer in progress'), answer);
-        messages.append(article);
+        article.append(textNode('h4', 'Assistant', 'chat-author'), answer);
+        messages.append(question, article);
       }
-      if (!this.data.messages.length && !this.provisional) messages.append(textNode('p', 'No questions yet.', 'muted'));
+      if (!this.data.messages.length && !this.provisional) {
+        const empty = textNode('div', '', 'chat-empty');
+        empty.id = 'chatStarters';
+        for (const [label, question] of [['Summarize video', 'Summarize this video.'], ['Explain the key ideas', 'Explain the key ideas in this video.']]) {
+          const action = textNode('button', label, 'chat-starter');
+          action.type = 'button';
+          action.disabled = !!this.pending || !this.config.available || this.needsReload;
+          action.addEventListener('click', () => this.ask({ question }));
+          empty.append(action);
+        }
+        messages.append(empty);
+      }
+      const suggestions = find('#chatFollowUps');
+      suggestions.replaceChildren();
+      const last = this.data.messages.at(-1);
+      const showSuggestions = !!last?.supported && !this.pending && !this.provisional && !this.needsReload && !this.preview;
+      suggestions.classList.toggle('hidden', !showSuggestions);
+      if (showSuggestions) {
+        const questions = Array.isArray(last.followUps) && last.followUps.length <= 2 && last.followUps.every(question => typeof question === 'string' && question.trim() && question.length <= 160)
+          ? last.followUps : ['Can you explain that more simply?', 'Which part of the video supports that?'];
+        for (const question of questions) {
+          const button = textNode('button', question, 'chat-suggestion');
+          button.type = 'button';
+          button.disabled = !this.config.available;
+          button.addEventListener('click', () => { if (this.data.messages.at(-1)?.id === last.id) this.ask({ question }); });
+          suggestions.append(button);
+        }
+      }
       if (!atBottom) messages.scrollTop = scrollTop;
       this.follow(atBottom);
       this.controls();

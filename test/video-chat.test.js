@@ -46,7 +46,7 @@ function clientFixture(options) {
   const vm = require('node:vm');
   vm.runInNewContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '../public/video-chat.js'), 'utf8'), {
     window, document: { querySelector: find, createElement: makeElement }, fetch: options.fetch, crypto, structuredClone,
-    AbortSignal, AbortController, DOMException, TextEncoder, TextDecoder, setTimeout, clearTimeout, confirm: () => true,
+    AbortSignal, AbortController, DOMException, TextEncoder, TextDecoder, setTimeout, clearTimeout, confirm: options.confirm || (() => true),
   });
   find('#chatScope').value = 'moment';
   const controller = new window.VideoChat(options);
@@ -70,6 +70,22 @@ test('chat transcripts preserve zero timestamps, overlaps, language and stable s
   assert.throws(() => normalizeTranscript(cues, { durationSeconds: 5 }));
 });
 
+test('YouTube captions tolerate small end drift without changing starts or relaxing source limits', () => {
+  const input = [{ start: 1095, end: 1098.4, text: 'Final caption.' }];
+  const options = { source: 'youtube', language: 'en', durationSeconds: 1097 };
+  const transcript = normalizeTranscript(input, options);
+  assert.deepEqual(transcript.segments, [{ id: 's1', start: 1095, end: 1097, text: 'Final caption.' }]);
+  assert.equal(input[0].end, 1098.4);
+  assert.equal(normalizeTranscript(transcript.segments, options).hash, transcript.hash);
+  assert.equal(normalizeTranscript([{ ...input[0], end: 1099 }], options).segments[0].end, 1097);
+  assert.throws(() => normalizeTranscript([{ ...input[0], end: 1099.01 }], options));
+  assert.throws(() => normalizeTranscript([{ ...input[0], start: 1097 }], options));
+  assert.throws(() => normalizeTranscript([{ ...input[0], end: Infinity }], options));
+  assert.throws(() => normalizeTranscript([{ start: 14399, end: 14400.1, text: 'Too long.' }], { source: 'youtube' }));
+  assert.throws(() => normalizeTranscript(input, { durationSeconds: 1097 }));
+  assert.equal(normalizeTranscript(cues, { source: 'youtube', durationSeconds: 10 }).segments[0].start, 0);
+});
+
 test('chat citations resolve only supplied segment IDs and never model timestamps or URLs', () => {
   const transcript = normalizeTranscript(cues);
   const result = validateAnswer({ supported: true, answer: 'A shuffle moves data.', segmentIds: ['s1', 's2', 's1'], seconds: 900, url: 'javascript:alert(1)' }, transcript);
@@ -82,6 +98,22 @@ test('chat citations resolve only supplied segment IDs and never model timestamp
   assert.equal(missing.supported, false);
   assert.deepEqual(missing.citations, []);
   assert.doesNotMatch(missing.answer, /speculation/);
+});
+
+test('follow-up suggestions are bounded, optional and preserved in conversation backups', context => {
+  const { chat } = storage(context);
+  const transcript = normalizeTranscript(cues);
+  const answer = { answer: 'A shuffle moves data.', supported: true, segmentIds: ['s2'], followUps: [' Why does a shuffle happen? ', 'How do partitions help?'] };
+  const checked = validateAnswer(answer, transcript);
+  assert.deepEqual(checked.followUps, ['Why does a shuffle happen?', 'How do partitions help?']);
+  for (const followUps of [['One', 'Two', 'Three'], ['x'.repeat(161)], [' '], [123], 'Not an array']) {
+    assert.throws(() => validateAnswer({ ...answer, followUps }, transcript), error => error.code === 'INVALID_ANSWER');
+  }
+  assert.equal(validateAnswer({ ...answer, supported: false, segmentIds: [] }, transcript).followUps, undefined);
+  chat.restore(1, [{ courseId: 'course1', videoId: 'aqz-KE-bpKQ', transcript, messages: [
+    { id: crypto.randomUUID(), createdAt: new Date().toISOString(), question: 'What moves?', ...checked },
+  ] }]);
+  assert.deepEqual(validateChatBackup(chat.exportRecords(1))[0].conversations[0].messages[0].followUps, checked.followUps);
 });
 
 test('SRT and VTT uploads use the subtitle parser and keep timestamps in seconds', () => {
@@ -102,7 +134,7 @@ test('chat records isolate users, enforce revisions and preserve the usage ledge
   assert.throws(() => chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false), /changed/);
   const request = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId: crypto.randomUUID(), fingerprint: 'one', revision: thread.revision, maximumCost: 10, budgetMicros: 15 };
   chat.reserve(request);
-  assert.throws(() => chat.reserve({ ...request, requestId: crypto.randomUUID() }), /changed/);
+  assert.throws(() => chat.reserve({ ...request, requestId: crypto.randomUUID() }), error => error.code === 'CHAT_BUSY');
   assert.throws(() => chat.clear(1, 'course1', 'aqz-KE-bpKQ', thread.revision), /changed/);
   const answer = validateAnswer({ supported: true, answer: 'Answer', segmentIds: ['s1'] }, transcript);
   const message = { id: request.requestId, question: 'Question?', ...answer, createdAt: new Date().toISOString() };
@@ -110,7 +142,7 @@ test('chat records isolate users, enforce revisions and preserve the usage ledge
   assert.deepEqual(chat.reserve(request).previous.message, message);
   assert.throws(() => chat.reserve({ ...request, userId: 2 }), /changed/);
   const exported = chat.exportRecords(1);
-  assert.equal(validateChatBackup(exported)[0].messages[0].citations[0].seconds, 0);
+  assert.equal(validateChatBackup(exported)[0].conversations[0].messages[0].citations[0].seconds, 0);
   const cleared = chat.clear(1, 'course1', 'aqz-KE-bpKQ', 2);
   assert.equal(cleared.messages.length, 0);
   assert.equal(db.prepare('SELECT SUM(cost_micros) AS spent FROM video_chat_usage').get().spent, 10);
@@ -123,6 +155,21 @@ test('chat records isolate users, enforce revisions and preserve the usage ledge
   assert.equal(db.prepare('SELECT SUM(cost_micros) AS spent FROM video_chat_usage').get().spent, 10, 'Account deletion must not erase monthly spending');
 });
 
+test('one generating reply per account is enforced across videos without blocking other members', context => {
+  const { chat } = storage(context);
+  const transcript = normalizeTranscript(cues);
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false);
+  chat.saveTranscript(1, 'course2', 'jNQXAC9IVRw', transcript, 0, false);
+  chat.saveTranscript(2, 'course1', 'aqz-KE-bpKQ', transcript, 0, false);
+  const first = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId: crypto.randomUUID(), fingerprint: 'first', revision: 1, maximumCost: 10, budgetMicros: 100 };
+  const second = { ...first, courseId: 'course2', videoId: 'jNQXAC9IVRw', requestId: crypto.randomUUID(), fingerprint: 'second' };
+  chat.reserve(first);
+  assert.throws(() => chat.reserve(second), error => error.code === 'CHAT_BUSY');
+  assert.doesNotThrow(() => chat.reserve({ ...first, userId: 2, requestId: crypto.randomUUID() }));
+  chat.finish(first.requestId, null, null);
+  assert.doesNotThrow(() => chat.reserve(second));
+});
+
 test('interrupted requests keep conservative charges and malformed backup citations are rejected', context => {
   const { db, chat } = storage(context);
   chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
@@ -131,8 +178,89 @@ test('interrupted requests keep conservative charges and malformed backup citati
   chat.finish(requestId, null, null);
   assert.equal(db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 100);
   const records = chat.exportRecords(1);
-  records[0].messages = [{ id: crypto.randomUUID(), createdAt: new Date().toISOString(), question: 'Question?', answer: 'Unsupported', supported: true, citations: [{ id: 'fake', seconds: 5 }] }];
+  records[0].conversations[0].messages = [{ id: crypto.randomUUID(), createdAt: new Date().toISOString(), question: 'Question?', answer: 'Unsupported', supported: true, citations: [{ id: 'fake', seconds: 5 }] }];
   assert.throws(() => validateChatBackup(records), /linked/);
+});
+
+test('conversation migration keeps existing messages, revisions, sources and spending exactly once', context => {
+  const { db } = storage(context);
+  db.exec('DROP TABLE video_chat_conversations');
+  const transcript = normalizeTranscript(cues);
+  const generation = crypto.randomUUID();
+  const message = { id: crypto.randomUUID(), question: 'Existing question', ...validateAnswer({ answer: 'Existing answer', supported: true, segmentIds: ['s1'] }, transcript), createdAt: new Date().toISOString() };
+  db.prepare('INSERT INTO video_chats (user_id, course_id, video_id, generation, transcript_json, messages_json, revision, updated_at) VALUES (1, ?, ?, ?, ?, ?, 7, ?)')
+    .run('course1', 'aqz-KE-bpKQ', generation, JSON.stringify(transcript), JSON.stringify([message]), message.createdAt);
+  db.prepare("INSERT INTO video_chat_usage (request_id, user_id, course_id, video_id, generation, fingerprint, state, month, cost_micros, created_at) VALUES (?, 1, ?, ?, ?, 'legacy', 'completed', ?, 123, ?)")
+    .run(message.id, 'course1', 'aqz-KE-bpKQ', generation, new Date().toISOString().slice(0, 7), Date.now());
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const chat = createChatStore(db);
+    const thread = chat.get(1, 'course1', 'aqz-KE-bpKQ');
+    assert.equal(thread.conversationId, 'default');
+    assert.equal(thread.revision, 7);
+    assert.equal(thread.generation, generation);
+    assert.deepEqual(thread.messages, [message]);
+    assert.equal(thread.transcript.hash, transcript.hash);
+    assert.equal(thread.conversations.length, 1);
+    assert.equal(db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 123);
+  }
+  assert.equal(db.pragma('quick_check', { simple: true }), 'ok');
+  assert.equal(db.pragma('foreign_key_check').length, 0);
+});
+
+test('multiple conversations share one transcript, isolate messages and survive backup restore', context => {
+  const { chat, db } = storage(context);
+  const transcript = normalizeTranscript(cues);
+  let current = chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false);
+  const originalGeneration = current.generation;
+  const id = crypto.randomUUID();
+  current = chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', current.revision, id);
+  assert.equal(current.conversationId, id);
+  assert.equal(current.conversations.length, 2);
+  assert.equal(current.transcript.hash, transcript.hash);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ', 'default').generation, originalGeneration);
+  assert.throws(() => chat.get(2, 'course1', 'aqz-KE-bpKQ', id), error => error.code === 'CHAT_NOT_FOUND');
+  const request = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', conversationId: id, requestId: crypto.randomUUID(), fingerprint: 'second-chat', revision: current.revision, maximumCost: 10, budgetMicros: 100 };
+  chat.reserve(request);
+  assert.throws(() => chat.reserve({ ...request, conversationId: 'default', requestId: crypto.randomUUID() }), error => error.code === 'CHAT_BUSY');
+  const message = { id: request.requestId, question: 'A separate discussion', ...validateAnswer({ answer: 'A separate answer', supported: true, segmentIds: ['s1'] }, transcript), createdAt: new Date().toISOString() };
+  const completed = chat.finish(request.requestId, 3, message);
+  assert.equal(completed.title, message.question);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ', 'default').messages.length, 0);
+  assert.deepEqual(chat.reserve(request).previous.message, message);
+  assert.throws(() => chat.reserve({ ...request, conversationId: 'default' }), /changed/);
+  current = chat.renameConversation(1, 'course1', 'aqz-KE-bpKQ', id, 'Shuffle follow-ups', completed.revision);
+  const exported = chat.exportRecords(1);
+  assert.equal(exported.length, 1);
+  assert.equal(exported[0].conversations.length, 2);
+  chat.restore(2, exported);
+  assert.equal(chat.get(2, 'course1', 'aqz-KE-bpKQ', id).title, 'Shuffle follow-ups');
+  assert.deepEqual(chat.get(2, 'course1', 'aqz-KE-bpKQ', id).messages, [message]);
+  chat.deleteConversation(1, 'course1', 'aqz-KE-bpKQ', id, current.revision);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ').conversations.length, 1);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ').transcript.hash, transcript.hash);
+  assert.equal(db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 3);
+  assert.throws(() => chat.get(1, 'course1', 'aqz-KE-bpKQ', id), error => error.code === 'CHAT_NOT_FOUND');
+});
+
+test('conversation limits, stale edits and transcript replacement are atomic and retain legacy backups', context => {
+  const { chat } = storage(context);
+  const transcript = normalizeTranscript(cues);
+  const legacy = [{ courseId: 'course1', videoId: 'aqz-KE-bpKQ', transcript, messages: [] }];
+  chat.restore(1, legacy);
+  let current = chat.get(1, 'course1', 'aqz-KE-bpKQ');
+  for (let count = 1; count < 20; count++) current = chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', current.revision, crypto.randomUUID());
+  assert.throws(() => chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', current.revision, crypto.randomUUID()), error => error.code === 'CHAT_LIMIT');
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ').revision, current.revision);
+  assert.throws(() => chat.renameConversation(1, 'course1', 'aqz-KE-bpKQ', current.conversationId, 'Old edit', current.revision - 1), /changed/);
+  const changed = normalizeTranscript([{ start: 0, end: 2, text: 'New source.' }]);
+  assert.throws(() => chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', changed, current.revision, false), error => error.code === 'REPLACE_TRANSCRIPT');
+  const replaced = chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', changed, current.revision, true);
+  assert.equal(replaced.conversations.length, 1);
+  assert.equal(replaced.transcript.hash, changed.hash);
+  assert.equal(replaced.messages.length, 0);
+  const removed = chat.clear(1, 'course1', 'aqz-KE-bpKQ', replaced.revision, true);
+  assert.equal(removed.conversations.length, 0);
+  assert.equal(removed.transcript, null);
 });
 
 async function apiFixture(context, overrides = {}) {
@@ -151,7 +279,7 @@ async function apiFixture(context, overrides = {}) {
     async count(prompt) { calls.push(JSON.parse(prompt)); return 500; },
     async generate() { return { text: JSON.stringify({ answer: 'A partition holds part of the data.', supported: true, segmentIds: ['s1'] }), cost: 120, complete: true }; },
   };
-  app.use('/chat', createVideoChat(store, auth, { provider, timeoutMs: overrides.timeoutMs, heartbeatMs: overrides.heartbeatMs,
+  app.use('/chat', createVideoChat(store, auth, { provider, loadCaptions: overrides.loadCaptions, timeoutMs: overrides.timeoutMs, heartbeatMs: overrides.heartbeatMs,
     environment: { VIDEO_CHAT_ENABLED: '1', GEMINI_API_KEY: 'fixture-only', VIDEO_CHAT_ALLOWED_USER_IDS: '2', ...overrides.environment } }).router);
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -181,13 +309,94 @@ test('chat API requires source consent, owns conversations, and replays complete
   assert.equal((await request('', { revision: 2 }, 1, 'DELETE')).status, 200);
 });
 
+test('conversation HTTP actions isolate histories, bind replies and reject other-account IDs', async context => {
+  const { request, calls } = await apiFixture(context);
+  const id = crypto.randomUUID();
+  const created = await request('/conversations', { id, revision: 1 });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.conversations.length, 2);
+  assert.equal(created.body.conversationId, id);
+  assert.equal(created.body.messages.length, 0);
+  const renamed = await request('/conversations/' + id, { title: 'Second discussion', revision: created.body.revision }, 1, 'PATCH');
+  assert.equal(renamed.status, 200);
+  const body = { requestId: crypto.randomUUID(), question: 'What is a partition?', conversationId: id, revision: renamed.body.revision, consent: true };
+  const answer = await request('/messages', body);
+  assert.equal(answer.status, 200);
+  assert.equal(answer.body.conversationId, id);
+  assert.equal(answer.body.message.proposal.conversationId, id);
+  assert.equal((await request('?conversationId=default')).body.messages.length, 0);
+  const current = await request('?conversationId=' + id);
+  assert.equal(current.body.messages.length, 1);
+  assert.equal(current.body.title, 'Second discussion');
+  assert.equal(current.body.config.inputTokenLimit, 1048576);
+  assert.equal((await request('?conversationId=' + id, undefined, 2)).status, 404);
+  assert.equal((await request('/messages', { ...body, conversationId: 'default' })).status, 409);
+  assert.equal(calls.length, 1);
+  const removed = await request('/conversations/' + id, { revision: current.body.revision }, 1, 'DELETE');
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.conversations.length, 1);
+  assert.equal(removed.body.transcript.hash, current.body.transcript.hash);
+  assert.equal((await request('?conversationId=' + id)).status, 404);
+});
+
+test('an empty history list retains its transcript and can start a fresh conversation', async context => {
+  const { request } = await apiFixture(context);
+  const empty = await request('/conversations/default', { revision: 1 }, 1, 'DELETE');
+  assert.equal(empty.status, 200);
+  assert.equal(empty.body.conversationId, null);
+  const source = '1\n00:00:00,000 --> 00:00:04,000\nA partition contains a subset of the data.\n\n2\n00:00:03,500 --> 00:00:10,000\nA shuffle moves data between partitions.\n';
+  const prepared = await request('/transcript', { revision: empty.body.revision, source: 'upload', text: source, rightsConfirmed: true, replace: true }, 1, 'PUT');
+  assert.equal(prepared.status, 200);
+  assert.equal(prepared.body.transcript.hash, empty.body.transcript.hash);
+  const created = await request('/conversations', { id: crypto.randomUUID(), revision: prepared.body.revision });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.conversations.length, 1);
+  assert.equal(created.body.messages.length, 0);
+});
+
+test('independent SQLite workers allow only one active conversation for an account', async context => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { Worker } = require('node:worker_threads');
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'focustube-chat-race-'));
+  const filename = path.join(directory, 'chat.db');
+  const db = new Database(filename);
+  context.after(() => { db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+  db.pragma('journal_mode = WAL');
+  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE user_data (user_id INTEGER PRIMARY KEY); INSERT INTO users VALUES (1); INSERT INTO user_data VALUES (1);');
+  const chat = createChatStore(db);
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
+  const second = chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', 1, crypto.randomUUID());
+  const code = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const Database = require(workerData.databaseModule);
+    const db = new Database(workerData.filename, { timeout: 5000 });
+    try {
+      const chat = require(workerData.storeModule).createChatStore(db);
+      chat.reserve(workerData.request);
+      parentPort.postMessage('reserved');
+    } catch (error) { parentPort.postMessage(error.code || error.message); }
+    finally { db.close(); }
+  `;
+  const outcomes = await Promise.all(['default', second.conversationId].map(conversationId => new Promise((resolve, reject) => {
+    const worker = new Worker(code, { eval: true, workerData: { filename, databaseModule: require.resolve('better-sqlite3'), storeModule: require.resolve('../video-chat-store'),
+      request: { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', conversationId, requestId: crypto.randomUUID(), fingerprint: conversationId, revision: second.revision, maximumCost: 10, budgetMicros: 100 } } });
+    let outcome;
+    worker.on('message', value => { outcome = value; });
+    worker.once('error', reject);
+    worker.once('exit', exitCode => exitCode === 0 ? resolve(outcome) : reject(new Error('Chat worker exited unsuccessfully.')));
+  })));
+  assert.deepEqual(outcomes.sort(), ['CHAT_BUSY', 'reserved']);
+  assert.equal(db.prepare("SELECT COUNT(*) AS count FROM video_chat_usage WHERE state = 'pending'").get().count, 1);
+});
+
 test('disabled chat and excessive context make no generation calls; invalid model citations are not saved', async context => {
   const disabled = await apiFixture(context, { environment: { VIDEO_CHAT_ENABLED: '0' } });
   const body = { requestId: crypto.randomUUID(), question: 'Question?', revision: 1, consent: true };
   assert.equal((await disabled.request('/messages', body)).status, 403);
   assert.equal(disabled.calls.length, 0);
   let generated = 0;
-  const oversized = await apiFixture(context, { provider: { async count() { return 100001; }, async generate() { generated++; } } });
+  const oversized = await apiFixture(context, { provider: { async count() { return 1048577; }, async generate() { generated++; } } });
   assert.equal((await oversized.request('/messages', body)).status, 413);
   assert.equal(generated, 0);
   assert.equal(oversized.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 0);
@@ -243,7 +452,7 @@ test('context scopes use real playheads and the entire selected completed discus
   assert.deepEqual(buildContext(thread, { scope: 'moment', playhead: 300 }).transcript.map(segment => segment.start), [190, 300]);
   assert.equal(buildContext(thread, { scope: 'moment', playhead: 0 }).transcript[0].start, 0);
   assert.throws(() => buildContext(thread, { scope: 'moment', playhead: null }), /playback/);
-  assert.equal(buildContext(thread, { scope: 'video' }).recentConversation.length, 4);
+  assert.equal(buildContext(thread, { scope: 'video' }).recentConversation.length, 8);
   assert.equal(buildContext(thread, { scope: 'discussion' }).recentConversation.length, 8);
   assert.equal(buildContext(thread, { scope: 'discussion' }).transcript.length, 1);
   assert.throws(() => buildContext(thread, { scope: 'discussion', messageIds: ['missing'] }), /completed/);
@@ -297,7 +506,7 @@ test('stream timeout settles unknown usage, ends the response and never commits 
   assert.ok(events.some(event => event.type === 'heartbeat'));
   finish({ complete: true, cost: 1, text: '{}' });
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 26536);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
 });
 
 test('NDJSON writer waits for drain, aborts blocked writes and bounds records', async () => {
@@ -348,7 +557,7 @@ test('disconnecting a stream cancels dispatched work and retains its unknown res
   await aborted;
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 26536);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
   assert.equal(fixture.db.prepare('SELECT state FROM video_chat_usage').get().state, 'failed');
 });
 
@@ -364,7 +573,7 @@ test('validated proposals bind source times and completed messages, and backups 
   assert.equal(proposal.courseId, 'course1');
   assert.equal(proposal.videoId, 'aqz-KE-bpKQ');
   const records = fixture.chat.exportRecords(1);
-  assert.deepEqual(validateChatBackup(records)[0].messages[0].proposal, proposal);
+  assert.deepEqual(validateChatBackup(records)[0].conversations[0].messages[0].proposal, proposal);
   const transcript = normalizeTranscript(cues);
   const binding = { requestId, courseId: 'course1', videoId: 'aqz-KE-bpKQ' };
   const blocks = [{ kind: 'heading', text: 'Discussion', segmentIds: [], messageIds: [] },
@@ -373,10 +582,10 @@ test('validated proposals bind source times and completed messages, and backups 
   assert.throws(() => validateNoteDraft({ blocks }, transcript, [], binding), /linked/);
   assert.throws(() => validateNoteDraft({ blocks: [{ text: 'No evidence', segmentIds: ['fake'] }] }, transcript, [], binding), /linked/);
   assert.throws(() => validateNoteDraft({ blocks: [{ text: 'Invented time', segmentIds: ['s1'], seconds: 44 }] }, transcript, [], binding), /linked/);
-  records[0].messages[0].proposal.blocks[0].seconds = 99;
+  records[0].conversations[0].messages[0].proposal.blocks[0].seconds = 99;
   assert.throws(() => validateChatBackup(records), /source time/);
-  delete records[0].messages[0].proposal;
-  assert.equal(validateChatBackup(records)[0].messages[0].proposal, undefined, 'Older chat backups remain valid');
+  delete records[0].conversations[0].messages[0].proposal;
+  assert.equal(validateChatBackup(records)[0].conversations[0].messages[0].proposal, undefined, 'Older chat backups remain valid');
 });
 
 test('unsupported and malformed drafts cannot expose actionable notes or persist unchecked content', async context => {
@@ -432,7 +641,7 @@ test('profile exports include chats and stale imports cannot reset conversations
   store.saveUserData(owner.id, { courses: {}, stats: {}, settings: {}, workspace: {} }, 0);
   store.chat.saveTranscript(owner.id, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
   const exported = store.getExportData(owner.id);
-  assert.equal(exported.schemaVersion, 3);
+  assert.equal(exported.schemaVersion, 4);
   assert.equal(exported.videoChats[0].transcript.segments[0].start, 0);
   assert.equal(exported.source.chatRevision, 1);
   assert.equal(Object.hasOwn(exported, 'video_chat_usage'), false);
@@ -462,7 +671,7 @@ test('cancellation keeps the unknown charge and never stores an interrupted answ
   assert.equal((await fixture.request('/cancel', { requestId })).status, 204);
   assert.equal((await answer).status, 502);
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 26536);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
 });
 
 test('the official Gemini adapter uses the supported model, minimal thinking and current token prices', async () => {
@@ -631,7 +840,7 @@ test('integrated controller streams provisionally, preserves playback context an
   assert.equal(controller.data.messages.length, 1);
   assert.equal(controller.data.messages[0].context.playhead, 0);
   assert.equal(prompts[0].playhead, 0);
-  const add = find('#chatMessages').children[0].children.find(child => child.textContent === 'Add to notes');
+  const add = find('#chatMessages').children.flatMap(child => child.children).find(child => child.textContent === 'Add to notes');
   assert.equal(add.disabled, false);
   add.listeners.click();
   assert.equal(noteWrites, 0);
@@ -655,6 +864,131 @@ test('integrated controller streams provisionally, preserves playback context an
   assert.equal(controller.drafts.size, 0);
   assert.equal(errors.length, 1);
   assert.equal(calls, 2);
+});
+
+test('first question prepares available captions after one permission prompt and reuses them for follow-ups', async context => {
+  let prepared = 0;
+  let permission = false;
+  let prompts = 0;
+  const fixture = await apiFixture(context, { environment: { VIDEO_CHAT_AUTO_CAPTIONS: '1' }, loadCaptions: async () => {
+    prepared++;
+    return normalizeTranscript(cues, { source: 'youtube', language: 'en' });
+  } });
+  fixture.chat.clear(1, 'course1', 'aqz-KE-bpKQ', 1, true);
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 1 }), getTime: () => 0,
+    notesOpen: () => false, setNotesOpen() {}, onOpen() {}, formatTime: String, showError() {}, ensureCourseSaved: async () => true,
+    confirm() { prompts++; return permission; },
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '1' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  await controller.load();
+  assert.equal(find('#chatQuestion').disabled, false);
+  find('#chatQuestion').value = 'What is this about?';
+  find('#chatQuestion').listeners.input();
+  assert.equal(find('#chatSend').disabled, false);
+  await controller.ask();
+  assert.equal(prepared, 0, 'Declining permission must not retrieve captions');
+  assert.equal(fixture.calls.length, 0);
+  permission = true;
+  await controller.ask();
+  assert.equal(prepared, 1);
+  assert.equal(controller.data.messages.length, 1);
+  assert.equal(controller.data.conversationId, 'default');
+  assert.equal(find('#chatQuestion').value, '');
+  find('#chatQuestion').value = 'Can you explain that further?';
+  await controller.ask();
+  assert.equal(controller.data.messages.length, 2);
+  assert.equal(prepared, 1);
+  assert.equal(prompts, 2, 'Permission is not requested again after acceptance');
+  assert.equal(fixture.calls[1].recentConversation.length, 1);
+  assert.equal(find('#chatMessages').children.some(element => element.id === 'chatStarters'), false);
+  assert.equal(find('#chatFollowUps').children.length, 2);
+});
+
+test('caption retrieval failure keeps the question and never dispatches generation or suggests an upload', async context => {
+  const fixture = await apiFixture(context, { loadCaptions: async () => { throw new (require('../video-chat').ChatError)(502, 'CAPTIONS_UNAVAILABLE', 'Upload an SRT or VTT file.'); } });
+  fixture.chat.clear(1, 'course1', 'aqz-KE-bpKQ', 1, true);
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 1 }), getTime: () => 0, notesOpen: () => false, setNotesOpen() {}, onOpen() {},
+    formatTime: String, showError() {}, ensureCourseSaved: async () => true,
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '1' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  await controller.load();
+  assert.equal(controller.config.autoCaptions, true);
+  find('#chatQuestion').value = 'Keep my question';
+  await controller.ask();
+  assert.equal(find('#chatQuestion').value, 'Keep my question');
+  assert.equal(fixture.calls.length, 0);
+  assert.equal(controller.needsReload, false);
+  assert.equal(controller.provisional, null, 'Preparation failure must not render an interrupted assistant response');
+  assert.equal(find('#chatSend').disabled, false, 'A pre-generation failure leaves the question retryable');
+  assert.match(find('#chatError').textContent, /could not access captions/);
+  assert.doesNotMatch(find('#chatError').textContent, /upload|SRT|VTT/i);
+  const disabled = await apiFixture(context, { environment: { VIDEO_CHAT_AUTO_CAPTIONS: '0' } });
+  assert.equal((await disabled.request()).body.config.autoCaptions, false);
+});
+
+test('chat controller creates named histories, restores drafts and previews, and keeps keyboard entry conversational', async context => {
+  const fixture = await apiFixture(context);
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 1 }), getCourseTitle: () => 'Course', getTime: () => 0,
+    notesOpen: () => false, setNotesOpen() {}, onOpen() {}, formatTime: String, showError() {}, ensureCourseSaved: async () => true,
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '1' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  controller.config = { available: true };
+  await controller.load();
+  const original = controller.data.conversationId;
+  find('#chatQuestion').value = 'Draft in the original chat';
+  find('#chatQuestion').listeners.input();
+  await controller.newConversation();
+  const second = controller.data.conversationId;
+  assert.notEqual(second, original);
+  assert.equal(controller.data.conversations.length, 2);
+  assert.equal(find('#chatQuestion').value, '');
+  find('#chatName').value = 'Follow-up questions';
+  await controller.renameConversation();
+  assert.equal(controller.data.title, 'Follow-up questions');
+  find('#chatQuestion').value = 'What is a partition?';
+  find('#chatConsent').checked = true;
+  await controller.ask();
+  const turns = find('#chatMessages').children;
+  assert.equal(turns[0].className, 'chat-turn chat-user');
+  assert.equal(turns[1].className, 'chat-turn chat-assistant');
+  controller.offerPreview(controller.data.messages[0]);
+  const preview = controller.preview;
+  preview.proposal.blocks[0].text = 'Keep this edit';
+  find('#chatQuestion').value = 'Draft in the second chat';
+  find('#chatQuestion').listeners.input();
+  await controller.load(original);
+  assert.equal(controller.data.messages.length, 0);
+  assert.equal(controller.preview, null);
+  assert.equal(find('#chatQuestion').value, 'Draft in the original chat');
+  await controller.load(second);
+  assert.equal(find('#chatQuestion').value, 'Draft in the second chat');
+  assert.equal(controller.preview, preview);
+  assert.equal(controller.preview.proposal.blocks[0].text, 'Keep this edit');
+  let sends = 0;
+  let prevented = 0;
+  controller.ask = () => { sends++; };
+  const keydown = values => find('#chatQuestion').listeners.keydown({ key: 'Enter', preventDefault() { prevented++; }, ...values });
+  keydown({ shiftKey: true });
+  keydown({ isComposing: true });
+  find('#chatQuestion').listeners.compositionstart();
+  keydown({});
+  find('#chatQuestion').listeners.compositionend();
+  keydown({});
+  assert.equal(sends, 1);
+  assert.equal(prevented, 1);
+  controller.pending = { controller: new AbortController() };
+  const before = controller.data.conversationId;
+  await controller.load(original);
+  assert.equal(controller.data.conversationId, before);
+  controller.pending = null;
+  await controller.deleteConversation();
+  assert.equal(controller.data.conversationId, original);
+  assert.equal(controller.previews.size, 0);
+  await controller.load(second);
+  assert.equal(controller.data.conversationId, original, 'A deleted selection reloads the actual history list');
 });
 
 test('note preview cancel writes nothing, confirmation is explicit, and stale sources invalidate previews', async () => {

@@ -192,6 +192,10 @@ function createExtensionStore(store) {
       outcome: existing ? 'existing' : 'saved', present: true, title: String(video.title || course.title || 'YouTube video').slice(0, 500) };
     db.prepare('INSERT INTO extension_receipts (user_id, request_id, fingerprint, receipt_json, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(actor.userId, input.requestId, fingerprint, JSON.stringify(receipt), Date.now());
+    if (!existing) {
+      store.analytics?.capture('course', actor.userId);
+      store.analytics?.capture('extension', actor.userId);
+    }
     return receipt;
   });
 

@@ -315,7 +315,7 @@ async function updatePresence() {
     const { challenge } = await issued.json();
     if (generation !== sessionGeneration || !hasLiveActivity() || controller.signal.aborted) return;
     await fetch('/api/presence', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tabId: presenceTabId, challenge }), signal: controller.signal });
+      body: JSON.stringify({ tabId: presenceTabId, challenge, ...(window.productAnalytics?.collecting ? { watching: !!(playerReady && current && safe(() => player.getPlayerState()) === 1) } : {}) }), signal: controller.signal });
   } catch {}
   finally {
     clearTimeout(timeout);
@@ -575,6 +575,7 @@ let authBusy = false;
 let authRetryUntil = 0;
 let authRetryTimer = null;
 let authConfiguration = null;
+let authSignupStep = 'account';
 let captchaScript = null;
 const captchaWidgets = { auth: null, enrollment: null };
 const emailChallenges = { auth: null, enrollment: null };
@@ -745,8 +746,9 @@ function captchaToken(kind) {
 }
 
 function resetCaptcha(kind) {
-  const visible = kind === 'auth' ? !authView.classList.contains('hidden') && !$('#authForm').classList.contains('hidden') :
-    $('#profileModal').open && !$('#settingsAccount').classList.contains('hidden') && !$('#emailEnrollment').classList.contains('hidden');
+  const visible = kind === 'auth' ? !authView.classList.contains('hidden') && !$('#authForm').classList.contains('hidden') &&
+    (authMode === 'login' || authSignupStep !== 'account' || authSignupSteps().length === 2) :
+    $('#profileModal').open && $('#accountEmailSettings').open && !$('#settingsAccount').classList.contains('hidden') && !$('#emailEnrollment').classList.contains('hidden');
   if (!visible) { syncCaptcha(kind, null); return; }
   const state = captchaWidgets[kind];
   if (state?.id !== undefined) { state.token = ''; window.turnstile?.reset(state.id); }
@@ -814,7 +816,7 @@ function setupCodeInput(input) {
 
 function syncEmailCode(kind) {
   const challenge = emailChallenges[kind];
-  const visible = !!challenge && (kind !== 'auth' || authMode !== 'login');
+  const visible = !!challenge && (kind !== 'auth' || (authMode !== 'login' && authSignupStep === 'verify'));
   $('#' + kind + 'CodeBlock').classList.toggle('hidden', !visible);
   $('#' + kind + 'Code').required = visible;
   $('#' + kind + 'Code').disabled = !visible;
@@ -832,6 +834,7 @@ function syncEmailCode(kind) {
   if (visible && (remaining || expires)) emailResendTimers[kind] = setTimeout(() => syncEmailCode(kind), 1000);
   $('#' + (kind === 'auth' ? 'authSubmit' : 'enrollmentSubmit')).textContent = kind === 'auth' && authMode === 'login' ? 'Sign in' :
     challenge ? kind === 'auth' ? 'Verify and create account' : 'Verify email' : 'Send verification code';
+  if (kind === 'auth') syncAuthSignup();
 }
 
 function clearEmailCode(kind) {
@@ -856,6 +859,7 @@ async function requestEmailCode(kind) {
     body: JSON.stringify({ email, captchaToken: captchaToken(kind) }), invitation: kind === 'auth' });
   if (version !== emailChallengeVersions[kind] || input.value.trim().toLowerCase() !== email) return;
   emailChallenges[kind] = { token: result.verificationToken, email, resendAt: Date.now() + result.resendAfter * 1000, expiresAt: result.expiresAt };
+  if (kind === 'auth') authSignupStep = 'verify';
   syncEmailCode(kind);
   const code = $('#' + kind + 'Code');
   code.value = '';
@@ -870,9 +874,74 @@ function emailCodeBody(kind) {
   return { verificationToken: emailChallenges[kind]?.token, verificationCode: $('#' + kind + 'Code').value.trim() };
 }
 
+function resetAuthOnboarding() {
+  for (const id of ['authLearningRole', 'authLearningGoal', 'authDiscoverySource']) $('#' + id).value = '';
+  $('#authAnalyticsConsent').checked = false;
+  $('#authOnboardingStatus').textContent = '';
+}
+
+function syncAuthOnboarding() {
+  const available = authMode !== 'login' && authSignupStep === 'about' && window.FocusTubeInvite.has() && authConfiguration?.onboarding?.available === true;
+  $('#authOnboarding').classList.toggle('hidden', !available);
+  $('#authOnboarding').disabled = !available || authBusy;
+  $('#authOnboardingSkip').classList.toggle('hidden', !available);
+  for (const id of ['authLearningRole', 'authLearningGoal', 'authDiscoverySource', 'authAnalyticsConsent', 'authOnboardingSkip']) $('#' + id).disabled = !available || authBusy;
+}
+
+function authOnboardingBody() {
+  if (authMode === 'login' || !authConfiguration?.onboarding?.available || !$('#authAnalyticsConsent').checked) return undefined;
+  return { consent: true, notice: authConfiguration.onboarding.notice, audienceNotice: authConfiguration.onboarding.audienceNotice,
+    answers: { role: $('#authLearningRole').value || null, goal: $('#authLearningGoal').value || null, source: $('#authDiscoverySource').value || null } };
+}
+
+function authSignupSteps() {
+  return authConfiguration?.onboarding?.available === true ? ['account', 'about', 'verify'] : ['account', 'verify'];
+}
+
+function syncAuthSignup() {
+  const joining = authMode !== 'login';
+  const steps = authSignupSteps();
+  if (!steps.includes(authSignupStep) || (authSignupStep === 'verify' && !emailChallenges.auth)) authSignupStep = 'account';
+  const step = joining ? authSignupStep : 'account';
+  const active = joining && window.FocusTubeInvite.has() && !$('#authForm').classList.contains('hidden');
+  $('#authSteps').classList.toggle('hidden', !active);
+  for (const [name, id] of [['account', 'authStepAccount'], ['about', 'authStepAbout'], ['verify', 'authStepVerify']]) {
+    const item = $('#' + id);
+    const index = steps.indexOf(name);
+    item.classList.toggle('hidden', index < 0);
+    item.dataset.number = String(index + 1);
+    item.dataset.state = index < steps.indexOf(step) ? 'complete' : name === step ? 'current' : 'next';
+    if (name === step) item.setAttribute('aria-current', 'step'); else item.removeAttribute('aria-current');
+  }
+  $('#authAccountFields').classList.toggle('hidden', step !== 'account');
+  $('#authAccountFields').disabled = step !== 'account';
+  $('#authBack').classList.toggle('hidden', !active || step === 'account');
+  $('#authBack').disabled = authBusy;
+  const previous = steps[steps.indexOf(step) - 1];
+  $('#authBack').setAttribute('aria-label', previous === 'about' ? 'Back to optional questions' : 'Back to account details');
+  syncAuthOnboarding();
+  const sending = joining && (step === 'about' || steps.length === 2) && !emailChallenges.auth;
+  $('#authSubmit').textContent = authBusy ? joining ? 'Please wait...' : 'Signing in...' : !joining ? 'Sign in' :
+    step === 'verify' ? 'Verify and create account' : sending ? 'Send verification code' : 'Continue';
+  $('#authHeading').textContent = !joining ? 'Your learning workspace.' : step === 'about' ? 'About you' :
+    step === 'verify' ? 'Check your email' : authUser?.isGuest ? 'Keep your learning' : 'Create your account';
+  $('#authWelcome').textContent = !joining ? 'Welcome back.' : active ? `Step ${steps.indexOf(step) + 1} of ${steps.length}` : 'An invitation is required to join FocusTube.';
+  if (!authView.classList.contains('hidden')) document.title = `${joining ? 'Join' : 'Sign in'} - FocusTube`;
+  syncCaptcha('auth', $('#authForm').classList.contains('hidden') || (joining && step === 'account' && steps.length > 2) ? null : joining ? 'registration' : 'login');
+}
+
+function setAuthSignupStep(step) {
+  authSignupStep = step;
+  resetAuthPasswordVisibility();
+  syncEmailCode('auth');
+  $('#authHeading').focus();
+}
+
 function setAuthBusy(busy) {
   authBusy = busy;
+  syncAuthSignup();
   for (const id of ['authUsername', 'authDisplayName', 'authHandle', 'authPassword', 'authPasswordConfirmation']) $('#' + id).readOnly = busy;
+  $('#authCode').readOnly = busy;
   $('#authSubmit').disabled = busy || Date.now() < authRetryUntil || (authMode !== 'login' && authConfiguration?.emailVerification?.configured === false);
   $('#loginTab').disabled = busy;
   $('#registerTab').disabled = busy;
@@ -881,6 +950,8 @@ function setAuthBusy(busy) {
 }
 
 function setAuthMode(mode) {
+  if (mode === 'login') resetAuthOnboarding();
+  if (mode !== authMode || mode === 'login') authSignupStep = 'account';
   resetAuthHandleCheck();
   resetAuthPasswordVisibility();
   authMode = mode;
@@ -907,13 +978,9 @@ function setAuthMode(mode) {
   $('#authUsername').type = joining ? 'email' : 'text';
   $('#authUsername').autocomplete = joining ? 'email' : 'username';
   $('#authEmailUnavailable').classList.toggle('hidden', !joining || !hasInvite || authConfiguration?.emailVerification?.configured !== false);
-  $('#socialAuthOptions').classList.toggle('hidden', !!authUser);
   syncEmailCode('auth');
-  syncCaptcha('auth', $('#authForm').classList.contains('hidden') ? null : joining ? 'registration' : 'login');
   setAuthBusy(authBusy);
   $('#authPassword').autocomplete = joining ? 'new-password' : 'current-password';
-  $('#authHeading').textContent = authUser?.isGuest ? 'Your guest profile.' : joining ? 'Join FocusTube.' : 'Your learning workspace.';
-  $('#authWelcome').textContent = authUser?.isGuest ? 'Export available. An invitation is required to continue learning.' : joining ? 'Invitation-only registration.' : 'Welcome back.';
   $('#authError').classList.add('hidden');
   syncAuthPasswordFeedback();
 }
@@ -930,6 +997,7 @@ function showAccountError(error, target, button) {
   target.textContent = error.message;
   target.classList.remove('hidden');
   if (error.data?.code === 'USERNAME_TAKEN' && target.id === 'authError') {
+    setAuthSignupStep('account');
     authHandleResult = { username: $('#authHandle').value.trim().toLowerCase(), available: false };
     setAuthHandleFeedback('taken', 'This username is already taken. Pick another.');
     $('#authHandle').focus();
@@ -955,6 +1023,8 @@ function showAccountError(error, target, button) {
 }
 
 function resetSessionState() {
+  authSignupStep = 'account';
+  resetAuthOnboarding();
   withdrawPresence();
   accountSnapshot = null;
   accountSaveBusy = false;
@@ -970,6 +1040,7 @@ function resetSessionState() {
   $('#accountForm').reset();
   restoreAppearance();
   clearMonitoring();
+  window.productAnalytics?.reset();
   sessionGeneration++;
   notebooks?.reset();
   videoChat?.reset();
@@ -1042,6 +1113,7 @@ function showAuth({ preserveInvite = false } = {}) {
 }
 
 function updateProfileUI() {
+  window.productAnalytics?.configure();
   window.invitationSettings?.syncAccount();
   if (!authUser) return;
   const name = authUser.displayName || authUser.username || 'Guest';
@@ -1057,6 +1129,8 @@ function updateProfileUI() {
     ? 'Guest profile · inactive profiles are removed after 90 days'
     : authUser.email || 'Legacy username account';
   $('#emailEnrollment').classList.toggle('hidden', authUser.isGuest || authUser.emailVerified === true);
+  $('#accountEmailSummary').textContent = authUser.isGuest ? 'Email is available after creating a member account.' :
+    authUser.email ? `${authUser.email} - ${authUser.emailVerified ? 'Verified' : 'Not verified'}` : 'No email address added.';
   $('#profileEmailStatus').textContent = authUser.isGuest ? '' : authUser.emailVerified ? 'Email verified' : authUser.email ? 'Email not verified' : 'Email not set';
   $('#enrollmentEmail').readOnly = !!authUser.email;
   if (authUser.email) $('#enrollmentEmail').value = authUser.email;
@@ -4427,12 +4501,14 @@ function selectSettingsSection(section, focus = false) {
     $('#' + tab.getAttribute('aria-controls')).classList.toggle('hidden', !selected);
     if (selected && focus) tab.focus();
   }
-  syncCaptcha('enrollment', section === 'account' && !$('#emailEnrollment').classList.contains('hidden') ? 'email' : null);
+  syncCaptcha('enrollment', section === 'account' && $('#accountEmailSettings').open && !$('#emailEnrollment').classList.contains('hidden') ? 'email' : null);
   window.invitationSettings?.activate(section === 'admin');
+  if (section === 'data') window.productAnalytics?.loadPreference();
 }
 
 async function openProfile() {
   if ($('#profileModal').open) return;
+  for (const section of document.querySelectorAll('.account-disclosure')) section.open = false;
   clearPasswordFields();
   $('#passwordError').classList.add('hidden');
   $('#passwordStatus').textContent = '';
@@ -4454,13 +4530,23 @@ async function openProfile() {
     if (generation !== sessionGeneration || version !== accountLoadVersion || !$('#profileModal').open) return;
     $('#accountError').textContent = 'Could not refresh account details. Close settings and try again.';
     $('#accountError').classList.remove('hidden');
+    $('#accountDetails').open = true;
   }
 }
 
 function setupAccountSettings() {
   const dialog = $('#profileModal');
+  $('#accountEmailSettings').addEventListener('toggle', () => {
+    syncCaptcha('enrollment', dialog.open && $('#accountEmailSettings').open && settingsSection === 'account' &&
+      !$('#emailEnrollment').classList.contains('hidden') ? 'email' : null);
+  });
+  $('#settingsAccount').addEventListener('invalid', event => {
+    const section = event.target.closest('.account-disclosure');
+    if (section) section.open = true;
+  }, true);
   dialog.confirmClose = () => {
     if (!confirmAccountDiscard()) return false;
+    if (window.productAnalytics?.confirmSurveyClose() === false) return false;
     clearPasswordFields();
     window.invitationSettings?.close();
     return true;
@@ -4686,6 +4772,53 @@ let monitoringRequest = null;
 let monitoringData = null;
 let monitoringTrafficChart = null;
 let monitoringUsersChart = null;
+const monitoringFilterDefaults = { query: '', role: 'all', activity: 'all', sort: 'activity', event: 'all', days: '30' };
+let monitoringFilters = { ...monitoringFilterDefaults };
+let monitoringResultFilters = null;
+
+function selectMonitoringSection(section, focus = false) {
+  const tabs = [...document.querySelectorAll('[data-monitoring-section]')];
+  if (!tabs.some(tab => tab.dataset.monitoringSection === section)) section = 'overview';
+  for (const tab of tabs) {
+    const selected = tab.dataset.monitoringSection === section;
+    tab.setAttribute('aria-selected', String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    $('#' + tab.getAttribute('aria-controls')).classList.toggle('hidden', !selected);
+    if (selected && focus) tab.focus();
+  }
+  if (section === 'overview') {
+    monitoringTrafficChart?.resize();
+    monitoringUsersChart?.resize();
+  }
+}
+
+function syncMonitoringControls() {
+  const busy = !!monitoringRequest;
+  const matchingFilters = monitoringResultFilters && Object.keys(monitoringFilterDefaults).every(key => monitoringFilters[key] === monitoringResultFilters[key]);
+  $('#monitoringRefresh').disabled = busy;
+  $('#monitoringContent').setAttribute('aria-busy', String(busy));
+  $('#monitoringPrevious').disabled = busy || !monitoringData || !matchingFilters || monitoringData.usage.page <= 1;
+  $('#monitoringNext').disabled = busy || !monitoringData || !matchingFilters || monitoringData.usage.page >= monitoringData.usage.pages;
+  $('#monitoringMemberClear').classList.toggle('hidden', ['query', 'role', 'activity', 'sort'].every(key => monitoringFilters[key] === monitoringFilterDefaults[key]));
+  $('#monitoringEventClear').classList.toggle('hidden', ['event', 'days'].every(key => monitoringFilters[key] === monitoringFilterDefaults[key]));
+}
+
+function applyMonitoringFilters(reset = '') {
+  const memberKeys = ['query', 'role', 'activity', 'sort'];
+  const resetKeys = reset === 'members' ? memberKeys : reset === 'events' ? ['event', 'days'] : [];
+  const filters = {};
+  for (const field of document.querySelectorAll('[data-monitoring-filter]')) {
+    if (resetKeys.includes(field.name)) field.value = monitoringFilterDefaults[field.name];
+    filters[field.name] = field.value.trim();
+  }
+  if (memberKeys.some(key => monitoringFilters[key] !== filters[key])) monitoringPage = 1;
+  monitoringFilters = filters;
+  monitoringRequest?.abort();
+  monitoringRequest = null;
+  if (reset) $(reset === 'members' ? '#monitoringSearch' : '#monitoringEventType').focus();
+  syncMonitoringControls();
+  return refreshMonitoring();
+}
 
 function clearMonitoring() {
   monitoringRequest?.abort();
@@ -4695,12 +4828,19 @@ function clearMonitoring() {
   monitoringUsersChart?.destroy();
   monitoringTrafficChart = null;
   monitoringUsersChart = null;
+  monitoringPage = 1;
+  monitoringFilters = { ...monitoringFilterDefaults };
+  monitoringResultFilters = null;
+  for (const field of document.querySelectorAll('[data-monitoring-filter]')) field.value = monitoringFilterDefaults[field.name];
   $('#monitoringContent').classList.add('hidden');
   $('#monitoringUsers').replaceChildren();
   $('#monitoringEvents').replaceChildren();
   $('#monitoringTrafficData').replaceChildren();
   $('#monitoringUsersData').replaceChildren();
   $('#monitoringError').classList.add('hidden');
+  $('#monitoringUpdated').textContent = '';
+  syncMonitoringControls();
+  selectMonitoringSection('overview');
 }
 
 function monitoringDate(value) {
@@ -4742,14 +4882,15 @@ function renderMonitoring(data) {
     el('td', {}, el('span', { class: user.active ? 'monitoring-online' : 'muted' }, user.active ? 'Active' : user.accountState === 'disabled' ? 'Disabled' : 'Idle')),
     el('td', {}, user.isAdmin ? 'Administrator' : 'Member'),
     el('td', {}, monitoringDate(user.lastLoginAt)), el('td', {}, monitoringDate(user.lastActiveAt))));
-  $('#monitoringUsers').replaceChildren(...(userRows.length ? userRows : [el('tr', {}, el('td', { colspan: '5' }, 'No members recorded.'))]));
+  $('#monitoringUsers').replaceChildren(...(userRows.length ? userRows : [el('tr', {}, el('td', { colspan: '5' }, 'No members match these filters.'))]));
+  $('#monitoringMemberCount').textContent = `${Number(usage.filteredUsers ?? usage.totalUsers).toLocaleString()} of ${Number(usage.totalUsers).toLocaleString()} members`;
   $('#monitoringPage').textContent = `Page ${usage.page} of ${usage.pages}`;
-  $('#monitoringPrevious').disabled = usage.page <= 1;
-  $('#monitoringNext').disabled = usage.page >= usage.pages;
+  syncMonitoringControls();
   const eventNames = { login: 'Signed in', register: 'Account created', upgrade: 'Guest converted', email: 'Email verified', logout: 'Signed out' };
   const eventRows = usage.events.map(event => el('li', {}, el('span', {}, event.username || `Member #${event.userId}`),
     el('span', {}, eventNames[event.event] || 'Account event'), el('time', { datetime: event.createdAt }, monitoringDate(event.createdAt))));
-  $('#monitoringEvents').replaceChildren(...(eventRows.length ? eventRows : [el('li', { class: 'muted' }, 'No account events recorded yet.')]));
+  $('#monitoringEvents').replaceChildren(...(eventRows.length ? eventRows : [el('li', { class: 'muted' }, 'No account events match these filters.')]));
+  $('#monitoringEventCount').textContent = `${usage.events.length === 30 ? 'Latest ' : ''}${usage.events.length} events`;
   const styles = getComputedStyle(document.documentElement);
   const text = styles.getPropertyValue('--muted').trim();
   const border = styles.getPropertyValue('--border').trim();
@@ -4774,26 +4915,33 @@ async function refreshMonitoring() {
   const controller = new AbortController();
   const generation = sessionGeneration;
   monitoringRequest = controller;
-  $('#monitoringRefresh').disabled = true;
-  $('#monitoringLoading').classList.toggle('hidden', !!monitoringData);
+  syncMonitoringControls();
+  $('#monitoringLoading').textContent = monitoringData ? 'Updating monitoring...' : 'Loading monitoring data...';
+  $('#monitoringLoading').classList.remove('hidden');
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const result = await api(`/api/admin/monitoring?page=${monitoringPage}`, { signal: controller.signal });
-    if (controller.signal.aborted || generation !== sessionGeneration || !$('#monitoringModal').open) return;
+    const parameters = new URLSearchParams({ page: String(monitoringPage) });
+    for (const [name, value] of Object.entries(monitoringFilters)) if (value !== monitoringFilterDefaults[name]) parameters.set(name, value);
+    const result = await api(`/api/admin/monitoring?${parameters}`, { signal: controller.signal });
+    if (controller.signal.aborted || monitoringRequest !== controller || generation !== sessionGeneration || !$('#monitoringModal').open) return;
     monitoringData = result;
+    monitoringResultFilters = { ...monitoringFilters };
+    monitoringPage = result.usage.page;
     $('#monitoringContent').classList.remove('hidden');
     $('#monitoringError').classList.add('hidden');
     renderMonitoring(result);
   } catch (error) {
-    if (generation !== sessionGeneration || !$('#monitoringModal').open) return;
-    if (error.status === 403) { hideModal('monitoringModal'); toast('Administrator access is required.', { error: true }); return; }
-    $('#monitoringError').textContent = monitoringData ? 'Refresh failed. Displayed values are from the last successful update.' : 'Monitoring is unavailable. Try refreshing.';
+    if (monitoringRequest !== controller || generation !== sessionGeneration || !$('#monitoringModal').open) return;
+    if (error.status === 401 || error.status === 403) { hideModal('monitoringModal'); toast('Administrator access is required.', { error: true }); return; }
+    $('#monitoringError').textContent = monitoringData ? 'Refresh failed. Displayed values are from the last successful update and may not match the selected filters.' : 'Monitoring is unavailable. Try refreshing.';
     $('#monitoringError').classList.remove('hidden');
   } finally {
     clearTimeout(timeout);
-    if (monitoringRequest === controller) monitoringRequest = null;
-    $('#monitoringLoading').classList.add('hidden');
-    $('#monitoringRefresh').disabled = false;
+    if (monitoringRequest === controller) {
+      monitoringRequest = null;
+      $('#monitoringLoading').classList.add('hidden');
+      syncMonitoringControls();
+    }
   }
 }
 
@@ -4856,8 +5004,8 @@ async function importProfileData(file) {
     } catch {
       throw new Error('That file is not valid JSON.');
     }
-    if (imported?.schema !== 'focustube-user-export' || ![1, 2, 3].includes(imported?.schemaVersion)) {
-      throw new Error('Choose a FocusTube user export (schema version 1, 2 or 3).');
+    if (imported?.schema !== 'focustube-user-export' || ![1, 2, 3, 4].includes(imported?.schemaVersion)) {
+      throw new Error('Choose a FocusTube user export (schema version 1, 2, 3 or 4).');
     }
     const courseCount =
       imported.courses && typeof imported.courses === 'object' && !Array.isArray(imported.courses)
@@ -4871,6 +5019,7 @@ async function importProfileData(file) {
         `Import ${courseCount} course(s), ${historyCount} watch-history record(s), and ${imported.notebooks?.length || 0} video note(s) from "${file.name}"?\n\n` +
           'This replaces all progress, notebooks and video chats in your current profile. Your username and password will not change.' +
           (imported.schemaVersion < 3 ? '\nThis older export has no video chats; your current chats and transcripts will be cleared.' : '') +
+          (imported.schemaVersion === 3 ? '\nThis single-chat export will replace all current conversation histories.' : '') +
           (imported.schemaVersion === 1 ? '\nThis older export has no notebooks; your current notes will be cleared.' : '')
       )
     ) {
@@ -4923,9 +5072,19 @@ document.querySelectorAll('[data-password-for]').forEach(button => button.addEve
   if (event.detail > 0) input.focus({ preventScroll: true });
   if (selectionStart !== null) input.setSelectionRange(selectionStart, selectionEnd);
 }));
-window.addEventListener('pagehide', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); });
-$('#authForm').addEventListener('reset', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); queueMicrotask(syncAuthPasswordFeedback); });
-document.querySelectorAll('.auth-provider').forEach(button => button.addEventListener('click', event => event.preventDefault()));
+window.addEventListener('pagehide', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); resetAuthOnboarding(); });
+$('#authForm').addEventListener('reset', () => { resetAuthHandleCheck(); resetAuthPasswordVisibility(); resetAuthOnboarding(); queueMicrotask(syncAuthPasswordFeedback); });
+$('#authBack').addEventListener('click', () => {
+  if (authBusy) return;
+  const steps = authSignupSteps();
+  setAuthSignupStep(steps[Math.max(0, steps.indexOf(authSignupStep) - 1)]);
+  $('#authError').classList.add('hidden');
+});
+$('#authOnboardingSkip').addEventListener('click', () => {
+  if (authBusy || authSignupStep !== 'about') return;
+  resetAuthOnboarding();
+  $('#authForm').requestSubmit();
+});
 $('#authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (authBusy || Date.now() < authRetryUntil) return;
@@ -4936,7 +5095,7 @@ $('#authForm').addEventListener('submit', async (e) => {
   error.classList.add('hidden');
   try {
     const joining = authMode !== 'login';
-    if (joining && !await checkAuthHandle()) { $('#authHandle').focus(); return; }
+    if (joining && !await checkAuthHandle()) { setAuthSignupStep('account'); $('#authHandle').focus(); return; }
     if (transition !== authTransition) return;
     const identity = joining ? 'email' : 'identifier';
     const body = { [identity]: $('#authUsername').value.trim(), password: $('#authPassword').value };
@@ -4945,8 +5104,12 @@ $('#authForm').addEventListener('submit', async (e) => {
       body.username = $('#authHandle').value.trim();
       body.passwordConfirmation = $('#authPasswordConfirmation').value;
       if (body.passwordConfirmation !== body.password) throw new Error('Passwords do not match.');
+      if (authSignupStep === 'account' && authSignupSteps().includes('about')) { setAuthSignupStep('about'); return; }
       if (!emailChallenges.auth) { await requestEmailCode('auth'); return; }
+      if (authSignupStep !== 'verify') { setAuthSignupStep('verify'); return; }
       Object.assign(body, emailCodeBody('auth'));
+      const onboarding = authOnboardingBody();
+      if (onboarding) body.onboarding = onboarding;
     }
     body.captchaToken = captchaToken('auth');
     const result = await api(`/api/auth/${authMode}`, {
@@ -4977,9 +5140,12 @@ $('#authForm').addEventListener('submit', async (e) => {
       window.FocusTubeInvite.clear();
       setAuthMode(authMode);
     }
-    $('#authPassword').value = '';
-    $('#authPasswordConfirmation').value = '';
-    $('#authPasswordConfirmation').setCustomValidity('');
+    if (authMode === 'login' || err.data?.code !== 'INVALID_VERIFICATION') {
+      $('#authPassword').value = '';
+      $('#authPasswordConfirmation').value = '';
+      $('#authPasswordConfirmation').setCustomValidity('');
+      if (authMode !== 'login') setAuthSignupStep('account');
+    }
     syncAuthPasswordFeedback();
     showAccountError(err, error, $('#authSubmit'));
   } finally {
@@ -5044,6 +5210,12 @@ window.invitationSettings = new window.InvitationSettings({
   getAccount: () => ({ id: authUser?.id, isAdmin: !!authUser?.isAdmin, isGuest: !!authUser?.isGuest, generation: sessionGeneration }),
   el, icon,
 });
+window.productAnalytics = new window.ProductAnalytics({ getAccount: () => ({ id: authUser?.id, isAdmin: !!authUser?.isAdmin, isGuest: !!authUser?.isGuest, generation: sessionGeneration }), el, chartTable: renderChartData });
+$('#profileAnalytics').addEventListener('click', () => {
+  if (!authUser?.isAdmin || !hideModal('profileModal')) return;
+  showModal('analyticsModal');
+  window.productAnalytics.open();
+});
 $('#profileModal').addEventListener('close', () => { if (!$('#profileModal').open) clearIssuedInvite(); });
 $('#profileModal').addEventListener('close', () => { clearEmailCode('enrollment'); syncCaptcha('enrollment', null); });
 window.addEventListener('pagehide', clearIssuedInvite);
@@ -5064,6 +5236,7 @@ $('#guestExport').addEventListener('click', exportProfileData);
 async function signOut() {
   if (authBusy || passwordSaveBusy) return;
   if ($('#profileModal').open && !confirmAccountDiscard()) return;
+  if ($('#profileModal').open && window.productAnalytics?.confirmSurveyClose() === false) return;
   setAuthBusy(true);
   try {
     if (appBooted && !authUser?.isGuest) {
@@ -5087,9 +5260,28 @@ async function signOut() {
 }
 for (const selector of ['#logoutBtn', '#guestSignOut', '#inviteSignOut']) $(selector).addEventListener('click', signOut);
 for (const selector of ['#monitoringBtn', '#profileMonitoring']) $(selector).addEventListener('click', openMonitoring);
+for (const tab of document.querySelectorAll('[data-monitoring-section]')) tab.addEventListener('click', () => selectMonitoringSection(tab.dataset.monitoringSection));
+$('#monitoringTabs').addEventListener('keydown', event => {
+  const tabs = [...document.querySelectorAll('[data-monitoring-section]')];
+  const index = tabs.indexOf(event.target);
+  if (index < 0) return;
+  let next;
+  if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+  else if (event.key === 'ArrowLeft') next = (index - 1 + tabs.length) % tabs.length;
+  else if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = tabs.length - 1;
+  else return;
+  event.preventDefault();
+  selectMonitoringSection(tabs[next].dataset.monitoringSection, true);
+});
+for (const selector of ['#monitoringMemberFilters', '#monitoringEventFilters']) $(selector).addEventListener('submit', event => { event.preventDefault(); applyMonitoringFilters(); });
+for (const select of document.querySelectorAll('select[data-monitoring-filter]')) select.addEventListener('change', () => applyMonitoringFilters());
+$('#monitoringSearch').addEventListener('input', () => { if (!$('#monitoringSearch').value) applyMonitoringFilters(); });
+$('#monitoringMemberClear').addEventListener('click', () => applyMonitoringFilters('members'));
+$('#monitoringEventClear').addEventListener('click', () => applyMonitoringFilters('events'));
 $('#monitoringRefresh').addEventListener('click', refreshMonitoring);
-$('#monitoringPrevious').addEventListener('click', () => { if (!monitoringRequest) { monitoringPage = Math.max(1, monitoringPage - 1); refreshMonitoring(); } });
-$('#monitoringNext').addEventListener('click', () => { if (!monitoringRequest) { monitoringPage++; refreshMonitoring(); } });
+$('#monitoringPrevious').addEventListener('click', () => { if (!$('#monitoringPrevious').disabled && monitoringData) { monitoringPage = Math.max(1, monitoringData.usage.page - 1); refreshMonitoring(); } });
+$('#monitoringNext').addEventListener('click', () => { if (!$('#monitoringNext').disabled && monitoringData) { monitoringPage = monitoringData.usage.page + 1; refreshMonitoring(); } });
 $('#monitoringModal').addEventListener('close', clearMonitoring);
 document.addEventListener('themechange', () => { if (monitoringData && $('#monitoringModal').open) renderMonitoring(monitoringData); });
 document.addEventListener('visibilitychange', () => { updatePresence(); if (!document.hidden) refreshMonitoring(); });

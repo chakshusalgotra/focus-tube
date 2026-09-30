@@ -43,10 +43,13 @@ Discover videos and playlists by keyword, or import a YouTube link directly. The
 
 Video chat and extension capture are disabled by default. Their implementation is not a claim of hosted or real-provider verification; see the [V1 release contract and gates](docs/v1-release.md).
 
-**Not included yet:** Google/GitHub sign-in, the replacement Board view, forgotten-password recovery, and self-service account deletion. Coming-soon controls do not call a sign-in provider. Course downloads remain an optional backend API, not a website button.
+**Not included yet:** Google/GitHub sign-in, the replacement Board view, forgotten-password recovery, and self-service account deletion. Unavailable sign-in providers are not shown in the account flow. Course downloads remain an optional backend API, not a website button.
 
 ## Documentation
 
+- [Documentation index](docs/README.md): current reader paths, document ownership, evidence limits and maintenance commands.
+- [Interactive architecture atlas](docs/diagrams/index.html): self-contained system and workflow diagrams with reader-controlled motion, editable JSON, and a separately labelled release-process draft. Open locally in a browser; no app server or private data is required.
+- [Architecture](docs/architecture.md), [website flows](docs/flows.md), and [complete API route reference](docs/api.md): code structure, data ownership, account/learning/chat/capture/forum journeys and exact HTTP contracts reviewed on 2026-09-28.
 - [timeline.html](timeline.html): newest-first feature history, commit links, changed files, branch stages, bugs, and pending work.
 - [docs/timeline.md](docs/timeline.md): timeline provenance and the `npm run timeline:update` refresh workflow.
 - [Quick start](#quick-start): local installation, Docker, and the first-run workflow.
@@ -142,6 +145,12 @@ The interface supports light and dark themes, with teal actions and restrained c
 
 V1 is streamed text chat using the official Google Gen AI SDK with `gemini-3.1-flash-lite`, minimal thinking, no tools, and no automatic generation retries. It answers from permitted spoken captions, not unseen slides, code, diagrams, audio, or video frames. Citation validation checks that referenced segments exist, not that every claim is correct. This is not voice chat, live-stream ingestion, or chat with other viewers.
 
+The pane contains a conversation and a bottom message box, with **Summarize video** and **Explain the key ideas** starters that disappear when a chat begins. Completed answers can suggest up to two follow-up questions. The model name, caption upload, language, scope controls and persistent consent checkbox are not shown. A summary is an ordinary reply, not an automatic note preview.
+
+**New chat** starts a separate discussion for the same video; histories can be selected, renamed or deleted. Up to 20 conversations share the video's captions. Unsent drafts and edited note previews stay with their conversation while switching histories. Enter sends, Shift+Enter inserts a newline, and active text composition does not submit. The first question asks permission to use/share that video's content with Google, then the app retrieves available captions itself. Permission is remembered only for that video in the current page session; **Reset AI permission** in the actions menu revokes that local choice for the next send.
+
+The current [Google model catalog](https://ai.google.dev/gemini-api/docs/models) restricts Gemini 2.5 models to previous users. Although 2.5 Flash-Lite has a lower list price, it was unavailable to this project's earlier API check. This implementation retains the working, lower-cost non-legacy 3.1 Flash-Lite model, not a newer, more expensive default alias. Recheck availability and [deprecation dates](https://ai.google.dev/gemini-api/docs/deprecations) before deployment.
+
 Configure these server environment variables only after approving provider billing and transcript processing:
 
 | Variable | Default | Purpose |
@@ -151,28 +160,27 @@ Configure these server environment variables only after approving provider billi
 | `VIDEO_CHAT_MODEL` | `gemini-3.1-flash-lite` | Only this model is accepted because the spending policy uses its rates. |
 | `VIDEO_CHAT_MONTHLY_BUDGET_USD` | Native/local `5`; production Compose `4`; development Compose `1` | UTC-month generation budget shared by accounts in one database; `0` disables generation. |
 | `VIDEO_CHAT_ALLOWED_USER_IDS` | Empty | Comma-separated registered account IDs. Administrators are allowed; guests are not. |
-| `VIDEO_CHAT_AUTO_CAPTIONS` | `0` | Opt in to best-effort public YouTube caption retrieval only when permitted. |
+| `VIDEO_CHAT_AUTO_CAPTIONS` | `1` | Automatically retrieve available public captions on the first permitted question. Set `0` to disable retrieval; this does not enable AI chat by itself. |
 
 The app does not load `.env` automatically; native runs need an explicitly supplied environment or Node's `--env-file` option. All three Compose files now pass these variables into the container. Keep secrets out of tracked files. Hosted features are not enabled automatically.
 
 Production and development use separate SQLite ledgers. The `$4 + $1` defaults are an allocation, **not a globally enforced $5 cap** across environments or a shared API key. A common `.env` or shell value for `VIDEO_CHAT_MONTHLY_BUDGET_USD` overrides both defaults; the example's `5` would give each deployment its own $5 limit. Use separate environment settings, account for any local $5 instance too, and configure provider-side limits. Recheck the effective nonsecret settings before enabling billing.
 
-- Confirm source permission before loading captions or uploading timed `.srt`/`.vtt` text. Sources are limited to four hours, 1 MiB, and 10,000 ordered segments. Each account can retain 50 active transcripts and 10 MiB of transcript/conversation data. Subtitle parsing uses the `subtitle` package's SRT/partial-WebVTT support.
-- Automatic caption access uses `youtube-transcript-plus`, an unofficial interface. Missing tracks, content restrictions, and network/IP blocking can prevent retrieval. There is no private-video credential, cookie/proxy bypass, audio download, or background transcription fallback; upload permitted subtitles instead. Prior local caption probes do not verify this release's hosted coverage.
+- The first-message permission confirmation covers caption access and AI processing. Caption retrieval does not start merely by opening a video. Existing captions are reused across its histories. Sources remain limited to four hours, 1 MiB, and 10,000 ordered segments; each account can retain 50 videos and 10 MiB of caption/conversation data. The legacy SRT/VTT API is retained for compatibility, but users are not asked to upload files.
+- Automatic caption access uses `youtube-transcript-plus`, an unofficial interface. Missing tracks, content restrictions, and network/IP blocking can prevent retrieval. The chat then gives a plain unavailable message and preserves the question; preparation failures do not dispatch inference. There is no private-video credential, cookie/proxy bypass, audio download, or paid audio-transcription fallback. Prior local caption probes do not verify this release's hosted coverage.
 - After explicit provider consent, the server sends the question, video title, available captured playhead, selected caption context, and conversation context to Google Gemini. Existing notebook content, account credentials, and other videos are not automatically included. Text you put in the question is sent, so do not paste secrets. Google's account-specific data-use and retention terms apply; this is not a locally running model.
-- **Current moment** selects caption segments overlapping the window from 120 seconds before to 60 seconds after the playhead captured at Send. A later seek does not retarget the request, and a missing playhead is not treated as zero. **Whole video** uses the full permitted transcript. Normal follow-ups include the last four completed exchanges; older saved turns are not implicit model memory.
-- **Discussion** snapshots all completed exchanges in the current UI discussion and their referenced caption segments. The API can bind an explicit set of completed message IDs. It does not silently summarize only the last four or discard earlier selected messages to fit the limit.
-- Input counting allows at most 100,000 tokens including a conservative instruction/format allowance; output is capped at 1,024 tokens. Oversized context is rejected with a smaller-scope action, not silently truncated. Questions are limited to 2,000 characters and threads to 100 completed answers.
+- The simplified chat uses the full permitted video transcript and every completed exchange in the selected conversation, never another chat's history. Optional moment/discussion scopes remain in the API for compatibility, without user-facing configuration. A captured playhead is bound to the sent question and is not retargeted by a later seek.
+- Input counting uses the model's documented **1,048,576-token input limit**, including a conservative instruction/format allowance; application output remains capped at 1,024 tokens. Oversized context is rejected with a new-chat/smaller-scope action, not silently truncated. Questions are limited to 2,000 characters and each conversation to 100 completed answers.
 - Streamed text is **provisional** until the complete JSON, answer, references, and any note proposal pass validation. Only a validated final response is persisted and gets actionable citations or **Add to notes**. Interrupted, blocked, malformed, or unsupported output cannot become an insertable preview. The client negotiates NDJSON; the existing final-JSON response remains available.
 - At the rates used by this pilot ($0.25/million input and $1.50/million output tokens, including thinking), 50,000 input tokens plus 500 total output tokens cost about $0.01325. Provider prices can change; verify the [current pricing](https://ai.google.dev/gemini-api/docs/pricing) before enabling the feature. The application cap does not cover other applications using the key, hosting, taxes, or independently enabled services.
-- SQLite reserves the maximum generation cost before a call and reconciles usage when available. Failed or canceled calls with unknown provider usage conservatively retain their reservation. Clearing chat, restoring a backup, restarting, or removing an account does not reset spending. The ledger stores identifiers and cost metadata, not transcript or conversation text.
-- One answer may be pending per thread, with five requests per account per minute and **20 per account per UTC day**, including administrators. Newly reserved attempts count even if they later fail. The daily cap is hardcoded, not an environment setting. Reusing a request ID never starts a second generation; Stop, disconnect, timeout, source/video changes, and stale sessions are guarded.
+- SQLite reserves the maximum generation cost before a call and reconciles usage when available. With the full input window and 1,024 output tokens, the conservative reservation is **$0.263680**, not the cost of a typical answer. Failed or canceled calls with unknown provider usage retain that reservation. Existing monthly budgets are unchanged. Clearing chat, restoring a backup, restarting, or removing an account does not reset spending. The ledger stores identifiers and cost metadata, not transcript or conversation text.
+- **Only one answer may generate per account at a time**, across conversations, videos, tabs and app instances. Other members are independent. The existing five requests per account per minute and **20 per account per UTC day** still apply, including administrators. Newly reserved attempts count even if they later fail. The daily cap is hardcoded, not an environment setting. Reusing a request ID never starts a second generation; Stop, disconnect, timeout, source/video changes, and stale sessions are guarded.
 - Timestamp buttons use stored segment times rather than model-supplied URLs or seconds, including time zero. If evidence is missing, the UI displays an insufficient-evidence answer. Model output is rendered as text, never raw HTML.
-- **Summarize** requests a note proposal for the selected context. **Add to notes** on an existing supported answer opens a preview without another generation. The editable preview names its course/video and sources; only **Append to notes** authorizes insertion. Asking the model to save, or canceling the preview, never writes notes automatically.
+- **Summarize video** produces a normal chat answer. Optional follow-up questions are returned in the same bounded model response, not generated through additional calls. **Add to notes** on an existing supported answer opens a preview without another generation; an explicit request to make notes can also propose one. Only **Append to notes** authorizes insertion. Canceling a preview never writes notes automatically.
 - Confirmation appends to the latest note for that exact account/course/video. It preserves existing text, source anchors, Read/Edit mode, and editor history; an immediate Undo removes only the appended group. Source-backed paragraphs use validated source times, including zero; discussion-only text need not have a timestamp. Conflicts, text composition, changed sources, and quotas block unsafe insertion. Stable proposal/block IDs prevent duplicate confirmation or save retries from appending twice.
 - **Saved to notes** means the normal notebook write was acknowledged. A failed save keeps the existing local recovery draft and offers retry without regenerating. Cancel before append writes nothing; closing an already appended preview does not undo its note content. Chat and Notes share the study pane without destroying the editor; fullscreen stays video-only.
-- Chat is private to an authenticated account/course/video. **Clear chat** removes messages but retains captions; **Remove transcript** removes both. Replacing a source requires confirmation and clears its old conversation. Removing a course preserves its stored chat for backup; archived chats are not listed in a separate UI in this pilot.
-- Schema-version-3 backups include transcripts, completed conversations, context, and validated optional proposals, not provider keys or the spending ledger. Older messages without proposals remain accepted. Import checks chat revisions and rejects pending requests. Versions 1 and 2 remain accepted with an explicit chat-clearing warning.
+- Chat is private to an authenticated account/course/video. **Clear messages** clears only the selected conversation; **Delete chat** removes that history, retaining other histories and the shared transcript. Legacy source-removal/replacement API operations clear all of that video's conversations; they are not exposed as chat setup controls. Removing a course preserves its stored chats for backup; archived chats are not listed in a separate UI.
+- Schema-version-4 backups include each video's shared transcript and a `conversations` array containing IDs, names, dates, completed messages, context and validated optional proposals. They exclude provider keys and the spending ledger. Versions 1-3 remain accepted; version 3 is migrated into a first conversation, and restoring it warns before replacing all current histories. Versions 1 and 2 retain the explicit chat-clearing warning. Import checks chat revisions and rejects pending requests.
 
 Automated checks use fake providers and intercepted SDK requests, not paid inference. Real structured streaming, HTTPS proxy delivery, answer quality, hosted caption coverage, and provider latency remain release gates in [docs/v1-release.md](docs/v1-release.md).
 
@@ -284,9 +292,9 @@ The profile menu can export a pretty-printed, versioned JSON file containing:
 
 Password hashes, salts, session cookies/tokens, provider keys, extension codes/grants/verifiers, and spending ledgers are never included. Extension connection state and receipts are not learning-export data.
 
-The same menu accepts FocusTube schema-version-1, schema-version-2, and schema-version-3 JSON exports. Importing atomically replaces the current profile's courses, progress, settings, daily activity, watch history, notebooks, and video chats while preserving its username, password, sessions, and chat-spending ledger. A confirmation shows the course, history, and video-note counts before anything changes. Unsaved notes must be resolved, and pending chat requests must finish before export or import.
+The same menu accepts FocusTube schema-version-1 through schema-version-4 JSON exports. Importing atomically replaces the current profile's courses, progress, settings, daily activity, watch history, notebooks, and video chats while preserving its username, password, sessions, and chat-spending ledger. A confirmation shows the course, history, and video-note counts before anything changes. Unsaved notes must be resolved, and pending chat requests must finish before export or import.
 
-Workspace boards, tasks, checklists, sprints, and roadmaps are included in exports and restored on import. Older exports without workspace data restore an empty workspace. Version-1 exports have no notebooks and clear existing notes during a full restore, with an explicit warning. Versions 1 and 2 have no video chats and clear them with a warning. New version-3 exports require an updated FocusTube installation to restore. Imports check profile, notebook, and chat revisions so concurrent changes cannot be silently overwritten.
+Workspace boards, tasks, checklists, sprints, and roadmaps are included in exports and restored on import. Older exports without workspace data restore an empty workspace. Version-1 exports have no notebooks and clear existing notes during a full restore, with an explicit warning. Versions 1 and 2 have no video chats and clear them with a warning. Version 3 restores one conversation per video and warns that current histories will be replaced. Version-4 exports require an updated FocusTube installation to restore all histories. Imports check profile, notebook, and chat revisions so concurrent changes cannot be silently overwritten.
 
 ### Backend download API
 
@@ -451,7 +459,7 @@ The command prints a one-time administrator invitation link and its expiry. Open
 
 In **Settings > Administration > Member invitations**, set **Allowed signups** (1-1,000, default 1) and **Expires after** (1, 7, 30 days, or a custom date/time; default 7 days), then choose **Create invitation**. Custom input uses the displayed local timezone and is sent as canonical UTC. Expiry must be in the future and within 365 days of creation/edit. Share the link with up to the selected number of people. Each successful verified registration or guest conversion uses one place; visits, code requests, failed attempts, and rolled-back transactions do not. Expiry, revocation, exhausted signups, and the workspace member cap all remain authoritative. Existing stored dates and use limits do not change automatically. Bootstrap links remain one-use/24-hour and outside browser management.
 
-`POST /api/invites` accepts optional `maxUses` and `expiresAt`; `{}` means one signup and server-now plus seven days. The response includes the copy-once `inviteUrl` and safe metadata. **Issued invitations** lists status, expiry, used/remaining signups, and supports refresh/pagination, expiry editing, and confirmed revocation. Edits/revocation use the displayed revision; stale edits must reload. Expired links with unused slots need explicit **Reactivate** confirmation. Revoked or exhausted links cannot be revived; create a new link. Changing expiry never resets counts or adds slots, and revoking prevents remaining signups without deleting accounts already created. Create public invitations on the intended HTTPS instance, not localhost.
+`POST /api/invites` accepts optional `maxUses` and `expiresAt`; `{}` means one signup and server-now plus seven days. The response includes the copy-once `inviteUrl` and safe metadata. Expand **New invitation** to use its form; **Issued invitations** stays separate and supports status filtering before cursor pagination, refresh, expiry editing, and confirmed revocation. Edits/revocation use the displayed revision; stale edits must reload. Expired links with unused slots need explicit **Reactivate** confirmation. Revoked or exhausted links cannot be revived; create a new link. Changing expiry never resets counts or adds slots, and revoking prevents remaining signups without deleting accounts already created. Create public invitations on the intended HTTPS instance, not localhost.
 
 Each invitation contains 32 random bytes and only its hash is stored. Copy the link at creation: listing/editing cannot reconstruct it or reveal the hash. The join fragment is removed from the visible URL and kept only in page memory; after reloading or canceling, reopen the privately shared link. Invitations are bearer credentials, not proof of email ownership. Records expired for at least 30 days are eligible for cleanup; a pruned link cannot be restored. See the [current lifecycle contract](docs/invite-only-auth-spec.md#17-member-invitation-lifecycle-v1).
 
@@ -462,6 +470,8 @@ Configure private settings locally in an ignored `.env` file using [.env.example
 Set `SMTP_HOST`, `SMTP_FROM` (a single sender email address), and your provider's `SMTP_USER`/`SMTP_PASSWORD`. Use port 587 with `SMTP_SECURE=0` for mandatory STARTTLS, or port 465 with `SMTP_SECURE=1` for direct TLS. Certificate validation is always enabled. SMTP authentication may be omitted only for a trusted TLS relay that permits it. The sender/domain must be authorized by your mail provider; sending acceptance is not a guarantee of inbox delivery.
 
 Without SMTP configuration, existing users can still sign in, but new registration and email verification are unavailable. There is no console-code, auto-verification, local-inbox, or CAPTCHA bypass in the running application.
+
+Signup uses focused **Account > About you (optional) > Verify email** steps. The optional step is omitted when product analytics is unavailable. **Back** retains the current page's details and choices; **Skip optional questions** clears optional answers and consent and advances to code delivery. A wrong code keeps the verification step and masked passwords available for correction. No account is created until final server verification succeeds. Returning members go directly to their existing workspace; a new empty Library offers **Find a course**. The progress row and actions reflow at larger text sizes instead of shrinking controls.
 
 The signup flow collects email, display name, required username, password and confirmation, sends a six-digit code, then verifies it before creating the account. Usernames use 3-32 letters, numbers, dots, dashes, or underscores and are unique without regard to case. Availability checks do not reserve a name; final registration checks again, and a username conflict leaves the invitation and verification proof usable for another attempt. Codes expire after ten minutes, allow at most five wrong guesses, and are replaced when resent. Resending has a 60-second cooldown, plus limits of three code requests per recipient and five per source per 15 minutes. Only hashes of the code and random challenge token are stored; codes are never returned by the API or written to logs. Failed delivery leaves no usable challenge. Final registration consumes the email proof and invitation in the same transaction.
 
@@ -475,7 +485,7 @@ After setting the values, recreate the local instance on the same port:
 docker compose up --build -d app
 ```
 
-Google and GitHub options are explicitly **Coming soon**. They make no OAuth requests and cannot create/link accounts. Future integration must retain invitation gating, use authorization-code flow with state/PKCE, bind identities by issuer and provider subject, verify provider email claims where applicable, and require reauthentication for account linking. Email equality alone must never merge accounts.
+Google and GitHub sign-in are not implemented and their unavailable buttons are omitted from signup and sign-in. No OAuth requests or account linking occur. Future integration must retain invitation gating, use authorization-code flow with state/PKCE, bind identities by issuer and provider subject, verify provider email claims where applicable, and require reauthentication for account linking. Email equality alone must never merge accounts.
 
 The initial member limit is **100**, counting active and disabled non-guest accounts, including administrators. Change it only through the local operator command:
 
@@ -575,6 +585,8 @@ Pushing a feature branch does not deploy it. The existing workflows run on pushe
 
 ## Data storage
 
+The [architecture data map](docs/architecture.md#data-ownership) groups all 25 application table definitions and explains lazy extension initialization, independent revisions, ownership and retention boundaries. [Source inventory](docs/diagrams/source-inventory.json) is generated from declarations, not private database contents.
+
 Runtime data is stored in:
 
 ```text
@@ -594,6 +606,7 @@ The database uses SQLite WAL mode and contains:
 - Per-video watch history
 - Idempotency records for activity batches
 - Bounded operational usage, account activity, and short-lived presence records
+- Shared public/private feedback, replies, moderation and permission-checked screenshot BLOBs
 
 The entire `data/` directory is excluded from Git. Back up the database and its WAL files consistently when the server is stopped, or use SQLite-aware backup tooling.
 
@@ -604,7 +617,7 @@ Exports use the versioned schema:
 ```json
 {
   "schema": "focustube-user-export",
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "exportedAt": "2026-09-25T00:00:00.000Z",
   "profile": {},
   "courses": {},
@@ -622,11 +635,13 @@ Exports use the versioned schema:
 }
 ```
 
-Versions 1, 2, and 3 can be restored from Settings. Version 2 added `notebooks`; version 3 adds `videoChats` with transcripts, completed messages, and validated optional proposals. Notebook paragraphs carry `blockId` and optional numeric `anchorSeconds`. Exported revisions are informational; restoring advances live revisions rather than reusing old ones. Older versions warn before clearing data they cannot represent. The 25 MB full-import limit still applies. Learning exports are not a substitute for an operator database backup, which also preserves security records and cost accounting.
+Versions 1-4 can be restored from Settings. Version 2 added `notebooks`; version 3 added `videoChats`; version 4 stores a shared transcript plus named `conversations` for each video. Each conversation retains its ID, timestamps, completed messages and validated optional proposals. Notebook paragraphs carry `blockId` and optional numeric `anchorSeconds`. Exported revisions are informational; restoring advances live revisions rather than reusing old ones. Older versions warn before clearing data they cannot represent. The 25 MB full-import limit still applies. Learning exports are not a substitute for an operator database backup, which also preserves security records and cost accounting.
 
 ## Security model
 
 ### Operational monitoring
+
+Optional first-party **Product analytics** is a separate Administration view for activity trends, feature-use counts, sampled watch time, opt-in activation/retention cohorts, and **Audience** breakdowns. It requires `PRODUCT_ANALYTICS_ENABLED=1` and explicit member opt-in; every Compose default is off. Invitation signup and guest conversion now include optional **About you** questions for role, learning goal, and where the person first heard about FocusTube (friend/invitation, LinkedIn, X/Twitter, Reddit, Instagram, YouTube, search, Other, or Prefer not to say). Sharing is unchecked by default; skipped answers are not transmitted or saved. Shared choices and consent commit atomically with account creation, not with email-code requests. These are self-reported sources, not detected referrals. There is no delayed Library survey; members can edit/remove answers in **Account > Learning profile** and manage collection under **Settings > Data**. Audience reports use the previous 30 complete UTC days, include response coverage and Unknown groups, and withhold small groups and sparse rates. Administrators never receive individual answers. Privacy controls and metric definitions are documented in [docs/monitoring.md](docs/monitoring.md#optional-product-analytics). Age, geographic inference, automated campaign attribution, and session recordings remain out of scope.
 
 Active administrators can open **Monitoring** from the workspace sidebar or profile. It displays approximate current activity, recent logins, daily/weekly usage, last-hour origin traffic, process memory and application storage. This does not grant access to other members' learning content. Activity history starts with this feature; existing personal learning statistics are unchanged.
 
@@ -672,6 +687,8 @@ The optional media worker enforces:
 Completed ZIPs remain available for a limited retry window and are streamed instead of copied into a second archive file on disk.
 
 ## API overview
+
+The consolidated [HTTP API reference](docs/api.md) covers all current route families, including chat, extension capture, feedback, filtered administration, presence, and body/account-binding limits. The overview below remains a quick introduction.
 
 `GET` and `PUT /api/data` require `X-Profile-Account` with the current authenticated member ID. Missing or mismatched bindings return `409 SESSION_CHANGED`; ordinary revision conflicts remain separate. Reload old tabs after an upgrade. Invitation responses echo the verified `X-Invite-Account`, and notebook/chat requests reject mismatched account bindings.
 

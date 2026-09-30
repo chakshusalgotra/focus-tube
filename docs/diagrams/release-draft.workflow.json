@@ -1,0 +1,36 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Draft: evidence-gated release",
+    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "views": [
+      { "id": "candidate", "label": "Reproducible candidate", "focus": ["scope", "checks", "rehearsal"], "note": "Proposed gates: scope the change, validate the exact artifact and rehearse with a disposable populated copy." },
+      { "id": "promotion", "label": "Controlled promotion", "focus": ["approval", "deploy", "acceptance"], "note": "Approval precedes each environment change. A compatible rollback plan must exist before cutover." }
+    ]
+  },
+  "lanes": [
+    { "id": "development", "label": "Proposed verification" },
+    { "id": "operator", "label": "Proposed operator gates" },
+    { "id": "runtime", "label": "Intended environment" }
+  ],
+  "mainPath": ["scope", "checks", "rehearsal", "approval", "deploy", "acceptance"],
+  "nodes": [
+    { "id": "scope", "lane": "development", "col": 0, "type": "frontend", "label": "Freeze scoped change", "sublabel": "Source and artifact hashes", "width": 185 },
+    { "id": "checks", "lane": "development", "col": 1, "type": "security", "label": "Test exact artifact", "sublabel": "Tests, scan, browser cases", "width": 180 },
+    { "id": "rehearsal", "lane": "operator", "col": 2, "type": "database", "label": "Rehearse recovery", "sublabel": "Private backup and restore", "width": 175 },
+    { "id": "approval", "lane": "operator", "col": 3, "type": "security", "label": "Approve environment", "sublabel": "Costs, config, migration", "width": 185 },
+    { "id": "deploy", "lane": "runtime", "col": 4, "type": "cloud", "label": "Controlled cutover", "sublabel": "Preserve settings and data", "width": 180 },
+    { "id": "acceptance", "lane": "operator", "col": 5, "type": "frontend", "label": "Record acceptance", "sublabel": "Health, behavior, rollback", "width": 180 }
+  ],
+  "edges": [
+    { "id": "propose-tests", "from": "scope", "to": "checks", "label": "Candidate", "variant": "emphasis" },
+    { "id": "propose-rehearsal", "from": "checks", "to": "rehearsal", "label": "Passing evidence", "variant": "emphasis" },
+    { "id": "propose-approval", "from": "rehearsal", "to": "approval", "label": "Restore proven", "variant": "security" },
+    { "id": "propose-cutover", "from": "approval", "to": "deploy", "label": "Explicit approval", "variant": "security" },
+    { "id": "propose-acceptance", "from": "deploy", "to": "acceptance", "label": "Postflight checks", "variant": "emphasis" }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "Draft proposal only", "items": ["This chart is not a description of checks enforced by the existing GitHub workflows.", "No deployment, branch protection, backup job or paid-provider activation is created by these docs."] }
+  ]
+}

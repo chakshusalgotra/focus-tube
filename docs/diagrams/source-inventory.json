@@ -1,0 +1,262 @@
+{
+  "version": 1,
+  "reviewedOn": "2026-09-28",
+  "scope": "Reviewed working-tree source, including uncommitted changes; not a live deployment attestation",
+  "gitBase": "4b86e83dd17fb26c15f45b31189eda9196aa8a5f",
+  "sources": [
+    {
+      "path": ".github/workflows/deploy-dev.yml",
+      "sha256": "506baa77b54f94de9d803265d2f8bf3e8b812a74cbbd2d7d78160da960665bc6"
+    },
+    {
+      "path": ".github/workflows/deploy-prod.yml",
+      "sha256": "3b54c94369e57813a4318b0159d2d095f0304911aaa82398a1e4047c0d609a6d"
+    },
+    {
+      "path": ".github/workflows/merge-guard.yml",
+      "sha256": "3fd906c3e6bef49c2ee0b00864d6b2714ff45f4e284cd4b65a448be6eb35c091"
+    },
+    {
+      "path": "auth-services.js",
+      "sha256": "20070851fa95a43939eafadc4b24c0b3ad8c67b11714857bd5c4c7844dad0576"
+    },
+    {
+      "path": "auth.js",
+      "sha256": "56313ba3407fe3550d1001317289cabd4eae8f5d41c376c6da6943708e3ac473"
+    },
+    {
+      "path": "compose.dev.yaml",
+      "sha256": "7bdd2602dab4b42b80872ae2be3d5463584016d175d47c72d8302ffe24034fe6"
+    },
+    {
+      "path": "compose.monitoring.yaml",
+      "sha256": "76689b046f904adffa9b46751edc0c6f7cc1dffae806b23d1af77b067a1554cd"
+    },
+    {
+      "path": "compose.prod.yaml",
+      "sha256": "9e3beef849455adc47a5874a8e3ce2c7a53c3849e9573fcf9070240ab1e35f01"
+    },
+    {
+      "path": "compose.yaml",
+      "sha256": "684e7f0a6a07b409b644597db5f033d24c9d259583ba2bb77c78af6711ac3ce8"
+    },
+    {
+      "path": "db.js",
+      "sha256": "55b67d5497fed6b2d133fc217a1ebc05630f694c7545daa5f6f1303d35bcd451"
+    },
+    {
+      "path": "Dockerfile",
+      "sha256": "d393e118f550c3824dc558a05416848fea6016e569b2fa3d56018d446595b457"
+    },
+    {
+      "path": "downloads.js",
+      "sha256": "7ef8546963a7004f24a555144e5b6495b18d22549bbf07b6ffbdadb97e84016f"
+    },
+    {
+      "path": "extension-store.js",
+      "sha256": "494ed64918c489c1819e45a63df579b588b9988ee3f0852758a6bad0b2685208"
+    },
+    {
+      "path": "extension.js",
+      "sha256": "b6079ea5b330debb0e7523bbb59b8ba9c63983e5722e6f96e4ed99da90912917"
+    },
+    {
+      "path": "extension/manifest.json",
+      "sha256": "03dcf7db4d0fba4fa52fbdabea5d3936f05dc748a01c9f8659965916358c7c05"
+    },
+    {
+      "path": "extension/popup.js",
+      "sha256": "48732f17885b43ddb2c4071d0f893916518fc14ff2fba1f05d4457615bc650d4"
+    },
+    {
+      "path": "extension/service-worker.js",
+      "sha256": "7697fcbf648f3d862a48facd389a92635b2d281d4339a6439cd3d0e35ad4f67e"
+    },
+    {
+      "path": "feedback.js",
+      "sha256": "5cbb18c72585dc210953af635212630661e0653ce87b0b49a6b264b82f82a869"
+    },
+    {
+      "path": "observability.js",
+      "sha256": "ff9dc7124bb9c601ac908e9da5801ed5bcd3efeafca11b5ab5e055be6cd50276"
+    },
+    {
+      "path": "package.json",
+      "sha256": "b9585aeac2acd59c2fb33ac5a979fc3dd5109170b9e329a36bdb85d0dcb88f1e"
+    },
+    {
+      "path": "public/app.js",
+      "sha256": "ceeee989330f8c427d864151e710f582e3444fda3eb9576360642cc36a9d0a14"
+    },
+    {
+      "path": "public/auth-entry.js",
+      "sha256": "29896ebe36d87da8569c2ff72b8125db1e5fb05df2dd5220cd12af94bed4d2b5"
+    },
+    {
+      "path": "public/extension-connect.js",
+      "sha256": "68c857cc42388b94bf8c73f83dd0f4f2f6f335e0ec91269710fc4f0188ed96d8"
+    },
+    {
+      "path": "public/feedback.js",
+      "sha256": "64efdcbe84904b593cbad542597589b1a443a3769f601dedad60dc450757ef05"
+    },
+    {
+      "path": "public/index.html",
+      "sha256": "444d376a88c5641fe43474356b23981908f77f405e2209c40e3e981b6980aad8"
+    },
+    {
+      "path": "public/invitations.js",
+      "sha256": "c4e8eb92a76be2fc467b8aa2851fc11cf4a667312621ba401804f251f50a7098"
+    },
+    {
+      "path": "public/notebook-editor.js",
+      "sha256": "d77b0eb7876bcc8af1b3a137d42544f8ad68597fa78c3b1ab7c6e18f338aba52"
+    },
+    {
+      "path": "public/notebook-model.js",
+      "sha256": "2cb70e9adc1a1c6b4c491bc515b48509f917b386610f4bddfd338b9e8fb54a38"
+    },
+    {
+      "path": "public/notebooks.js",
+      "sha256": "a0d3f57cb13513c98df4d49f30d6c879bb0ccf3c544009ff152b11c14f545ee5"
+    },
+    {
+      "path": "public/policies.html",
+      "sha256": "91e3309277fb457acc0ba1d6a1ae0b1b93285ba2d078773840aabe91d44734c1"
+    },
+    {
+      "path": "public/theme.js",
+      "sha256": "52162f45159ebd854091f0a05bd96c412905a4db5315fb0ed04cc86b3203e265"
+    },
+    {
+      "path": "public/video-chat.js",
+      "sha256": "2410ce71d9c5f3845a019830e7d755d304244ec4466139576ab3cc5657b813a0"
+    },
+    {
+      "path": "scripts/auth-admin.js",
+      "sha256": "f0847e961db84a155eb50d228c2e4cd4d8f42e1931b6e8f4dfe5c4688b96b943"
+    },
+    {
+      "path": "scripts/package-extension.js",
+      "sha256": "e6721f2b5379e5ab359526e500789adf5ce84525110323086612e9547c1ab93e"
+    },
+    {
+      "path": "server.js",
+      "sha256": "c4c70c07d8b26ab6384f4581afde4a49ccda6b2a7625dc9b6705a5b9120d026a"
+    },
+    {
+      "path": "video-chat-store.js",
+      "sha256": "e4f29256ac61008eda3ffef7a12cf6a63d14ce7fc80ecdbea529aeecfc623b81"
+    },
+    {
+      "path": "video-chat.js",
+      "sha256": "64a90965f46cd4677294c64e996bb092671f2b0394cf4d04d040a42eefcd222c"
+    },
+    {
+      "path": "youtube-search.js",
+      "sha256": "ef36e37911ef67ceca823a6ce93bba90294ec62df6a7d3702652be98fc9c2f74"
+    }
+  ],
+  "tables": [
+    {
+      "name": "activity_batches",
+      "source": "db.js"
+    },
+    {
+      "name": "activity_log",
+      "source": "db.js"
+    },
+    {
+      "name": "auth_audit",
+      "source": "db.js"
+    },
+    {
+      "name": "auth_workspace",
+      "source": "db.js"
+    },
+    {
+      "name": "email_verifications",
+      "source": "db.js"
+    },
+    {
+      "name": "extension_codes",
+      "source": "extension-store.js"
+    },
+    {
+      "name": "extension_grants",
+      "source": "extension-store.js"
+    },
+    {
+      "name": "extension_receipts",
+      "source": "extension-store.js"
+    },
+    {
+      "name": "extension_session_revocations",
+      "source": "extension-store.js"
+    },
+    {
+      "name": "feedback_replies",
+      "source": "db.js"
+    },
+    {
+      "name": "feedback_screenshots",
+      "source": "db.js"
+    },
+    {
+      "name": "feedback_threads",
+      "source": "db.js"
+    },
+    {
+      "name": "invitations",
+      "source": "db.js"
+    },
+    {
+      "name": "login_budgets",
+      "source": "db.js"
+    },
+    {
+      "name": "presence_leases",
+      "source": "db.js"
+    },
+    {
+      "name": "sessions",
+      "source": "db.js"
+    },
+    {
+      "name": "usage_days",
+      "source": "db.js"
+    },
+    {
+      "name": "user_data",
+      "source": "db.js"
+    },
+    {
+      "name": "user_usage",
+      "source": "db.js"
+    },
+    {
+      "name": "users",
+      "source": "db.js"
+    },
+    {
+      "name": "video_chat_conversations",
+      "source": "video-chat-store.js"
+    },
+    {
+      "name": "video_chat_usage",
+      "source": "video-chat-store.js"
+    },
+    {
+      "name": "video_chats",
+      "source": "video-chat-store.js"
+    },
+    {
+      "name": "video_notes",
+      "source": "db.js"
+    },
+    {
+      "name": "watch_log",
+      "source": "db.js"
+    }
+  ]
+}

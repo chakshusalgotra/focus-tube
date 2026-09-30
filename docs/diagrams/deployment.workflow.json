@@ -1,0 +1,34 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Checked-in hosted deployment flow",
+    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "views": [
+      { "id": "automation", "label": "Push-triggered automation", "focus": ["push", "runner", "host", "compose"], "note": "dev and main select separate deployment jobs, checkouts, Compose projects and data volumes." },
+      { "id": "verify", "label": "Configured healthcheck", "focus": ["compose", "health"], "note": "A periodic container healthcheck is distinct from manual release acceptance and is not awaited by the workflow." }
+    ]
+  },
+  "lanes": [
+    { "id": "github", "label": "GitHub Actions" },
+    { "id": "host", "label": "Deployment host" }
+  ],
+  "mainPath": ["push", "runner", "host", "compose", "health"],
+  "nodes": [
+    { "id": "push", "lane": "github", "col": 0, "type": "external", "label": "Push dev or main", "sublabel": "Different deployment jobs", "width": 175 },
+    { "id": "runner", "lane": "github", "col": 1, "type": "security", "label": "Tailnet + SSH", "sublabel": "Configured secret references", "width": 180 },
+    { "id": "host", "lane": "host", "col": 2, "type": "backend", "label": "Sync host checkout", "sublabel": "Windows SSH into WSL", "width": 180 },
+    { "id": "compose", "lane": "host", "col": 3, "type": "cloud", "label": "Compose up --build", "sublabel": "Same environment volumes", "width": 180 },
+    { "id": "health", "lane": "host", "col": 4, "type": "backend", "label": "Healthcheck", "sublabel": "HTTPS /api/health", "width": 145 }
+  ],
+  "edges": [
+    { "id": "trigger-workflow", "from": "push", "to": "runner", "label": "on: push", "variant": "emphasis" },
+    { "id": "remote-shell", "from": "runner", "to": "host", "label": "SSH", "variant": "security" },
+    { "id": "run-compose", "from": "host", "to": "compose", "label": "Branch checkout", "variant": "emphasis" },
+    { "id": "periodic-probe", "from": "compose", "to": "health", "label": "Every 30s", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "Configuration, not live attestation", "items": ["The workflows do not run the full test suite, back up SQLite, or wait for application health.", "Public tunnel configuration and hosted feature activation need independent verification."] },
+    { "dot": "rose", "title": "Data safety", "items": ["Local/dev use port 3002; production uses 3003 on its intended host. Projects isolate volumes.", "After data migrations use a compatible image or forward fix, never a blind old-database restore."] }
+  ]
+}

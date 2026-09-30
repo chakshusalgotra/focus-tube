@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "reviewedOn": "2026-09-28",
+  "scope": "Reviewed working-tree source, including uncommitted changes; not a live deployment attestation",
+  "archify": {
+    "repository": "https://github.com/tt-a1i/archify",
+    "revision": "9e35d2b0b39b155553ba9fcfe0b4f2a5198dd993",
+    "version": "2.17",
+    "packageSha256": "d2296515b0091fb8f00580ea9e0b665d91ca5839fde651abe3ecd57a3ca178ec"
+  },
+  "sources": [
+    "package.json", "server.js", "auth.js", "auth-services.js", "db.js", "feedback.js",
+    "video-chat.js", "video-chat-store.js", "extension.js", "extension-store.js", "downloads.js", "youtube-search.js", "observability.js",
+    "public/index.html", "public/app.js", "public/auth-entry.js", "public/theme.js", "public/notebook-model.js", "public/notebook-editor.js",
+    "public/notebooks.js", "public/video-chat.js", "public/feedback.js", "public/invitations.js", "public/extension-connect.js", "public/policies.html",
+    "extension/manifest.json", "extension/service-worker.js", "extension/popup.js", "scripts/auth-admin.js", "scripts/package-extension.js",
+    "Dockerfile", "compose.yaml", "compose.dev.yaml", "compose.prod.yaml", "compose.monitoring.yaml",
+    ".github/workflows/deploy-dev.yml", ".github/workflows/deploy-prod.yml", ".github/workflows/merge-guard.yml"
+  ],
+  "diagrams": [
+    { "id": "system", "type": "architecture", "title": "System map", "state": "current", "evidence": [
+      { "path": "server.js", "anchor": "app.use('/api/video-chat', createVideoChat(store, auth).router);" },
+      { "path": "db.js", "anchor": "db.pragma('journal_mode = WAL');" }
+    ] },
+    { "id": "account", "type": "workflow", "title": "Invitation and sign-up", "state": "current", "evidence": [
+      { "path": "auth.js", "anchor": "async function register(req, res, upgrade)" },
+      { "path": "db.js", "anchor": "function redeemInvitation(" }
+    ] },
+    { "id": "learning", "type": "workflow", "title": "Learning workspace", "state": "current", "evidence": [
+      { "path": "public/app.js", "anchor": "function route()" },
+      { "path": "server.js", "anchor": "app.put('/api/data', auth.requireAuth, requireProfileAccount" }
+    ] },
+    { "id": "notes", "type": "workflow", "title": "Notes and recovery", "state": "current", "evidence": [
+      { "path": "public/notebooks.js", "anchor": "class Notebooks" },
+      { "path": "server.js", "anchor": "app.put('/api/notebooks/:courseId/videos/:videoId'" }
+    ] },
+    { "id": "chat", "type": "workflow", "title": "Video chat and consent", "state": "current", "evidence": [
+      { "path": "video-chat.js", "anchor": "router.post(path + '/messages'" },
+      { "path": "video-chat.js", "anchor": "router.post(path + '/notes/validate'" }
+    ] },
+    { "id": "capture", "type": "workflow", "title": "Extension capture", "state": "current", "evidence": [
+      { "path": "extension.js", "anchor": "router.post('/videos'" },
+      { "path": "extension-store.js", "anchor": "CREATE TABLE IF NOT EXISTS extension_receipts" }
+    ] },
+    { "id": "feedback", "type": "workflow", "title": "Feedback and screenshots", "state": "current", "evidence": [
+      { "path": "feedback.js", "anchor": "router.get('/:id/screenshots/:screenshotId'" },
+      { "path": "db.js", "anchor": "function updateFeedback(" }
+    ] },
+    { "id": "deployment", "type": "workflow", "title": "Deployment configuration", "state": "current", "evidence": [
+      { "path": ".github/workflows/deploy-dev.yml", "anchor": "branches: [dev]" },
+      { "path": ".github/workflows/deploy-prod.yml", "anchor": "branches: [main]" }
+    ] },
+    { "id": "release-draft", "type": "workflow", "title": "Draft release gates", "state": "draft", "evidence": [
+      { "path": ".github/workflows/deploy-dev.yml", "anchor": "docker compose -f compose.dev.yaml up -d --build" }
+    ] }
+  ]
+}

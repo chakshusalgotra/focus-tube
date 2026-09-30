@@ -6,7 +6,7 @@ No YouTube Data API key, YouTube account connection, or additional dependency is
 
 ## Start Here
 
-Follow the [quick start](../README.md#quick-start) to run FocusTube, then sign in or choose **Continue as guest**. Both account types can search and save courses.
+Follow the [quick start](../README.md#quick-start) to run FocusTube, then sign in with an active member account. New accounts require an invitation and email verification. New guest creation is disabled, and retained legacy guests must convert before searching or saving courses. See the [website flow guide](flows.md#discover-save-and-learn) and [interactive learning chart](diagrams/learning.html).
 
 1. On the library page, enter a topic such as `python programming`, `SQL window functions`, or `React testing`.
 2. The **All**, **Videos**, **Playlists**, and **Courses** controls appear once keyword input is non-empty. Choose a result type to search, or select **Search** or press Enter. Typing alone does not issue a request.
@@ -72,7 +72,7 @@ The count shown in a search result is YouTube's advertised count. The imported c
 GET /api/search?q=python&type=course
 ```
 
-An authenticated FocusTube account or guest session is required. Same-origin requests from the signed-in app use its HttpOnly session cookie automatically. No YouTube credential is required.
+An active FocusTube member session is required; retained guest sessions are rejected with `403 GUEST_MIGRATION_REQUIRED`. Same-origin requests from the signed-in app use its HttpOnly session cookie automatically. No YouTube credential is required.
 
 | Parameter | Required | Accepted values |
 | --- | --- | --- |
