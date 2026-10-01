@@ -62,11 +62,11 @@ Read/Edit selection, manual content, source anchors, resize preferences and pend
 
 ## Ask and Confirmed Note Append
 
-Open [the chat diagram](diagrams/chat.html). Chat is a configured pilot, not a default provider call. Opening a lesson does not start inference.
+Open [the chat diagram](diagrams/chat.html) and [six-hour quota flow](diagrams/video-chat-quota.html). Chat requires operator configuration and is available to active registered members, not a default provider call. Opening a lesson does not start inference.
 
 1. The user asks a question or selects one of the two starters. On the first question for that video/page session, a permission prompt explains use of the content with Google. Declining starts no caption/model request.
 2. The client prepares available permitted captions and reuses the shared source across histories. The current UI does not expose transcript upload or scope controls; compatibility API paths still support their documented forms. Unavailable captions fail explicitly, without an audio-download or fabricated-transcript fallback.
-3. The API checks account/session, course/video ownership, feature eligibility, source/history revision and request identity. SQLite reserves cost and enforces one active request per account across histories/processes sharing the database, plus per-minute/day limits.
+3. The API checks account/session, course/video ownership, feature eligibility, source/history revision and request identity. SQLite atomically reserves cost and one of the account's 30 requests in a six-hour window, with the existing five-per-minute and one-active-answer limits. The first admitted request anchors the window; resetting request allowance never resets monthly spending. Exhaustion reports remaining/reset metadata and preserves the editable draft and readable history.
 4. The provider receives bounded captions, question and completed exchanges in the selected history, not all histories, private notes or unrelated videos. Server-side token counting precedes generation. The SDK streams provisional text; the browser displays it but does not make partial output insertable.
 5. A completed structured result is validated against the selected source, then committed with usage accounting. Only a supported final answer exposes citations and optional note actions. Up to two follow-up suggestions come from the same response, not another paid call.
 6. New chat creates another history for the same video. Switching histories preserves unsent browser drafts and edited previews. Rename/delete are revision checked. Changing/removing the shared transcript invalidates all histories/proposals for that video, but does not erase already-appended notes.

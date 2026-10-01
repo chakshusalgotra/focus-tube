@@ -286,22 +286,25 @@ async function fetchCaptions(videoId, language, signal, fetchImpl = fetch) {
 
 function createVideoChat(store, auth, { environment = process.env, provider, loadCaptions = fetchCaptions, timeoutMs = 70000, heartbeatMs = 15000 } = {}) {
   const router = require('express').Router();
-  const { validConversationId, MAX_CONVERSATIONS } = require('./video-chat-store');
+  const { validConversationId, MAX_CONVERSATIONS, DEFAULT_REQUEST_LIMIT, validRequestLimit } = require('./video-chat-store');
   const enabled = environment.VIDEO_CHAT_ENABLED === '1' && !!environment.GEMINI_API_KEY &&
     (!environment.VIDEO_CHAT_MODEL || environment.VIDEO_CHAT_MODEL === MODEL);
   const budget = environment.VIDEO_CHAT_MONTHLY_BUDGET_USD ?? '5';
   const budgetMicros = /^\d+(?:\.\d{1,2})?$/.test(budget) && Number(budget) <= 1000 ? Math.round(Number(budget) * 1000000) : 0;
-  const allowedIds = new Set(String(environment.VIDEO_CHAT_ALLOWED_USER_IDS || '').split(',').filter(value => /^\d+$/.test(value)).map(Number));
+  const configuredLimit = String(environment.VIDEO_CHAT_REQUESTS_PER_WINDOW ?? DEFAULT_REQUEST_LIMIT);
+  const requestLimit = /^[1-9]\d{0,3}$/.test(configuredLimit) && validRequestLimit(Number(configuredLimit)) ? Number(configuredLimit) : null;
   const active = new Map();
   const preparationTimes = new Map();
   let model = provider;
   const access = user => {
     const account = store.getUserById(user.id);
-    const permitted = account && !account.is_guest && account.account_state !== 'disabled' && (account.is_admin || allowedIds.has(user.id));
-    return { available: !!(enabled && permitted && budgetMicros > 0), model: MODEL,
+    const permitted = account && !account.is_guest && account.account_state === 'active';
+    return { available: !!(enabled && permitted && budgetMicros > 0 && requestLimit), model: MODEL,
       inputTokenLimit: INPUT_LIMIT, maxConversations: MAX_CONVERSATIONS,
+      quota: permitted && requestLimit ? store.chat.getQuota(user.id, requestLimit) : null,
       autoCaptions: (environment.VIDEO_CHAT_AUTO_CAPTIONS ?? '1') === '1',
-      reason: !enabled || !budgetMicros ? 'Video chat has not been configured by the administrator.' : !permitted ? 'Video chat is limited to approved pilot accounts.' : '' };
+      reason: !enabled || !budgetMicros ? 'Video chat has not been configured by the administrator.' : !requestLimit ? 'Video chat request quota is not configured correctly. Contact the administrator.' :
+        !permitted ? 'Video chat requires an active member account.' : '' };
   };
   const snapshot = (userId, courseId, videoId, conversationId) => {
     const thread = store.chat.get(userId, courseId, videoId, conversationId);
@@ -325,6 +328,11 @@ function createVideoChat(store, auth, { environment = process.env, provider, loa
         code: known ? error.code : controller.signal.aborted ? 'CHAT_TIMEOUT' : 'CHAT_UNAVAILABLE',
         error: known ? error.message : controller.signal.aborted ? 'The request timed out. Reload chat before retrying.' : 'Video chat is temporarily unavailable. Reload before retrying.',
       };
+      if (known && error.code === 'CHAT_WINDOW_LIMIT') body.quota = error.quota;
+      if (known && Number.isSafeInteger(error.retryAfterSeconds) && error.retryAfterSeconds > 0) {
+        body.retryAfterSeconds = error.retryAfterSeconds;
+        if (!res.headersSent) res.set('Retry-After', String(error.retryAfterSeconds));
+      }
       if (res.locals.chatStream) res.locals.chatStream.fail(body);
       else if (!res.destroyed && !res.headersSent) res.status(known ? error.status : controller.signal.aborted ? 504 : 502).json(body);
     } finally { clearTimeout(timeout); res.locals.chatStream?.close(); res.off('close', disconnected); }
@@ -444,7 +452,7 @@ function createVideoChat(store, auth, { environment = process.env, provider, loa
     if (sourceHash !== undefined && store.chat.get(userId, courseId, videoId, conversationId).transcript?.hash !== sourceHash) {
       throw new ChatError(409, 'CHAT_CHANGED', 'The transcript changed. Reload chat before continuing.');
     }
-    const reservation = store.chat.reserve({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision: expected, maximumCost: MAXIMUM_COST, budgetMicros });
+    const reservation = store.chat.reserve({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision: expected, maximumCost: MAXIMUM_COST, budgetMicros, requestLimit });
     const wantsStream = req.get('accept')?.split(',').some(value => value.split(';')[0].trim() === 'application/x-ndjson') && req.accepts('application/x-ndjson');
     const delivery = wantsStream ? (res.locals.chatStream = streamResponse(res, signal, heartbeatMs)) : null;
     if (reservation.previous) {

@@ -351,8 +351,12 @@
         </div>
         <div id="chatFollowUps" class="chat-suggestions hidden" role="group" aria-label="Suggested follow-up questions"></div>
         <form id="chatForm" class="chat-form">
+          <div id="chatQuota" class="chat-quota hidden">
+            <div class="chat-quota-status" role="status" aria-live="polite" aria-atomic="true"><span id="chatQuotaRemaining"></span><span id="chatQuotaReset"></span></div>
+            <button id="chatQuotaRefresh" class="icon-btn" type="button" title="Refresh request allowance" aria-label="Refresh request allowance"><span data-ui-icon="RefreshCw" aria-hidden="true"></span></button>
+          </div>
           <div class="chat-composer">
-            <textarea id="chatQuestion" rows="2" maxlength="2000" placeholder="Ask about this video" aria-label="Chat message" required></textarea>
+            <textarea id="chatQuestion" rows="2" maxlength="2000" placeholder="Ask about this video" aria-label="Chat message" aria-describedby="chatQuotaRemaining chatQuotaReset chatError" required></textarea>
             <div class="chat-compose-actions"><button id="chatCancel" class="icon-btn hidden" type="button" title="Stop answer" aria-label="Stop answer"><span data-ui-icon="Square" aria-hidden="true"></span></button><button id="chatSend" class="icon-btn" type="submit" title="Send message" aria-label="Send message" disabled><span data-ui-icon="ArrowUp" aria-hidden="true"></span></button></div>
           </div>
           <div class="chat-footer">

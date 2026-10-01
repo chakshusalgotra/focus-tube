@@ -728,6 +728,9 @@ body.side-collapsed #sidebar { display: none; }
 .video-chat-panel .chat-citations button { color: var(--muted); background: transparent; border: 0; border-radius: 3px; padding: 2px 4px; min-height: 26px; font: inherit; font-size: calc(11px * var(--text-scale)); cursor: pointer; font-variant-numeric: tabular-nums; text-decoration: underline; text-underline-offset: 3px; }
 .chat-citations button:hover { color: var(--teal); }
 .chat-form { display: flex; flex-direction: column; flex-shrink: 0; border-top: var(--hairline) solid var(--line); padding-top: 10px; position: relative; }
+.chat-quota { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 8px; }
+.chat-quota-status { display: flex; flex: 1; flex-wrap: wrap; gap: 2px 12px; min-width: 0; color: var(--muted); font-size: calc(12px * var(--text-scale)); overflow-wrap: anywhere; }
+.chat-quota-status span { min-width: 0; }
 .chat-composer { display: flex; align-items: flex-end; min-width: 0; padding: 4px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--panel); }
 .chat-composer:focus-within { outline: 2px solid var(--teal); outline-offset: 2px; }
 .chat-form textarea { display: block; flex: 1; width: 100%; min-width: 0; min-height: 68px; max-height: 160px; resize: vertical; border: 0; border-radius: 4px; background: transparent; color: var(--text); padding: 8px; font: inherit; line-height: 1.5; }

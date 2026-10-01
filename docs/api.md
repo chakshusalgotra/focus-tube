@@ -118,11 +118,11 @@ Report body: `{submissionId,category,visibility,publicConsent?,title,body,steps?
 
 ## Video Chat
 
-Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member session and enforce supplied `X-Video-Chat-Account` binding. Generation/source preparation additionally require enabled/eligible access. Retained-history reads and deletion have separate rules, so a disabled pilot is not equivalent to deleting stored conversations.
+Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member session and enforce supplied `X-Video-Chat-Account` binding. Generation/source preparation additionally require configured/enabled chat and an active registered account; there is no pilot-ID gate. Retained-history reads and deletion have separate rules, so disabled generation is not equivalent to deleting stored conversations. Exhausted request allowance does not change the `available` capability flag.
 
 | Method | Path | Contract |
 | --- | --- | --- |
-| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag and a safe unavailability reason |
+| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag, safe unavailability reason and own-account `quota` |
 | GET | `C?conversationId=...` | Snapshot: revision/generation, selected history, histories, completed messages and source metadata |
 | POST | `C/conversations` | `{id,revision,title?}` creates a named history under the video's shared transcript |
 | PATCH | `C/conversations/:conversationId` | `{title,revision}` with consistent conversation binding |
@@ -134,6 +134,10 @@ Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member
 | DELETE | `C` | `{revision,conversationId?,removeTranscript?}`; clear selected history or remove shared source/all histories according to the request |
 
 For `C/messages`, `Accept: application/x-ndjson` requests streamed `start`, `text`, heartbeat and final/error events; the default final-JSON path remains compatible. Provisional text is not a validated answer. Scope is `moment|video|discussion`, default `video`; mode is `answer|note_draft`, default `answer`. The simplified website exposes whole-video conversation, starters and follow-ups rather than the legacy upload/scope controls. No tools or automatic billable retry are enabled. Source/current-account/history checks run again before committing an answer.
+
+`quota` in config and snapshot config contains `{limit,used,remaining,windowSeconds:21600,windowStartedAt,resetAt,serverNow}`. Dates are UTC ISO strings; a missing/expired window reports full remaining allowance and null start/reset until a new request is admitted. Default limit is 30; `VIDEO_CHAT_REQUESTS_PER_WINDOW` accepts 1-1,000. Reading status does not start a window. The stored counter and usage reservation commit in one immediate transaction; later failure/cancellation retains the request slot, while rejected admission and completed-ID replay consume none.
+
+An exhausted window returns HTTP `429` / `CHAT_WINDOW_LIMIT`, the own-account `quota`, `retryAfterSeconds`, and `Retry-After` seconds before any NDJSON headers or provider call. The existing five-per-minute limit returns `RATE_LIMITED` with retry seconds; concurrency and monthly cost use `CHAT_BUSY` and `CHAT_BUDGET`. A six-hour reset does not clear monthly spending or provider throttling. The old `CHAT_DAILY_LIMIT` check is removed. See the [quota implementation plan](video-chat-quota-plan.md) for reset and recovery cases.
 
 Limits, note proposal binding, shared transcript consequences, usage reservation and source timing tolerance are defined in [v1-release.md](v1-release.md#chat-and-confirmed-notes), [video-chat.js](../video-chat.js) and [video-chat-store.js](../video-chat-store.js). Citation validation verifies references exist, not that every generated claim is correct.
 
