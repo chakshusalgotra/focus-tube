@@ -78,6 +78,10 @@
       this.composing = false;
       this.preview = null;
       this.config = { available: false, reason: 'Video chat is not configured.' };
+      this.configVersion = 0;
+      this.quotaRefreshing = false;
+      this.quotaRefreshFailed = false;
+      this.quotaExpired = false;
       this.data = { revision: 0, transcript: null, messages: [] };
       find('#videoChatBtn').addEventListener('click', () => {
         if (!this.config.available) return options.showError(this.config.reason);
@@ -85,6 +89,7 @@
       });
       find('#chatClose').addEventListener('click', () => { this.hide(); find('#videoChatBtn').focus(); });
       find('#chatReload').addEventListener('click', () => this.load());
+      find('#chatQuotaRefresh').addEventListener('click', () => { if (!this.pending) this.configure(); });
       find('#chatCancel').addEventListener('click', () => this.cancel());
       find('#chatNew').addEventListener('click', () => this.newConversation());
       find('#chatHistory').addEventListener('change', event => this.load(event.target.value));
@@ -137,23 +142,78 @@
         else if (find('#chatMenu').open) { find('#chatMenu').open = false; find('#chatMenuToggle').focus(); }
         else { this.hide(); find('#videoChatBtn').focus(); }
       });
-      window.addEventListener('pagehide', () => this.cancel());
+      const refreshQuota = () => { if (this.opened && this.identity && !this.pending) return this.configure(); };
+      window.addEventListener('focus', refreshQuota);
+      window.addEventListener('pageshow', event => { if (event.persisted) refreshQuota(); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) clearTimeout(this.quotaTimer); else refreshQuota();
+      });
+      window.addEventListener('pagehide', () => {
+        this.cancel();
+        clearTimeout(this.quotaTimer);
+        this.configController?.abort();
+        this.configVersion++;
+      });
     }
 
     async configure() {
       const session = this.session;
       const owner = this.options.getUser?.()?.id;
+      const version = ++this.configVersion;
+      const current = () => session === this.session && owner === this.options.getUser?.()?.id && version === this.configVersion;
       this.configController?.abort();
       this.configController = new AbortController();
+      clearTimeout(this.quotaTimer);
+      if (this.quotaOwner !== owner) this.config = { ...this.config, quota: null };
+      this.quotaOwner = owner;
+      this.quotaRefreshing = true;
+      this.controls();
       try {
         const response = await fetch('/api/video-chat/config', { signal: AbortSignal.any([this.configController.signal, AbortSignal.timeout(10000)]),
           headers: owner ? { 'X-Video-Chat-Account': String(owner) } : {} });
         const config = await response.json();
-        if (session !== this.session || owner !== this.options.getUser?.()?.id) return;
+        if (!current()) return;
         if (response.status === 401 || config.code === 'SESSION_CHANGED') { this.reset(); this.options.onSessionChanged?.(); return; }
-        this.config = response.ok ? config : { available: false, reason: 'Video chat is unavailable.' };
-      } catch { if (session === this.session) this.config = { available: false, reason: 'Video chat is unavailable. Reload to try again.' }; }
-      if (session === this.session) this.controls();
+        if (!response.ok) throw new Error('Allowance unavailable');
+        this.applyConfig(config);
+      } catch {
+        if (!current()) return;
+        this.quotaRefreshing = false;
+        this.quotaRefreshFailed = true;
+        if (!this.config.available) this.config = { available: false, reason: 'Video chat is unavailable. Reload to try again.' };
+      }
+      if (current()) this.controls();
+    }
+
+    applyConfig(config) {
+      this.config = config;
+      this.quotaOwner = this.options.getUser?.()?.id;
+      this.quotaRefreshing = false;
+      this.quotaRefreshFailed = false;
+      this.quotaExpired = false;
+      clearTimeout(this.quotaTimer);
+      if (this.quotaRejected && config.quota?.remaining > 0) {
+        this.quotaRejected = false;
+        find('#chatError').textContent = '';
+        if (!this.pending) find('#chatStatus').textContent = 'Ready';
+      }
+      const quota = config.quota;
+      const delay = Date.parse(quota?.resetAt) - Date.parse(quota?.serverNow);
+      if (!this.opened || document.hidden || !Number.isFinite(delay)) return;
+      const session = this.session;
+      const owner = this.quotaOwner;
+      const version = this.configVersion;
+      this.quotaTimer = setTimeout(() => {
+        if (session !== this.session || owner !== this.options.getUser?.()?.id || version !== this.configVersion || !this.opened) return;
+        this.quotaExpired = true;
+        this.controls();
+        if (!this.pending) return this.configure();
+      }, Math.max(0, delay) + 100);
+      this.quotaTimer?.unref?.();
+    }
+
+    quotaBlocked() {
+      return this.quotaRefreshing || this.quotaRefreshFailed || this.quotaExpired || this.config.quota?.remaining === 0;
     }
 
     showVideo(courseId, videoId, title) {
@@ -205,6 +265,7 @@
     hide(restoreNotes = true) {
       if (!this.opened) return;
       this.opened = false;
+      clearTimeout(this.quotaTimer);
       find('#videoChatPanel').classList.add('hidden');
       find('#studyLayout').classList.remove('chat-open');
       if (restoreNotes) this.options.setNotesOpen(this.notesWasOpen);
@@ -223,7 +284,9 @@
 
     reset() {
       this.session++;
+      this.configVersion++;
       this.configController?.abort();
+      clearTimeout(this.quotaTimer);
       this.leave();
       this.drafts.clear();
       this.previews?.clear();
@@ -234,6 +297,11 @@
       this.preview = null;
       this.data = { revision: 0, transcript: null, messages: [] };
       this.config = { available: false, reason: 'Video chat is not configured.' };
+      this.quotaOwner = null;
+      this.quotaRefreshing = false;
+      this.quotaRefreshFailed = false;
+      this.quotaExpired = false;
+      this.quotaRejected = false;
       find('#chatQuestion').value = '';
       this.render();
     }
@@ -256,6 +324,7 @@
       const controller = new AbortController();
       const pending = { controller, path: identity.path, conversationId: identity.conversationId, requestId, owner, dispatched: false };
       this.pending = pending;
+      this.quotaRejected = false;
       find('#chatStatus').textContent = label;
       find('#chatError').textContent = '';
       this.controls();
@@ -274,7 +343,10 @@
           await onEvent?.(event);
         }) : response.status === 204 ? null : await response.json();
         if (!current()) throw new DOMException('Chat changed', 'AbortError');
-        if (!response.ok) throw Object.assign(new Error(result?.error || 'Chat request failed.'), { status: response.status, body: result, code: result?.code });
+        if (!response.ok) {
+          if (suffix === '/messages' && ['CHAT_WINDOW_LIMIT', 'RATE_LIMITED', 'CHAT_BUDGET', 'CHAT_BUSY'].includes(result?.code)) pending.dispatched = false;
+          throw Object.assign(new Error(result?.error || 'Chat request failed.'), { status: response.status, body: result, code: result?.code });
+        }
         return result;
       };
       try {
@@ -296,6 +368,12 @@
           this.options.showError('Your account or session changed. Sign in again before using chat.');
           return;
         }
+        if (error.code === 'CHAT_WINDOW_LIMIT' && error.body?.quota) {
+          this.configVersion++;
+          this.configController?.abort();
+          this.applyConfig({ ...this.config, quota: error.body.quota });
+          this.quotaRejected = true;
+        }
         if (requestId) {
           this.needsReload = pending.dispatched;
           if (!pending.dispatched) this.provisional = null;
@@ -312,7 +390,11 @@
           : error.message;
       } finally {
         clearTimeout(timer);
-        if (this.pending === pending) { this.pending = null; this.render(); }
+        if (this.pending === pending) {
+          this.pending = null;
+          if ((requestId || this.quotaExpired) && session === this.session && owner === this.options.getUser?.()?.id) await this.configure();
+          this.render();
+        }
       }
     }
 
@@ -334,7 +416,11 @@
         this.preview = this.previews?.get(this.threadKey()) || null;
       }
       this.data = { ...data, conversationId, conversations: data.conversations || [] };
-      if (data.config) this.config = data.config;
+      if (data.config) {
+        this.configVersion++;
+        this.configController?.abort();
+        this.applyConfig(data.config);
+      }
       if (this.identity && conversationId) this.selected?.set(this.identity.key, conversationId);
     }
 
@@ -395,7 +481,7 @@
     }
 
     ask({ scope = 'video', mode = 'answer', question = find('#chatQuestion').value.trim() } = {}) {
-      if (!this.identity || this.pending || this.composing || this.needsReload || !question || !this.config.available) return;
+      if (!this.identity || this.pending || this.composing || this.needsReload || !question || !this.config.available || this.quotaBlocked()) return;
       const requestId = crypto.randomUUID();
       const playhead = this.options.getTime(this.identity.courseId, this.identity.videoId);
       if (scope === 'moment' && !Number.isSafeInteger(playhead)) {
@@ -607,8 +693,22 @@
       toggle.setAttribute('aria-expanded', String(this.opened));
       toggle.title = available ? this.opened ? 'Hide video chat' : 'Ask about video' : this.config.reason;
       toggle.setAttribute('aria-label', available ? 'Ask about video' : this.config.reason);
-      find('#chatSend').disabled = busy || this.needsReload || !available || !find('#chatQuestion').value.trim();
+      const quota = this.config.quota;
+      const quotaBlocked = this.quotaBlocked();
+      find('#chatQuota').classList.toggle('hidden', !available || (!quota && !this.quotaRefreshing && !this.quotaRefreshFailed));
+      const remaining = this.quotaRefreshing ? 'Checking allowance...' : this.quotaRefreshFailed ? 'Allowance unavailable' :
+        this.quotaExpired ? 'Allowance needs refreshing' : quota ? `${quota.remaining} of ${quota.limit} requests remaining` : '';
+      const deadline = Date.parse(quota?.resetAt);
+      const reset = !this.quotaRefreshing && !this.quotaRefreshFailed && Number.isFinite(deadline)
+        ? 'Resets ' + new Date(deadline).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+      if (find('#chatQuotaRemaining').textContent !== remaining) find('#chatQuotaRemaining').textContent = remaining;
+      if (find('#chatQuotaReset').textContent !== reset) find('#chatQuotaReset').textContent = reset;
+      find('#chatQuotaRefresh').disabled = busy || this.quotaRefreshing;
+      find('#chatSend').disabled = busy || this.needsReload || !available || quotaBlocked || !find('#chatQuestion').value.trim();
       find('#chatQuestion').disabled = busy || !available;
+      for (const button of document.querySelectorAll('#chatStarters button, #chatFollowUps button')) {
+        button.disabled = busy || this.needsReload || !available || quotaBlocked;
+      }
       find('#chatHistory').disabled = busy || !this.data.conversations?.length;
       find('#chatHistory').value = this.data.conversationId || '';
       find('#chatNew').disabled = busy || !available || (this.data.conversations?.length || 0) >= (this.config.maxConversations || 20);
@@ -705,7 +805,7 @@
         for (const [label, question] of [['Summarize video', 'Summarize this video.'], ['Explain the key ideas', 'Explain the key ideas in this video.']]) {
           const action = textNode('button', label, 'chat-starter');
           action.type = 'button';
-          action.disabled = !!this.pending || !this.config.available || this.needsReload;
+          action.disabled = !!this.pending || !this.config.available || this.needsReload || this.quotaBlocked();
           action.addEventListener('click', () => this.ask({ question }));
           empty.append(action);
         }
@@ -722,7 +822,7 @@
         for (const question of questions) {
           const button = textNode('button', question, 'chat-suggestion');
           button.type = 'button';
-          button.disabled = !this.config.available;
+          button.disabled = !this.config.available || this.quotaBlocked();
           button.addEventListener('click', () => { if (this.data.messages.at(-1)?.id === last.id) this.ask({ question }); });
           suggestions.append(button);
         }

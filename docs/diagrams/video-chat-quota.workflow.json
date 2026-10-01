@@ -1,0 +1,39 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Proposed: six-hour video chat quota",
+    "locale": "en",
+    "animation": "none",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    { "id": "member", "label": "Member / browser" },
+    { "id": "service", "label": "FocusTube / SQLite" },
+    { "id": "provider", "label": "Gemini" }
+  ],
+  "mainPath": ["send", "validate", "reserve", "generate", "finish", "result"],
+  "nodes": [
+    { "id": "send", "lane": "member", "col": 0, "type": "frontend", "label": "Send message", "sublabel": "Stable request ID", "width": 140 },
+    { "id": "validate", "lane": "service", "col": 1, "type": "security", "label": "Validate", "sublabel": "Account, consent, source", "width": 175 },
+    { "id": "replay", "lane": "member", "col": 1, "type": "frontend", "label": "Replay receipt", "sublabel": "No extra slot or call", "width": 155 },
+    { "id": "reserve", "lane": "service", "col": 2, "type": "database", "label": "Check + reserve", "sublabel": "Window, burst, cost", "tag": "atomic", "width": 170 },
+    { "id": "wait", "lane": "member", "col": 2, "type": "frontend", "label": "Quota exhausted", "sublabel": "Keep draft; show reset", "width": 175 },
+    { "id": "generate", "lane": "provider", "col": 3, "type": "external", "label": "Generate answer", "sublabel": "One admitted attempt", "width": 170 },
+    { "id": "finish", "lane": "service", "col": 4, "type": "database", "label": "Commit outcome", "sublabel": "Answer / error + cost", "width": 165 },
+    { "id": "result", "lane": "member", "col": 4, "type": "frontend", "label": "Show result", "sublabel": "Refresh quota status", "width": 165 }
+  ],
+  "edges": [
+    { "from": "send", "to": "validate", "label": "POST message", "role": "main" },
+    { "from": "validate", "to": "reserve", "label": "New ID", "role": "main" },
+    { "from": "validate", "to": "replay", "label": "Completed ID", "role": "branch" },
+    { "from": "reserve", "to": "generate", "label": "Admitted", "role": "main" },
+    { "from": "reserve", "to": "wait", "label": "429 + resetAt", "role": "branch", "variant": "security" },
+    { "from": "generate", "to": "finish", "label": "Outcome", "role": "main" },
+    { "from": "finish", "to": "result", "label": "Receipt", "role": "main" }
+  ],
+  "cards": [
+    { "dot": "amber", "title": "Policy awaiting approval", "items": ["30 requests per member: allowance confirmed", "Six hours from the first admitted request", "Server deadline refills; never auto-resend"] },
+    { "dot": "emerald", "title": "Existing protections retained", "items": ["Five per minute and one in-flight answer", "Shared monthly spending cap remains separate", "Replay is free; admitted failures keep their slot"] }
+  ]
+}

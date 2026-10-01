@@ -15,7 +15,7 @@ test('architecture catalog covers current flows and keeps draft automation disti
     assert.equal(catalog.diagrams.find(item => item.id === id)?.state, 'current');
   }
   const inventory = docs.sourceInventory(catalog);
-  assert.equal(inventory.tables.length, 25);
+  assert.equal(inventory.tables.length, 26);
   assert.equal(inventory.tables.filter(table => table.source === 'extension-store.js').length, 4);
   assert.ok(inventory.sources.every(source => /^[a-f0-9]{64}$/.test(source.sha256)));
   assert.equal(inventory.sources.some(source => source.path === '.env' || source.path.startsWith('data/')), false);
