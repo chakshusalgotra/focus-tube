@@ -1,0 +1,711 @@
+{
+  "version": 1,
+  "style": "motion-v2",
+  "sourceViewport": {
+    "width": 1600,
+    "height": 780
+  },
+  "outputViewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "mediaBounds": {
+    "x": 40,
+    "y": 84,
+    "width": 1840,
+    "height": 898
+  },
+  "fixedCaptions": true,
+  "pointer": "Native event highlight and click ring",
+  "camera": "Recorded target positions; clamped crop with 900ms ease-out moves and stable holds",
+  "chapters": [
+    {
+      "id": "welcome",
+      "sourceStart": 2.443268060684204,
+      "start": 0,
+      "seconds": 32.12,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "signup",
+      "sourceStart": 34.566367864608765,
+      "start": 32.12,
+      "seconds": 28.08,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.87600004196167,
+          "x": 0.575625,
+          "y": 0.6727564102564103,
+          "zoom": 1.6,
+          "target": "authHandle"
+        },
+        {
+          "time": 14.62130009651184,
+          "x": 0.5,
+          "y": 0.819551282051282,
+          "zoom": 1.6,
+          "target": "authPassword"
+        },
+        {
+          "time": 20.34690010070801,
+          "x": 0.5,
+          "y": 0.9881410256410257,
+          "zoom": 1.6,
+          "target": "authPasswordConfirmation"
+        },
+        {
+          "time": 26.979999999999997,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "verification",
+      "sourceStart": 62.656368017196655,
+      "start": 60.199999999999996,
+      "seconds": 29.4,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 11.279800052642821,
+          "x": 0.5,
+          "y": 0.7564102564102564,
+          "zoom": 1.6,
+          "target": "authOnboardingSkip"
+        },
+        {
+          "time": 18.917199964523316,
+          "x": 0.5,
+          "y": 0.5993589743589743,
+          "zoom": 1.6,
+          "target": "authCode"
+        },
+        {
+          "time": 28.299999999999997,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "library",
+      "sourceStart": 92.0479679107666,
+      "start": 89.6,
+      "seconds": 27.84,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 5.747300024032593,
+          "x": 0.96,
+          "y": 0.4980769230769231,
+          "zoom": 1.6,
+          "target": "listModeBtn"
+        },
+        {
+          "time": 11.110700006484985,
+          "x": 0.79734375,
+          "y": 0.4980769230769231,
+          "zoom": 1.6,
+          "target": "libraryStatusFilter"
+        },
+        {
+          "time": 22.163099880218507,
+          "x": 0.934375,
+          "y": 0.4980769230769231,
+          "zoom": 1.6,
+          "target": "gridModeBtn"
+        },
+        {
+          "time": 26.74,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "discovery",
+      "sourceStart": 119.85876774787903,
+      "start": 117.44,
+      "seconds": 29.4,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 5.421500082015991,
+          "x": 0.28875,
+          "y": 0.24743589743589745,
+          "zoom": 1.5094339622641508,
+          "target": "urlInput"
+        },
+        {
+          "time": 10.333200092315673,
+          "x": 0.151796875,
+          "y": 0.32083333333333336,
+          "zoom": 1.6,
+          "target": "input"
+        },
+        {
+          "time": 17.014700050354005,
+          "x": 0.926875,
+          "y": 0.7010216346153846,
+          "zoom": 1.6,
+          "target": "button"
+        },
+        {
+          "time": 22.73520004272461,
+          "x": 0.28875,
+          "y": 0.24743589743589745,
+          "zoom": 1.5094339622641508,
+          "target": "urlInput"
+        },
+        {
+          "time": 28.299999999999997,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "player",
+      "sourceStart": 149.27356791496277,
+      "start": 146.84,
+      "seconds": 30.84,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.715200061798095,
+          "x": 0.244375,
+          "y": 0.7602564102564102,
+          "zoom": 1.6,
+          "target": "playBtn"
+        },
+        {
+          "time": 12.354299898147582,
+          "x": 0.6115625,
+          "y": 0.7602564102564102,
+          "zoom": 1.6,
+          "target": "speedSel"
+        },
+        {
+          "time": 21.44889986038208,
+          "x": 0.693125,
+          "y": 0.7602564102564102,
+          "zoom": 1.6,
+          "target": "muteBtn"
+        },
+        {
+          "time": 25.979099864959718,
+          "x": 0.6115625,
+          "y": 0.7602564102564102,
+          "zoom": 1.6,
+          "target": "speedSel"
+        },
+        {
+          "time": 29.74,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "lesson-navigation",
+      "sourceStart": 180.08656787872314,
+      "start": 177.68,
+      "seconds": 27.68,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 5.128599996566773,
+          "x": 0.0584375,
+          "y": 0.4904246794871795,
+          "zoom": 1.6,
+          "target": "button"
+        },
+        {
+          "time": 9.402999992370605,
+          "x": 0.89,
+          "y": 0.8454427083333333,
+          "zoom": 1.6,
+          "target": "npComplete"
+        },
+        {
+          "time": 12.67399990081787,
+          "x": 0.0584375,
+          "y": 0.38697916666666665,
+          "zoom": 1.6,
+          "target": "button"
+        },
+        {
+          "time": 15.886999959945678,
+          "x": 0.0696875,
+          "y": 0.7122195512820513,
+          "zoom": 1.6,
+          "target": "courseChecklistToggle"
+        },
+        {
+          "time": 19.984399909973146,
+          "x": 0.0696875,
+          "y": 0.8659054487179487,
+          "zoom": 1.6,
+          "target": "courseChecklistInput"
+        },
+        {
+          "time": 23.42679988861084,
+          "x": 0.57,
+          "y": 0.9434495192307693,
+          "zoom": 1,
+          "target": "descToggle"
+        },
+        {
+          "time": 26.58,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "notes",
+      "sourceStart": 207.7412679195404,
+      "start": 205.36,
+      "seconds": 29.72,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 5.8839000415802,
+          "x": 0.828076171875,
+          "y": 0.39775641025641023,
+          "zoom": 1.4460511679644048,
+          "target": "div"
+        },
+        {
+          "time": 28.619999999999997,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "notebooks",
+      "sourceStart": 237.45436787605286,
+      "start": 235.08,
+      "seconds": 28.48,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.231900091171265,
+          "x": 0.163486328125,
+          "y": 0.36217948717948717,
+          "zoom": 1.6,
+          "target": "notebookVideoSelect"
+        },
+        {
+          "time": 13.651800031661987,
+          "x": 0.746572265625,
+          "y": 0.2282051282051282,
+          "zoom": 1.6,
+          "target": "notebookMarkdown"
+        },
+        {
+          "time": 19.79449998855591,
+          "x": 0.831748046875,
+          "y": 0.2282051282051282,
+          "zoom": 1.6,
+          "target": "notebookPrintBtn"
+        },
+        {
+          "time": 27.38,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "planning",
+      "sourceStart": 265.9241678714752,
+      "start": 263.56,
+      "seconds": 28.84,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 1.2,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1.12,
+          "target": "taskModal"
+        },
+        {
+          "time": 6.489,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 17.304,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1.15,
+          "target": "roadmapForm"
+        },
+        {
+          "time": 21.918400000000002,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "dashboard",
+      "sourceStart": 294.7493679523468,
+      "start": 292.4,
+      "seconds": 30.8,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "chat",
+      "sourceStart": 325.5682678222656,
+      "start": 323.2,
+      "seconds": 34.8,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.95240008354187,
+          "x": 0.818125,
+          "y": 0.2903846153846154,
+          "zoom": 1.4705882352941175,
+          "target": "chatMessages"
+        },
+        {
+          "time": 33.699999999999996,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "chat-notes",
+      "sourceStart": 360.36986780166626,
+      "start": 358,
+      "seconds": 32.2,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.831199998855591,
+          "x": 0.818125,
+          "y": 0.4891025641025641,
+          "zoom": 1.4705882352941175,
+          "target": "chatMessages"
+        },
+        {
+          "time": 31.1,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "sourceStart": 392.5595679283142,
+      "start": 390.2,
+      "seconds": 40.56,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 6.656700010299683,
+          "x": 0.568125,
+          "y": 0.817988782051282,
+          "zoom": 1.6,
+          "target": "summary"
+        },
+        {
+          "time": 13.039899940490722,
+          "x": 0.2875,
+          "y": 0.4684294871794872,
+          "zoom": 1.6,
+          "target": "settingsAppearanceTab"
+        },
+        {
+          "time": 25.77470004081726,
+          "x": 0.4646875,
+          "y": 0.8339443108974359,
+          "zoom": 1.6,
+          "target": "exportDataBtn"
+        },
+        {
+          "time": 31.422000045776368,
+          "x": 0.2875,
+          "y": 0.5966346153846154,
+          "zoom": 1.6,
+          "target": "settingsPoliciesTab"
+        },
+        {
+          "time": 37.7614999961853,
+          "x": 0.859599609375,
+          "y": 0.03205128205128205,
+          "zoom": 1.6,
+          "target": "themeToggle"
+        },
+        {
+          "time": 39.46,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "sourceStart": 433.1240677833557,
+      "start": 430.76,
+      "seconds": 32.04,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 10.293400402069091,
+          "x": 0.391025390625,
+          "y": 0.7868589743589743,
+          "zoom": 1.6,
+          "target": "input"
+        },
+        {
+          "time": 15.283200378417968,
+          "x": 0.5,
+          "y": 0.6552083333333333,
+          "zoom": 1.6,
+          "target": "feedbackReportScreenshots"
+        },
+        {
+          "time": 20.54870044708252,
+          "x": 0.6427099609375,
+          "y": 0.9204827724358975,
+          "zoom": 1.6,
+          "target": "feedbackReportSubmit"
+        },
+        {
+          "time": 25.671000356674195,
+          "x": 0.5,
+          "y": 0.5431690705128205,
+          "zoom": 1.1730205278592374,
+          "target": "feedbackReplyBody"
+        },
+        {
+          "time": 30.939999999999998,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "administration",
+      "sourceStart": 465.16416811943054,
+      "start": 462.8,
+      "seconds": 33.12,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.047899837493896,
+          "x": 0.568125,
+          "y": 0.6425280448717948,
+          "zoom": 1.6,
+          "target": "inviteMaxUses"
+        },
+        {
+          "time": 25.853099937438966,
+          "x": 0.283125,
+          "y": 0.5003004807692307,
+          "zoom": 1.6,
+          "target": "feedbackLocked"
+        },
+        {
+          "time": 32.019999999999996,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "monitoring",
+      "sourceStart": 498.29316806793213,
+      "start": 495.92,
+      "seconds": 39.08,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "extension",
+      "sourceStart": 537.3839681148529,
+      "start": 535,
+      "seconds": 33.16,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.723600025177002,
+          "x": 0.5835312652587891,
+          "y": 0.1343299278846154,
+          "zoom": 1.6,
+          "target": "environment"
+        },
+        {
+          "time": 32.059999999999995,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "finish",
+      "sourceStart": 570.5266680717468,
+      "start": 568.16,
+      "seconds": 34.68,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 5.5488,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1.22,
+          "target": "certModal"
+        },
+        {
+          "time": 11.4444,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    }
+  ]
+}

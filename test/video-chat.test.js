@@ -6,6 +6,8 @@ const { normalizeTranscript, parseTranscript, validateAnswer, validateNoteDraft,
 const { createChatStore, validateChatBackup } = require('../video-chat-store');
 const Database = require('better-sqlite3');
 const crypto = require('node:crypto');
+const { CACHE_CONSENT, EMBEDDING_VERSION, MAXIMUM_EMBEDDING_COST, createGeminiEmbeddingProvider,
+  normalizeEmbedding, commonQuestionTask, canonicalQuestionTask, answerCacheDescriptor, selectSemanticAnswer, publicVideoMetadata } = require('../video-chat');
 
 function storage(context) {
   const db = new Database(':memory:');
@@ -20,6 +22,123 @@ const cues = [
   { start: 0, end: 4, text: 'A partition contains a subset of the data.' },
   { start: 3.5, end: 10, text: 'A shuffle moves data between partitions.' },
 ];
+
+test('admin settings persist, reject stale saves and immediately control budget reservations', context => {
+  const { db, chat } = storage(context);
+  const defaults = { monthlyBudgetCents: 100, paused: false, cacheEnabled: false, sharedCacheEnabled: false, semanticCacheEnabled: false };
+  assert.equal(chat.getSettings(defaults).source, 'environment');
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
+  const request = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId: crypto.randomUUID(), fingerprint: 'live-budget',
+    revision: 1, maximumCost: 1100000, budgetMicros: 1000000 };
+  assert.throws(() => chat.reserve(request), error => error.code === 'CHAT_BUDGET');
+  const changed = { ...defaults, monthlyBudgetCents: 500, revision: 0 };
+  assert.equal(chat.saveSettings(1, changed, defaults, () => {}).revision, 1);
+  chat.reserve(request);
+  assert.equal(createChatStore(db).getSettings(defaults).monthlyBudgetCents, 500);
+  assert.throws(() => chat.saveSettings(2, changed, defaults, () => {}), error => error.code === 'CHAT_SETTINGS_CHANGED');
+  assert.throws(() => chat.saveSettings(1, { ...changed, revision: 1, monthlyBudgetCents: 600 }, defaults, () => { throw new Error('Revoked administrator'); }), /Revoked/);
+  assert.equal(chat.getSettings(defaults).monthlyBudgetCents, 500);
+  chat.saveSettings(1, { ...changed, revision: 1, monthlyBudgetCents: 100 }, defaults, () => {});
+  assert.throws(() => chat.reserveCost(request.requestId, 'generation', 1200000, 5000000), error => error.code === 'CHAT_BUDGET');
+  chat.saveSettings(1, { ...changed, revision: 2, paused: true }, defaults, () => {});
+  assert.throws(() => chat.reserveCost(request.requestId, 'embedding', 10, 5000000), error => error.code === 'CHAT_PAUSED');
+  chat.finish(request.requestId, null, null);
+  assert.equal(db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 1100000);
+  for (const amount of [-1, 0.5, 100001, NaN, Infinity, '100']) assert.throws(() => chat.saveSettings(1, { ...changed, revision: 3, monthlyBudgetCents: amount }, defaults, () => {}), error => error.code === 'INVALID_CHAT_SETTINGS');
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_settings_audit').get().count, 3);
+  db.prepare('DELETE FROM users WHERE id = 1').run();
+  assert.equal(chat.getSettings(defaults).monthlyBudgetCents, 500);
+  assert.equal(chat.getSettings(defaults).updatedBy, null);
+});
+
+test('admin audit is bounded and saved settings survive database reopen outside member exports', async context => {
+  const { db, chat } = storage(context);
+  const defaults = { monthlyBudgetCents: 100, paused: false, cacheEnabled: false, sharedCacheEnabled: false, semanticCacheEnabled: false };
+  chat.saveSettings(1, { ...defaults, revision: 0, monthlyBudgetCents: 250 }, defaults, () => {});
+  const insert = db.prepare('INSERT INTO video_chat_settings_audit(revision, actor_id, before_json, after_json, created_at) VALUES (?, 1, ?, ?, ?)');
+  db.transaction(() => {
+    for (let revision = 2; revision <= 1003; revision++) insert.run(revision, JSON.stringify(defaults), JSON.stringify(defaults), Date.now());
+    insert.run(0, JSON.stringify(defaults), JSON.stringify(defaults), Date.now() - 91 * 86400000);
+    db.prepare('UPDATE video_chat_settings SET revision = 1003').run();
+  })();
+  chat.saveSettings(1, { ...defaults, revision: 1003, monthlyBudgetCents: 300 }, defaults, () => {});
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_settings_audit').get().count, 1000);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_settings_audit WHERE revision = 0').get().count, 0);
+  assert.equal(chat.adminSnapshot(defaults).changes.length, 20);
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'chat-settings-test-'));
+  context.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const filename = path.join(directory, 'settings.db');
+  await db.backup(filename);
+  const reopened = new Database(filename);
+  try {
+    reopened.pragma('foreign_keys = ON');
+    const restored = createChatStore(reopened);
+    assert.equal(restored.getSettings(defaults).monthlyBudgetCents, 300);
+    assert.equal(restored.getSettings(defaults).revision, 1004);
+    const exported = restored.exportRecords(1);
+    assert.deepEqual(exported, []);
+    restored.restore(1, exported);
+    assert.equal(restored.getSettings(defaults).monthlyBudgetCents, 300);
+    assert.equal(restored.adminSnapshot(defaults).changes.length, 20);
+    assert.equal(reopened.pragma('quick_check', { simple: true }), 'ok');
+    assert.equal(reopened.pragma('foreign_key_check').length, 0);
+  } finally { reopened.close(); }
+});
+
+test('admin currency input is exact and privileged controller bindings exist in the real markup', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.join(__dirname, '../public/video-chat-admin.js'), 'utf8');
+  const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+  const context = { window: {} };
+  require('node:vm').runInNewContext(source, context);
+  for (const [value, expected] of [['0', 0], ['5.25', 525], ['1000.00', 100000], ['1000.01', null], ['-1', null], ['1e2', null], ['1.001', null], ['', null]]) {
+    assert.equal(context.window.VideoChatAdmin.cents(value), expected);
+  }
+  for (const match of source.matchAll(/this\.get\('([^']+)'\)/g)) assert.ok(html.includes(`id="${match[1]}"`), match[1]);
+  assert.match(source, /AbortSignal\.timeout\(15000\)/);
+  assert.match(source, /this\.ownerKey\(\)/);
+  assert.doesNotMatch(source, /loadMonitoring|monitoringUsers|data-settings/);
+  assert.match(source, /this\.modal\.confirmClose = \(\) => this\.requestClose\(\)/);
+  const app = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
+  assert.match(app, /globalThis\.videoChatAdmin\?\.reset\(\)/);
+  assert.match(app, /globalThis\.videoChatAdmin\?\.open\(\)/);
+  assert.match(source, /values\.monthlyBudgetCents > previous\.monthlyBudgetCents/);
+});
+
+test('admin spending distinguishes known, pending, retained and legacy costs without rewriting money', context => {
+  const { db, chat } = storage(context);
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
+  const reserve = amount => {
+    const requestId = crypto.randomUUID();
+    chat.reserve({ userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId, fingerprint: requestId, revision: 1, maximumCost: amount, budgetMicros: 1000000 });
+    return requestId;
+  };
+  const known = reserve(30);
+  chat.reserveCost(known, 'embedding', 5, 1000000);
+  chat.markDispatched(known, 'embedding');
+  chat.settleEmbedding(known, 3);
+  chat.markDispatched(known, 'generation');
+  chat.finish(known, 12, null);
+  const unknown = reserve(7);
+  chat.markDispatched(unknown, 'generation');
+  chat.finish(unknown, null, null);
+  reserve(20);
+  db.prepare(`INSERT INTO video_chat_usage(request_id, user_id, course_id, video_id, generation, fingerprint, state, month, cost_micros, created_at)
+    VALUES (?, NULL, 'operator', 'legacy', 'legacy', 'legacy', 'failed', ?, 10, ?)`).run(crypto.randomUUID(), new Date().toISOString().slice(0, 7), Date.now());
+  const snapshot = chat.adminSnapshot({ monthlyBudgetCents: 100 });
+  assert.equal(snapshot.usage.accountedMicros, 52);
+  assert.equal(snapshot.usage.knownMicros, 15);
+  assert.equal(snapshot.usage.pendingMicros, 20);
+  assert.equal(snapshot.usage.retainedMicros, 7);
+  assert.equal(snapshot.usage.legacyMicros, 10);
+  assert.equal(snapshot.usage.embeddingMicros, 3);
+  assert.equal(snapshot.usage.remainingMicros, 999948);
+  assert.equal(chat.adminSnapshot({ monthlyBudgetCents: 100 }, Date.parse(snapshot.usage.resetsAt)).usage.accountedMicros, 0);
+  assert.equal(db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 52);
+});
 
 function clientFixture(options) {
   const elements = new Map();
@@ -182,6 +301,97 @@ test('interrupted requests keep conservative charges and malformed backup citati
   assert.throws(() => validateChatBackup(records), /linked/);
 });
 
+test('cache admission and staged provider reservations retain one request and all incurred costs', context => {
+  const { db, chat } = storage(context);
+  const transcript = normalizeTranscript(cues);
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false);
+  const request = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId: crypto.randomUUID(), fingerprint: 'staged', revision: 1, maximumCost: 0, budgetMicros: 100 };
+  chat.reserve(request);
+  chat.reserveCost(request.requestId, 'embedding', 10, 100);
+  chat.settleEmbedding(request.requestId, 3);
+  assert.throws(() => chat.reserveCost(request.requestId, 'generation', 100, 100), error => error.code === 'CHAT_BUDGET');
+  chat.reserveCost(request.requestId, 'generation', 90, 100);
+  chat.finish(request.requestId, null, null);
+  assert.deepEqual(db.prepare('SELECT cost_micros, embedding_cost_micros, state FROM video_chat_usage').get(),
+    { cost_micros: 93, embedding_cost_micros: 3, state: 'failed' });
+  const hit = { ...request, requestId: crypto.randomUUID(), fingerprint: 'hit', budgetMicros: 1 };
+  chat.reserve(hit);
+  const message = { id: hit.requestId, question: 'Summary', ...validateAnswer({ supported: true, answer: 'Answer', segmentIds: ['s1'] }, transcript), createdAt: new Date().toISOString() };
+  chat.finish(hit.requestId, 0, message);
+  assert.equal(chat.reserve(hit).previous.message.id, hit.requestId);
+  assert.equal(db.prepare('SELECT SUM(cost_micros) AS cost, COUNT(*) AS count FROM video_chat_usage').get().cost, 93);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage').get().count, 2);
+  const interrupted = { ...request, requestId: crypto.randomUUID(), revision: 2 };
+  chat.reserve(interrupted);
+  chat.reserveCost(interrupted.requestId, 'embedding', 5, 100);
+  chat.settleEmbedding(interrupted.requestId, null);
+  chat.finish(interrupted.requestId, 0, null);
+  assert.equal(db.prepare('SELECT cost_micros FROM video_chat_usage WHERE request_id = ?').get(interrupted.requestId).cost_micros, 5);
+});
+
+test('answer cache persists bounded private and canonical shared entries without importing trust', context => {
+  const { db, chat } = storage(context);
+  const transcript = normalizeTranscript(cues, { source: 'youtube', language: 'en' });
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false, undefined, true);
+  const descriptor = { key: 'private', userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', sourceHash: transcript.hash,
+    contextHash: 'context', question: 'Summarize this video.', task: 'summary' };
+  const value = { answer: 'A partition holds data.', supported: true, segmentIds: ['s1'] };
+  assert.equal(chat.putCachedAnswer(descriptor, value, [1, 0], 'fixture'), true);
+  assert.deepEqual(chat.getCachedAnswer(descriptor).value, value);
+  assert.equal(chat.getCachedAnswer({ ...descriptor, userId: 2 }), null);
+  assert.equal(chat.getCachedAnswer({ ...descriptor, sourceHash: 'different' }), null);
+  assert.equal(chat.cacheCandidates(descriptor, 'different').length, 0);
+  assert.deepEqual(chat.cachedEmbedding(1, descriptor.question, 'fixture'), [1, 0]);
+  assert.equal(chat.cachedEmbedding(2, descriptor.question, 'fixture'), null);
+  const shared = { ...descriptor, key: 'shared', userId: null, courseId: null };
+  assert.equal(chat.putCachedAnswer(shared, value), true);
+  assert.equal(chat.putCachedAnswer({ ...shared, key: 'personal', question: 'My private summary' }, value), false);
+  assert.equal(chat.putCachedAnswer({ ...descriptor, key: 'unsupported' }, { ...value, supported: false }), false);
+  const reopened = createChatStore(db);
+  assert.deepEqual(reopened.getCachedAnswer(descriptor).value, value);
+  const exported = chat.exportRecords(1);
+  assert.doesNotMatch(JSON.stringify(exported), /trustedSourceHash|trusted_source_hash|answer_cache|contextHash/);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ').trustedSourceHash, transcript.hash);
+  chat.restore(1, exported);
+  assert.equal(chat.get(1, 'course1', 'aqz-KE-bpKQ').trustedSourceHash, null);
+  assert.equal(chat.getCachedAnswer(descriptor), null);
+  assert.ok(chat.getCachedAnswer(shared));
+  const current = chat.get(1, 'course1', 'aqz-KE-bpKQ');
+  assert.equal(chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, current.revision, false, undefined, true).trustedSourceHash, transcript.hash);
+  for (let index = 0; index < 201; index++) chat.putCachedAnswer({ ...descriptor, key: 'entry-' + index }, value);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache WHERE user_id = 1').get().count, 200);
+  db.prepare('UPDATE video_chat_answer_cache SET created_at = ?, expires_at = ? WHERE cache_key = ?').run(Date.now() - 20000, Date.now() - 10000, 'shared');
+  assert.equal(chat.getCachedAnswer(shared), null);
+  db.prepare('DELETE FROM users WHERE id = 1').run();
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache WHERE user_id IS NOT NULL').get().count, 0);
+  assert.equal(db.pragma('foreign_key_check').length, 0);
+});
+
+test('cache migration preserves populated histories, revisions and legacy spending without trusting imported captions', context => {
+  const { db, chat } = storage(context);
+  const transcript = normalizeTranscript(cues, { source: 'youtube' });
+  chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 0, false);
+  const requestId = crypto.randomUUID();
+  chat.reserve({ userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId, fingerprint: 'legacy', revision: 1, maximumCost: 99, budgetMicros: 100 });
+  chat.finish(requestId, 99, { id: requestId, question: 'Legacy question', ...validateAnswer({ answer: 'Legacy answer', supported: true, segmentIds: ['s1'] }, transcript), createdAt: new Date().toISOString() });
+  const records = chat.exportRecords(1);
+  const revision = chat.get(1, 'course1', 'aqz-KE-bpKQ').revision;
+  db.exec('DROP TABLE video_chat_answer_cache; ALTER TABLE video_chat_usage DROP COLUMN embedding_cost_micros; ALTER TABLE video_chats DROP COLUMN trusted_source_hash;');
+  const before = db.prepare('SELECT * FROM video_chat_usage').all();
+  for (let index = 0; index < 2; index++) {
+    const migrated = createChatStore(db);
+    assert.deepEqual(migrated.exportRecords(1), records);
+    assert.equal(migrated.get(1, 'course1', 'aqz-KE-bpKQ').revision, revision);
+    assert.equal(migrated.get(1, 'course1', 'aqz-KE-bpKQ').trustedSourceHash, null);
+    assert.deepEqual(db.prepare('SELECT * FROM video_chat_usage').all().map(({ embedding_cost_micros, ...row }) => {
+      assert.equal(embedding_cost_micros, 0); return row;
+    }), before);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache').get().count, 0);
+    assert.equal(db.pragma('quick_check', { simple: true }), 'ok');
+    assert.equal(db.pragma('foreign_key_check').length, 0);
+  }
+});
+
 test('conversation migration keeps existing messages, revisions, sources and spending exactly once', context => {
   const { db } = storage(context);
   db.exec('DROP TABLE video_chat_conversations');
@@ -267,6 +477,7 @@ async function apiFixture(context, overrides = {}) {
   const { db, chat } = storage(context);
   const calls = [];
   const store = { db, chat, getUserById: id => ({ id, is_guest: 0, is_admin: id === 1 ? 1 : 0, account_state: 'active' }),
+    reserveBudgets: () => 0,
     getSessionUser: session => ({ id: Number(session), is_guest: 0, account_state: 'active' }),
     getNotebook: (userId, courseId) => ({ notesRevision: 0, records: db.prepare('SELECT * FROM video_notes WHERE user_id = ? AND course_id = ?').all(userId, courseId)
       .map(row => ({ videoId: row.video_id, document: JSON.parse(row.document_json), revision: row.revision })) }),
@@ -274,13 +485,18 @@ async function apiFixture(context, overrides = {}) {
   const express = require('express');
   const app = express();
   app.use(express.json());
+  if (overrides.observe) app.use((req, _res, next) => { req.monitoring = { observe: overrides.observe }; next(); });
   const auth = { requireAuth(req, res, next) { if (!req.get('x-test-user')) return res.status(401).end(); req.user = { id: Number(req.get('x-test-user')) }; req.sessionHash = req.get('x-test-user'); next(); } };
+  auth.requireAdmin = (req, res, next) => auth.requireAuth(req, res, () => store.getUserById(req.user.id)?.is_admin ? next() : res.status(403).json({ error: 'Administrator access is required.' }));
   const provider = overrides.provider || {
     async count(prompt) { calls.push(JSON.parse(prompt)); return 500; },
     async generate() { return { text: JSON.stringify({ answer: 'A partition holds part of the data.', supported: true, segmentIds: ['s1'] }), cost: 120, complete: true }; },
   };
-  app.use('/chat', createVideoChat(store, auth, { provider, loadCaptions: overrides.loadCaptions, timeoutMs: overrides.timeoutMs, heartbeatMs: overrides.heartbeatMs,
-    environment: { VIDEO_CHAT_ENABLED: '1', GEMINI_API_KEY: 'fixture-only', VIDEO_CHAT_ALLOWED_USER_IDS: '2', ...overrides.environment } }).router);
+  const service = createVideoChat(store, auth, { provider, embeddingProvider: overrides.embeddingProvider, verifyPublicVideo: overrides.verifyPublicVideo,
+    loadCaptions: overrides.loadCaptions, timeoutMs: overrides.timeoutMs, heartbeatMs: overrides.heartbeatMs,
+    environment: { VIDEO_CHAT_ENABLED: '1', GEMINI_API_KEY: 'fixture-only', VIDEO_CHAT_ALLOWED_USER_IDS: '2', ...overrides.environment } });
+  app.use('/chat', service.router);
+  app.use('/admin/video-chat', service.adminRouter);
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   context.after(() => new Promise(resolve => server.close(resolve)));
@@ -289,9 +505,136 @@ async function apiFixture(context, overrides = {}) {
     const response = await fetch(endpoint + suffix, { method, headers: { 'x-test-user': String(user), 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     return { status: response.status, body: response.status === 204 ? null : await response.json() };
   };
+  const adminRequest = async (body, user = 1, expectedUser = user) => {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/admin/video-chat${body ? '/settings' : ''}`, {
+      method: body ? 'PATCH' : 'GET', headers: { 'x-test-user': String(user), 'X-Video-Chat-Account': String(expectedUser), 'content-type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined });
+    return { status: response.status, body: await response.json(), headers: response.headers };
+  };
   chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
-  return { request, db, chat, calls, endpoint, store };
+  return { request, adminRequest, db, chat, calls, endpoint, store };
 }
+
+test('admin API changes the same running chat budget and enforces account, role and calibration gates', async context => {
+  const fixture = await apiFixture(context, { environment: { VIDEO_CHAT_MONTHLY_BUDGET_USD: '0.10' } });
+  const before = await fixture.adminRequest();
+  assert.equal(before.status, 200);
+  assert.equal(before.body.settings.monthlyBudgetCents, 10);
+  assert.equal(before.headers.get('cache-control'), 'no-store');
+  assert.equal(before.headers.get('x-video-chat-account'), '1');
+  assert.equal((await fixture.adminRequest(undefined, 2)).status, 403);
+  assert.equal((await fixture.adminRequest(undefined, 1, 2)).status, 409);
+  assert.doesNotMatch(JSON.stringify(before.body), /fixture-only|salt|password|partition contains/);
+  const input = { revision: 0, monthlyBudgetCents: 500, paused: false, cacheEnabled: true, sharedCacheEnabled: false, semanticCacheEnabled: false };
+  assert.equal((await fixture.adminRequest(input)).status, 200);
+  assert.equal((await fixture.adminRequest(input)).status, 409);
+  assert.equal((await fixture.adminRequest({ ...input, revision: 1, semanticCacheEnabled: true })).body.code, 'SEMANTIC_NOT_READY');
+  const body = { requestId: crypto.randomUUID(), revision: 1, question: 'What is a partition?', consent: true };
+  assert.equal((await fixture.request('/messages', body)).status, 200);
+  assert.equal(fixture.calls.length, 1);
+  assert.equal((await fixture.adminRequest({ ...input, revision: 1, paused: true })).status, 200);
+  assert.equal((await fixture.request()).body.config.available, false);
+  assert.equal((await fixture.request('/messages', { ...body, requestId: crypto.randomUUID(), revision: 2 })).status, 403);
+  assert.equal((await fixture.adminRequest({ ...input, revision: 2, monthlyBudgetCents: 0 })).status, 200);
+  assert.equal((await fixture.request()).body.config.available, false);
+});
+
+test('configured model preserves deployed pricing and isolates answer caches without changing the default', async context => {
+  const modelName = 'gemini-3.1-flash-lite';
+  const fixture = await apiFixture(context, { environment: { VIDEO_CHAT_MODEL: modelName, VIDEO_CHAT_MONTHLY_BUDGET_USD: '0.20' } });
+  const snapshot = (await fixture.adminRequest()).body;
+  assert.equal(snapshot.capabilities.configured, true);
+  assert.equal(snapshot.capabilities.model, modelName);
+  assert.equal(snapshot.capabilities.maximumGenerationMicros, 263680);
+  assert.equal((await fixture.request()).body.config.model, modelName);
+  const body = { requestId: crypto.randomUUID(), revision: 1, question: 'What is a partition?', consent: true };
+  assert.equal((await fixture.request('/messages', body)).body.code, 'CHAT_BUDGET');
+  assert.equal(fixture.calls.length, 0);
+  assert.equal((await fixture.adminRequest({ revision: 0, monthlyBudgetCents: 30, paused: false,
+    cacheEnabled: false, sharedCacheEnabled: false, semanticCacheEnabled: false })).status, 200);
+  assert.equal((await fixture.request('/messages', body)).status, 200);
+  const transcript = normalizeTranscript(cues);
+  const contextValue = { question: 'Summarize this video.', transcript: transcript.segments };
+  const descriptor = { userId: null, courseId: null, videoId: 'aqz-KE-bpKQ', task: 'summary' };
+  assert.notEqual(answerCacheDescriptor(contextValue, transcript, descriptor).contextHash,
+    answerCacheDescriptor(contextValue, transcript, { ...descriptor, modelName }).contextHash);
+  assert.throws(() => createGeminiProvider('fixture-only', 'constructor'), /Unsupported/);
+});
+
+test('a budget decrease after embedding blocks generation without refunding the lookup', async context => {
+  let fixture;
+  fixture = await cacheFixture(context, { embeddingProvider: { async embed() {
+    const settings = (await fixture.adminRequest()).body.settings;
+    const saved = await fixture.adminRequest({ revision: settings.revision, monthlyBudgetCents: 10, paused: false, cacheEnabled: true, sharedCacheEnabled: true, semanticCacheEnabled: true });
+    assert.equal(saved.status, 200);
+    return { cost: 6, embedding: Array(768).fill(1) };
+  } } });
+  const response = await fixture.request('/messages', fixture.body(1));
+  assert.equal(response.status, 429);
+  assert.equal(response.body.code, 'CHAT_BUDGET');
+  assert.equal(fixture.counts.generate, 0);
+  assert.deepEqual(fixture.db.prepare('SELECT cost_micros, embedding_cost_basis, generation_cost_basis FROM video_chat_usage').get(),
+    { cost_micros: 6, embedding_cost_basis: 'known', generation_cost_basis: 'known' });
+});
+
+test('pausing blocks undispatched generation but preserves a response that was already dispatched', async context => {
+  for (const stage of ['count', 'generate']) {
+    let fixture;
+    let generated = 0;
+    const pause = async () => {
+      const settings = (await fixture.adminRequest()).body.settings;
+      assert.equal((await fixture.adminRequest({ revision: settings.revision, monthlyBudgetCents: 500, paused: true,
+        cacheEnabled: false, sharedCacheEnabled: false, semanticCacheEnabled: false })).status, 200);
+    };
+    fixture = await apiFixture(context, { provider: {
+      async count() { if (stage === 'count') await pause(); return 100; },
+      async generate() { generated++; if (stage === 'generate') await pause(); return { complete: true, cost: 12,
+        text: JSON.stringify({ answer: 'A partition holds data.', supported: true, segmentIds: ['s1'] }) }; },
+    } });
+    const response = await fixture.request('/messages', { requestId: crypto.randomUUID(), revision: 1, question: 'What is a partition?', consent: true });
+    assert.equal(response.status, stage === 'count' ? 403 : 200);
+    assert.equal(generated, stage === 'count' ? 0 : 1);
+    assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, stage === 'count' ? 0 : 12);
+    assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, stage === 'count' ? 0 : 1);
+  }
+});
+
+test('admin mutations are rate limited and commit-time role revocation rolls back settings and audit', async context => {
+  const fixture = await apiFixture(context);
+  const input = { revision: 0, monthlyBudgetCents: 600, paused: false, cacheEnabled: false, sharedCacheEnabled: false, semanticCacheEnabled: false };
+  fixture.store.reserveBudgets = () => 45;
+  const limited = await fixture.adminRequest(input);
+  assert.equal(limited.status, 429);
+  assert.equal(limited.headers.get('retry-after'), '45');
+  assert.equal(fixture.chat.getSettings().revision, 0);
+  const user = fixture.store.getUserById;
+  fixture.store.reserveBudgets = () => { fixture.store.getUserById = id => ({ ...user(id), is_admin: 0 }); return 0; };
+  assert.equal((await fixture.adminRequest(input)).status, 403);
+  assert.equal(fixture.chat.getSettings().revision, 0);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_settings_audit').get().count, 0);
+});
+
+test('disabling shared caching at commit blocks late cache writes and delivery without losing paid answers', async context => {
+  for (const stage of ['write', 'read']) {
+    const fixture = await cacheFixture(context);
+    if (stage === 'read') assert.equal((await fixture.request('/messages', fixture.body(1))).status, 200);
+    const settings = (await fixture.adminRequest()).body.settings;
+    const finish = fixture.chat.finish;
+    fixture.chat.finish = (...args) => {
+      if (args[2]) fixture.chat.saveSettings(1, { revision: settings.revision, monthlyBudgetCents: 500, paused: false,
+        cacheEnabled: true, sharedCacheEnabled: false, semanticCacheEnabled: true }, settings, () => {});
+      return finish(...args);
+    };
+    const userId = stage === 'read' ? 2 : 1;
+    const response = await fixture.request('/messages', fixture.body(userId), userId);
+    assert.equal(response.status, stage === 'write' ? 200 : 409);
+    if (stage === 'read') assert.equal(response.body.code, 'CHAT_SETTINGS_CHANGED');
+    assert.equal(fixture.chat.get(userId, 'course1', 'aqz-KE-bpKQ').messages.length, stage === 'write' ? 1 : 0);
+    assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache').get().count, stage === 'write' ? 0 : 1);
+    assert.equal(fixture.db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 126);
+    assert.equal(fixture.counts.generate, 1);
+  }
+});
 
 test('chat API requires source consent, owns conversations, and replays completed requests without new inference', async context => {
   const { request, calls } = await apiFixture(context);
@@ -307,6 +650,264 @@ test('chat API requires source consent, owns conversations, and replays complete
   assert.equal((await request('/messages', body, 2)).status, 409);
   assert.equal((await request('/transcript', { source: 'upload', text: 'bad', revision: 2 }, 1, 'PUT')).status, 400);
   assert.equal((await request('', { revision: 2 }, 1, 'DELETE')).status, 200);
+});
+
+test('shared exact answers skip all model calls and bind a new message to each permitted learner', async context => {
+  const counts = { count: 0, generate: 0, embed: 0 };
+  const prompts = [];
+  const fixture = await apiFixture(context, {
+    environment: { VIDEO_CHAT_CACHE_ENABLED: '1', VIDEO_CHAT_SHARED_CACHE_ENABLED: '1' },
+    verifyPublicVideo: async videoId => ({ public: true, videoId, title: 'Verified public title' }),
+    provider: { async count(prompt) { counts.count++; prompts.push(JSON.parse(prompt)); return 50; },
+      async generate() { counts.generate++; return { complete: true, cost: 120, text: JSON.stringify({ answer: 'A partition holds data.', supported: true, segmentIds: ['s1'] }) }; } },
+    embeddingProvider: { async embed() { counts.embed++; throw new Error('Unexpected embedding'); } },
+  });
+  const transcript = normalizeTranscript(cues, { source: 'youtube', language: 'en' });
+  fixture.chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 1, true, undefined, true);
+  fixture.chat.saveTranscript(2, 'course1', 'aqz-KE-bpKQ', transcript, 0, false, undefined, true);
+  const firstBody = { requestId: crypto.randomUUID(), question: 'Summarize this video.', playhead: 0, revision: 2, consent: true, cacheConsent: CACHE_CONSENT };
+  const first = await fixture.request('/messages', firstBody);
+  assert.equal(first.status, 200);
+  const secondBody = { ...firstBody, requestId: crypto.randomUUID(), playhead: 50, revision: 1 };
+  const second = await fixture.request('/messages', secondBody, 2);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.message.responseSource, 'cache_exact');
+  assert.deepEqual(counts, { count: 1, generate: 1, embed: 0 });
+  assert.equal(prompts[0].playhead, null);
+  assert.deepEqual(prompts[0].recentConversation, []);
+  assert.equal(prompts[0].videoTitle, 'Verified public title');
+  assert.notEqual(second.body.message.id, first.body.message.id);
+  assert.equal(second.body.message.proposal.id, 'p_' + secondBody.requestId);
+  assert.equal(second.body.message.citations[0].seconds, 0);
+  assert.deepEqual((await fixture.request('/messages', secondBody, 2)).body, second.body);
+  assert.deepEqual(fixture.db.prepare('SELECT user_id, cost_micros FROM video_chat_usage ORDER BY user_id').all(),
+    [{ user_id: 1, cost_micros: 120 }, { user_id: 2, cost_micros: 0 }]);
+  assert.equal(fixture.chat.get(2, 'course1', 'aqz-KE-bpKQ').messages.length, 1);
+});
+
+test('semantic public paraphrases pay embedding only and do not seed transitive shared matches', async context => {
+  let generated = 0;
+  const embedded = [];
+  const fixture = await apiFixture(context, {
+    environment: { VIDEO_CHAT_CACHE_ENABLED: '1', VIDEO_CHAT_SHARED_CACHE_ENABLED: '1', VIDEO_CHAT_SEMANTIC_CACHE_ENABLED: '1',
+      VIDEO_CHAT_SEMANTIC_MIN_SCORE: '0.98', VIDEO_CHAT_SEMANTIC_MIN_MARGIN: '0.03' },
+    verifyPublicVideo: async videoId => ({ public: true, videoId, title: 'Lesson' }),
+    provider: { async count() { return 50; }, async generate() { generated++; return { complete: true, cost: 120,
+      text: JSON.stringify({ answer: 'A partition holds data.', supported: true, segmentIds: ['s1'] }) }; } },
+    embeddingProvider: { async embed(question) { embedded.push(question); return { cost: 6, embedding: Array.from({ length: 768 }, (_, index) => index === 0 ? 1 : 0) }; } },
+  });
+  const transcript = normalizeTranscript(cues, { source: 'youtube', language: 'en' });
+  fixture.chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 1, true, undefined, true);
+  fixture.chat.saveTranscript(2, 'course1', 'aqz-KE-bpKQ', transcript, 0, false, undefined, true);
+  const body = { requestId: crypto.randomUUID(), question: 'Summarize this video.', revision: 2, consent: true, cacheConsent: CACHE_CONSENT };
+  assert.equal((await fixture.request('/messages', body)).status, 200);
+  const paraphrase = { ...body, requestId: crypto.randomUUID(), revision: 1, question: 'Give me an overview of this video.' };
+  const response = await fixture.request('/messages', paraphrase, 2);
+  assert.equal(response.status, 200);
+  assert.equal(response.body.message.question, paraphrase.question);
+  assert.equal(response.body.message.responseSource, 'cache_semantic');
+  assert.equal(generated, 1);
+  assert.deepEqual(embedded, [body.question, paraphrase.question]);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage WHERE request_id = ?').get(paraphrase.requestId).cost_micros, 6);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache').get().count, 1);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage').get().count, 2);
+});
+
+async function cacheFixture(context, overrides = {}) {
+  const counts = { count: 0, generate: 0, embed: 0, verify: 0 };
+  const prompts = [];
+  const fixture = await apiFixture(context, {
+    verifyPublicVideo: async videoId => { counts.verify++; return { public: true, videoId, title: 'Public lesson' }; },
+    provider: { async count(prompt) { counts.count++; prompts.push(JSON.parse(prompt)); return 50; },
+      async generate() { counts.generate++; return { complete: true, cost: 120, text: JSON.stringify({ answer: 'A partition holds data.', supported: true, segmentIds: ['s1'] }) }; } },
+    embeddingProvider: { async embed() { counts.embed++; return { cost: 6, embedding: Array.from({ length: 768 }, (_, index) => index === 0 ? 1 : 0) }; } },
+    ...overrides,
+    environment: { VIDEO_CHAT_CACHE_ENABLED: '1', VIDEO_CHAT_SHARED_CACHE_ENABLED: '1', VIDEO_CHAT_SEMANTIC_CACHE_ENABLED: '1',
+      VIDEO_CHAT_SEMANTIC_MIN_SCORE: '0.98', VIDEO_CHAT_SEMANTIC_MIN_MARGIN: '0.03', ...overrides.environment },
+  });
+  const transcript = normalizeTranscript(cues, { source: 'youtube', language: 'en' });
+  fixture.chat.saveTranscript(1, 'course1', 'aqz-KE-bpKQ', transcript, 1, true, undefined, true);
+  fixture.chat.saveTranscript(2, 'course1', 'aqz-KE-bpKQ', transcript, 0, false, undefined, true);
+  const body = (userId, question = 'Summarize this video.') => ({ requestId: crypto.randomUUID(), question, playhead: 0, consent: true,
+    cacheConsent: CACHE_CONSENT, revision: fixture.chat.get(userId, 'course1', 'aqz-KE-bpKQ').revision });
+  return { ...fixture, counts, prompts, transcript, body };
+}
+
+test('shared cache excludes imported sources, old consent, private metadata and contextual follow-ups', async context => {
+  for (const scenario of ['imported', 'old-client', 'private-video', 'history', 'personalized']) {
+    const fixture = await cacheFixture(context, scenario === 'private-video' ? { verifyPublicVideo: async () => null } : {});
+    assert.equal((await fixture.request('/messages', fixture.body(1))).status, 200);
+    if (scenario === 'imported') fixture.chat.restore(2, fixture.chat.exportRecords(2));
+    if (scenario === 'history') {
+      const requestId = crypto.randomUUID();
+      fixture.chat.reserve({ userId: 2, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId, fingerprint: 'history', revision: 1, maximumCost: 0, budgetMicros: 5000000 });
+      fixture.chat.finish(requestId, 0, { id: requestId, question: 'My private project', answer: 'Earlier response', supported: true, citations: [{ id: 's1' }], createdAt: new Date().toISOString() });
+    }
+    const body = fixture.body(2, scenario === 'personalized' ? 'Summarize this video for my private project.' : 'Summarize this video.');
+    if (scenario === 'old-client') delete body.cacheConsent;
+    const result = await fixture.request('/messages', body, 2);
+    assert.equal(result.status, 200, scenario);
+    assert.equal(result.body.message.responseSource, 'generated', scenario);
+    assert.equal(fixture.counts.generate, 2, scenario);
+    const sharedRows = fixture.db.prepare('SELECT question, answer_json FROM video_chat_answer_cache WHERE user_id IS NULL').all();
+    assert.doesNotMatch(JSON.stringify(sharedRows), /private project|Earlier response/);
+    if (scenario === 'history') assert.equal(fixture.prompts[1].recentConversation.length, 1);
+    if (scenario === 'private-video') assert.equal(sharedRows.length, 0);
+  }
+});
+
+test('private exact cache respects ownership and the full playback and conversation context', async context => {
+  const fixture = await cacheFixture(context, { environment: { VIDEO_CHAT_SHARED_CACHE_ENABLED: '0', VIDEO_CHAT_SEMANTIC_CACHE_ENABLED: '0' } });
+  const first = await fixture.request('/messages', fixture.body(1, 'What is a partition?'));
+  assert.equal(first.status, 200);
+  const next = fixture.chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', first.body.revision, crypto.randomUUID());
+  const body = { ...fixture.body(1, 'What is a partition?'), conversationId: next.conversationId };
+  const hit = await fixture.request('/messages', body);
+  assert.equal(hit.body.message.responseSource, 'cache_exact');
+  assert.equal(fixture.counts.generate, 1);
+  const other = await fixture.request('/messages', fixture.body(2, 'What is a partition?'), 2);
+  assert.equal(other.body.message.responseSource, 'generated');
+  const changed = fixture.chat.createConversation(1, 'course1', 'aqz-KE-bpKQ', hit.body.revision, crypto.randomUUID());
+  assert.equal((await fixture.request('/messages', { ...fixture.body(1, 'What is a partition?'), conversationId: changed.conversationId, playhead: 20 })).body.message.responseSource, 'generated');
+  assert.equal(fixture.counts.generate, 3);
+});
+
+test('exact hits work at exhausted monthly budget but still consume the minute request allowance', async context => {
+  const fixture = await cacheFixture(context);
+  assert.equal((await fixture.request('/messages', fixture.body(1))).status, 200);
+  fixture.db.prepare('UPDATE video_chat_usage SET cost_micros = 6000000').run();
+  for (let index = 0; index < 5; index++) {
+    const result = await fixture.request('/messages', fixture.body(2), 2);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.message.responseSource, 'cache_exact');
+    fixture.chat.clear(2, 'course1', 'aqz-KE-bpKQ', result.body.revision);
+  }
+  const limited = await fixture.request('/messages', fixture.body(2), 2);
+  assert.equal(limited.status, 429);
+  assert.equal(limited.body.code, 'RATE_LIMITED');
+  assert.equal(fixture.counts.generate, 1);
+  assert.equal(fixture.counts.embed, 1);
+  assert.equal(fixture.db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 6000000);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage WHERE user_id = 2').get().count, 5);
+});
+
+test('corrupt and expired cache entries generate fresh answers and cache-only failure cannot lose a committed answer', async context => {
+  for (const scenario of ['corrupt', 'expired', 'write-failure']) {
+    const fixture = await cacheFixture(context, { environment: { VIDEO_CHAT_SEMANTIC_CACHE_ENABLED: '0' },
+      ...(scenario === 'write-failure' ? { observe() { throw new Error('Fixture telemetry unavailable'); } } : {}) });
+    if (scenario === 'write-failure') {
+      fixture.db.exec("CREATE TRIGGER reject_cache BEFORE INSERT ON video_chat_answer_cache BEGIN SELECT RAISE(ABORT, 'Fixture cache failure'); END");
+      const body = fixture.body(1);
+      const result = await fixture.request('/messages', body);
+      assert.equal(result.status, 200);
+      assert.deepEqual((await fixture.request('/messages', body)).body, result.body);
+      assert.equal(fixture.counts.generate, 1);
+      assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 1);
+      assert.equal(fixture.db.prepare('SELECT state FROM video_chat_usage').get().state, 'completed');
+      continue;
+    }
+    assert.equal((await fixture.request('/messages', fixture.body(1))).status, 200);
+    if (scenario === 'corrupt') fixture.db.prepare('UPDATE video_chat_answer_cache SET answer_json = ?').run(JSON.stringify({ answer: 'Invalid', supported: true, segmentIds: ['s9999'] }));
+    else fixture.db.prepare('UPDATE video_chat_answer_cache SET created_at = ?, expires_at = ?').run(Date.now() - 20000, Date.now() - 10000);
+    const result = await fixture.request('/messages', fixture.body(2), 2);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.message.responseSource, 'generated');
+    assert.equal(fixture.counts.generate, 2);
+    assert.equal(JSON.parse(fixture.db.prepare('SELECT answer_json FROM video_chat_answer_cache').get().answer_json).answer, 'A partition holds data.');
+  }
+});
+
+test('embedding failures and invalid vectors fall back once while retaining known or unknown lookup cost', async context => {
+  for (const scenario of ['unknown', 'known', 'invalid']) {
+    const fixture = await cacheFixture(context, { embeddingProvider: { async embed() {
+      if (scenario === 'invalid') return { cost: 6, embedding: [1] };
+      throw Object.assign(new Error('Fixture embedding unavailable'), scenario === 'known' ? { embeddingCost: 4 } : {});
+    } } });
+    const result = await fixture.request('/messages', fixture.body(1));
+    assert.equal(result.status, 200);
+    assert.equal(fixture.counts.generate, 1);
+    const expected = scenario === 'unknown' ? MAXIMUM_EMBEDDING_COST : scenario === 'known' ? 4 : 6;
+    assert.deepEqual(fixture.db.prepare('SELECT cost_micros, embedding_cost_micros FROM video_chat_usage').get(),
+      { cost_micros: 120 + expected, embedding_cost_micros: expected });
+    assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage').get().count, 1);
+  }
+});
+
+test('lookup budget rejection settles embedding only and NDJSON clients keep the question without an interrupted answer', async context => {
+  const fixture = await cacheFixture(context, { environment: { VIDEO_CHAT_MONTHLY_BUDGET_USD: '0.10' } });
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 1 }), getTime: () => 0,
+    notesOpen: () => false, setNotesOpen() {}, onOpen() {}, formatTime: String, showError() {},
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '1' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  await controller.load();
+  find('#chatQuestion').value = 'Summarize this video.';
+  await controller.ask();
+  assert.equal(find('#chatQuestion').value, 'Summarize this video.');
+  assert.equal(controller.needsReload, false);
+  assert.equal(controller.provisional, null);
+  assert.match(find('#chatError').textContent, /similarity lookup may still incur a charge/);
+  assert.deepEqual(fixture.counts, { count: 0, generate: 0, embed: 1, verify: 1 });
+  assert.deepEqual(fixture.db.prepare('SELECT cost_micros, state FROM video_chat_usage').get(), { cost_micros: 6, state: 'failed' });
+});
+
+test('an immediate cached NDJSON final reaches the real controller and yields a fresh validated note preview', async context => {
+  const fixture = await cacheFixture(context);
+  const first = await fixture.request('/messages', fixture.body(1));
+  assert.equal(first.status, 200);
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 2 }), getTime: () => 42,
+    notesOpen: () => false, setNotesOpen() {}, onOpen() {}, formatTime: String, showError() {},
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '2' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  await controller.load();
+  find('#chatQuestion').value = 'Summarize this video.';
+  await controller.ask();
+  assert.equal(controller.data.messages.length, 1);
+  const message = controller.data.messages[0];
+  assert.equal(message.responseSource, 'cache_exact');
+  assert.notEqual(message.id, first.body.message.id);
+  assert.equal(controller.provisional, null);
+  assert.equal(controller.needsReload, false);
+  assert.equal(find('#chatQuestion').value, '');
+  assert.equal(fixture.counts.generate, 1);
+  assert.equal(fixture.counts.embed, 1);
+  const checked = await fixture.request('/notes/validate', { conversationId: controller.data.conversationId,
+    sourceHash: fixture.transcript.hash, generation: controller.data.generation, proposalId: message.proposal.id,
+    texts: message.proposal.blocks.map(block => block.text), document: require('../public/notebook-model').empty(), noteRevision: 0 }, 2);
+  assert.equal(checked.status, 200);
+  assert.equal(checked.body.proposal.id, message.proposal.id);
+  assert.equal(checked.body.proposal.blocks[0].seconds, 0);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_notes').get().count, 0);
+});
+
+test('canceling an embedding cannot generate, cache or commit a late result', async context => {
+  let release;
+  const fixture = await cacheFixture(context, { timeoutMs: 40, embeddingProvider: { embed() { return new Promise(resolve => { release = resolve; }); } } });
+  const result = await fixture.request('/messages', fixture.body(1));
+  assert.equal(result.status, 504);
+  assert.equal(result.body.attempt.generationDispatched, false);
+  assert.equal(result.body.attempt.embeddingDispatched, true);
+  assert.equal(result.body.attempt.settled, true);
+  assert.equal(fixture.counts.generate, 0);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, MAXIMUM_EMBEDDING_COST);
+  release({ cost: 1, embedding: Array(768).fill(1) });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_answer_cache').get().count, 0);
+});
+
+test('cache configuration is opt-in and semantic matching requires explicit valid calibration settings', async context => {
+  const defaults = await apiFixture(context);
+  assert.deepEqual((await defaults.request()).body.config.cache, { enabled: false, shared: false, semantic: false, consentVersion: CACHE_CONSENT });
+  for (const value of [undefined, '', 'NaN', '0', '1.1', 'Infinity']) {
+    const fixture = await cacheFixture(context, { environment: { VIDEO_CHAT_SEMANTIC_MIN_SCORE: value } });
+    assert.equal((await fixture.request()).body.config.cache.semantic, false);
+    assert.equal((await fixture.request('/messages', fixture.body(1))).status, 200);
+    assert.equal(fixture.counts.embed, 0);
+  }
+  const disabled = await cacheFixture(context, { environment: { VIDEO_CHAT_CACHE_ENABLED: '0' } });
+  assert.deepEqual((await disabled.request()).body.config.cache, { enabled: false, shared: false, semantic: false, consentVersion: CACHE_CONSENT });
 });
 
 test('conversation HTTP actions isolate histories, bind replies and reject other-account IDs', async context => {
@@ -388,6 +989,48 @@ test('independent SQLite workers allow only one active conversation for an accou
   })));
   assert.deepEqual(outcomes.sort(), ['CHAT_BUSY', 'reserved']);
   assert.equal(db.prepare("SELECT COUNT(*) AS count FROM video_chat_usage WHERE state = 'pending'").get().count, 1);
+});
+
+test('independent SQLite workers cannot over-reserve monthly headroom during cache-miss top-ups', async context => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const { Worker } = require('node:worker_threads');
+  const directory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'focustube-cache-cost-race-'));
+  const filename = path.join(directory, 'chat.db');
+  const db = new Database(filename);
+  context.after(() => { db.close(); fs.rmSync(directory, { recursive: true, force: true }); });
+  db.pragma('journal_mode = WAL');
+  db.exec('CREATE TABLE users (id INTEGER PRIMARY KEY); CREATE TABLE user_data (user_id INTEGER PRIMARY KEY); INSERT INTO users VALUES (1), (2); INSERT INTO user_data VALUES (1), (2);');
+  const chat = createChatStore(db);
+  const requests = [1, 2].map(userId => {
+    chat.saveTranscript(userId, 'course1', 'aqz-KE-bpKQ', normalizeTranscript(cues), 0, false);
+    const requestId = crypto.randomUUID();
+    chat.reserve({ userId, courseId: 'course1', videoId: 'aqz-KE-bpKQ', requestId, fingerprint: String(userId), revision: 1, maximumCost: 0, budgetMicros: 100 });
+    chat.reserveCost(requestId, 'embedding', 5, 100);
+    chat.settleEmbedding(requestId, 3);
+    return requestId;
+  });
+  const code = `
+    const { parentPort, workerData } = require('node:worker_threads');
+    const Database = require(workerData.databaseModule);
+    const db = new Database(workerData.filename, { timeout: 5000 });
+    try {
+      const chat = require(workerData.storeModule).createChatStore(db);
+      chat.reserveCost(workerData.requestId, 'generation', 70, 100);
+      parentPort.postMessage('reserved');
+    } catch (error) { parentPort.postMessage(error.code); }
+    finally { db.close(); }
+  `;
+  const outcomes = await Promise.all(requests.map(requestId => new Promise((resolve, reject) => {
+    const worker = new Worker(code, { eval: true, workerData: { filename, requestId, databaseModule: require.resolve('better-sqlite3'), storeModule: require.resolve('../video-chat-store') } });
+    let outcome;
+    worker.once('message', value => { outcome = value; });
+    worker.once('error', reject);
+    worker.once('exit', exitCode => exitCode === 0 ? resolve(outcome) : reject(new Error('Cache cost worker exited unsuccessfully.')));
+  })));
+  assert.deepEqual(outcomes.sort(), ['CHAT_BUDGET', 'reserved']);
+  assert.equal(db.prepare('SELECT SUM(cost_micros) AS cost FROM video_chat_usage').get().cost, 76);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage').get().count, 2);
 });
 
 test('disabled chat and excessive context make no generation calls; invalid model citations are not saved', async context => {
@@ -506,7 +1149,7 @@ test('stream timeout settles unknown usage, ends the response and never commits 
   assert.ok(events.some(event => event.type === 'heartbeat'));
   finish({ complete: true, cost: 1, text: '{}' });
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 105268);
 });
 
 test('NDJSON writer waits for drain, aborts blocked writes and bounds records', async () => {
@@ -557,7 +1200,7 @@ test('disconnecting a stream cancels dispatched work and retains its unknown res
   await aborted;
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 105268);
   assert.equal(fixture.db.prepare('SELECT state FROM video_chat_usage').get().state, 'failed');
 });
 
@@ -671,16 +1314,17 @@ test('cancellation keeps the unknown charge and never stores an interrupted answ
   assert.equal((await fixture.request('/cancel', { requestId })).status, 204);
   assert.equal((await answer).status, 502);
   assert.equal(fixture.chat.get(1, 'course1', 'aqz-KE-bpKQ').messages.length, 0);
-  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 263680);
+  assert.equal(fixture.db.prepare('SELECT cost_micros FROM video_chat_usage').get().cost_micros, 105268);
 });
 
-test('the official Gemini adapter uses the supported model, minimal thinking and current token prices', async () => {
+test('the official Gemini adapter uses model-specific thinking and current token prices', async () => {
   const original = global.fetch;
   const requests = [];
+  let modelName;
   global.fetch = async (url, options) => {
     requests.push({ url: String(url), body: JSON.parse(options.body) });
     assert.match(String(url), /^https:\/\/generativelanguage.googleapis.com\//);
-    assert.match(String(url), /models\/gemini-3\.1-flash-lite:/);
+    assert.ok(String(url).includes(`/models/${modelName}:`));
     const body = String(url).includes('countTokens') ? { totalTokens: 100 } : {
       candidates: [{ finishReason: 'STOP', content: { role: 'model', parts: [{ text: '{"answer":"Answer","supported":true,"segmentIds":["s1"]}' }] } }],
       usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20, thoughtsTokenCount: 10 },
@@ -691,17 +1335,93 @@ test('the official Gemini adapter uses the supported model, minimal thinking and
     });
   };
   try {
-    const provider = createGeminiProvider('fixture-key-never-sent');
+    for (const [selectedModel, cost, thinking] of [['gemini-2.5-flash-lite', 22, { thinkingBudget: 0 }],
+      ['gemini-3.1-flash-lite', 70, { thinkingLevel: 'MINIMAL' }]]) {
+    modelName = selectedModel;
+    requests.length = 0;
+    const provider = createGeminiProvider('fixture-key-never-sent', modelName);
     assert.equal(await provider.count('Transcript', new AbortController().signal), 612);
     const result = await provider.generate('Transcript', new AbortController().signal);
     assert.equal(result.complete, true);
-    assert.equal(result.cost, 70);
+    assert.equal(result.cost, cost);
     assert.match(requests[1].url, /streamGenerateContent/);
-    assert.equal(requests[1].body.generationConfig.thinkingConfig.thinkingLevel, 'MINIMAL');
+    assert.deepEqual(requests[1].body.generationConfig.thinkingConfig, thinking);
     assert.equal(requests[1].body.generationConfig.maxOutputTokens, 1024);
     assert.equal(requests[1].body.tools, undefined);
     assert.match(requests[1].body.systemInstruction.parts[0].text, /untrusted data/);
+    }
   } finally { global.fetch = original; }
+});
+
+test('shared-source verification requires positive public metadata, not caption access or an imported label', () => {
+  const videoId = 'aqz-KE-bpKQ';
+  const player = { playabilityStatus: { status: 'OK' }, videoDetails: { videoId, title: 'Public lesson', isPrivate: false, isCrawlable: true },
+    microformat: { playerMicroformatRenderer: { isUnlisted: false } } };
+  assert.deepEqual(publicVideoMetadata(player, videoId), { public: true, videoId, title: 'Public lesson' });
+  for (const variant of [null, {}, { ...player, playabilityStatus: { status: 'LOGIN_REQUIRED' } },
+    { ...player, videoDetails: { ...player.videoDetails, isPrivate: true } },
+    { ...player, videoDetails: { ...player.videoDetails, isCrawlable: false } },
+    { ...player, videoDetails: { ...player.videoDetails, videoId: 'jNQXAC9IVRw' } },
+    { ...player, microformat: {} }, { ...player, microformat: { playerMicroformatRenderer: { isUnlisted: true } } }]) {
+    assert.equal(publicVideoMetadata(variant, videoId), null);
+  }
+});
+
+test('embedding adapter meters real SDK response bytes without generation or retries', async () => {
+  const original = global.fetch;
+  const requests = [];
+  const values = Array.from({ length: 768 }, (_, index) => index === 0 ? 2 : 0);
+  let responseBody = { embeddings: [{ values }], usageMetadata: { promptTokenCount: 30 } };
+  let status = 200;
+  global.fetch = async (url, options) => {
+    requests.push({ url: String(url), body: JSON.parse(options.body) });
+    return new Response(JSON.stringify(responseBody), { status, headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    const provider = createGeminiEmbeddingProvider('fixture-only');
+    const result = await provider.embed('Summarize this video.', new AbortController().signal);
+    assert.equal(result.cost, 6);
+    assert.equal(result.embedding.length, 768);
+    assert.equal(result.embedding[0], 1);
+    assert.match(requests[0].url, /models\/gemini-embedding-2:batchEmbedContents$/);
+    assert.equal(requests[0].body.requests.length, 1);
+    assert.equal(requests[0].body.requests[0].outputDimensionality, 768);
+    assert.equal(requests[0].body.requests[0].taskType, undefined);
+    assert.match(requests[0].body.requests[0].content.parts[0].text, /^task: sentence similarity \| query: Summarize/);
+    responseBody = { embeddings: [{ values }] };
+    assert.equal((await provider.embed('Question', new AbortController().signal)).cost, null);
+    responseBody = { embeddings: [{ values: [1] }], usageMetadata: { promptTokenCount: 20 } };
+    await assert.rejects(provider.embed('Question', new AbortController().signal), error => error.code === 'INVALID_EMBEDDING' && error.embeddingCost === 4);
+    status = 503;
+    responseBody = { error: { code: 503, message: 'Fixture unavailable' } };
+    const before = requests.length;
+    await assert.rejects(provider.embed('Question', new AbortController().signal));
+    assert.equal(requests.length, before + 1);
+  } finally { global.fetch = original; }
+});
+
+test('cache keys bind effective context and semantic matching rejects constraints and ambiguous vectors', () => {
+  const transcript = normalizeTranscript(cues);
+  const context = buildContext({ transcript, messages: [] }, { scope: 'video', mode: 'answer', playhead: 0, question: 'Summarize this video.', videoTitle: 'Lesson' });
+  const identity = { userId: 1, courseId: 'course1', videoId: 'aqz-KE-bpKQ', task: 'summary' };
+  const key = answerCacheDescriptor(context, transcript, identity);
+  assert.equal(answerCacheDescriptor({ ...context }, transcript, identity).key, key.key);
+  for (const changed of [{ playhead: 1 }, { videoTitle: 'Edited' }, { scope: 'moment' }, { recentConversation: [{ answer: 'Private' }] }, { question: 'Other' }]) {
+    assert.notEqual(answerCacheDescriptor({ ...context, ...changed }, transcript, identity).key, key.key);
+  }
+  assert.notEqual(answerCacheDescriptor(context, transcript, { ...identity, userId: 2 }).key, key.key);
+  assert.equal(commonQuestionTask('Give me an overview of this video.'), 'summary');
+  assert.equal(canonicalQuestionTask('Give me an overview of this video.'), null);
+  for (const question of ['Do not summarize this video.', 'Summarize minute 2.', 'Summarize this video in Hindi.', 'Summarize this video in three bullets.', 'Summarize my previous answer.', 'Summarize this video for my exam.']) {
+    assert.equal(commonQuestionTask(question), null, question);
+  }
+  const vector = Array.from({ length: 768 }, (_, index) => index === 0 ? 1 : 0);
+  const candidate = { key: 'one', task: 'summary', question: 'Summarize this video.', expiresAt: Date.now() + 60000, embedding: vector };
+  assert.equal(selectSemanticAnswer(vector, [candidate], 'summary', 0.98, 0.03).key, 'one');
+  assert.equal(selectSemanticAnswer(vector, [candidate, { ...candidate, key: 'two' }], 'summary', 0.98, 0.03), null);
+  assert.equal(selectSemanticAnswer(vector, [candidate], 'ideas', 0.98, 0.03), null);
+  assert.equal(selectSemanticAnswer(vector, [{ ...candidate, expiresAt: 0 }], 'summary', 0.98, 0.03), null);
+  for (const invalid of [[], [1], Array(768), Array(768).fill(0), [NaN, ...vector.slice(1)]]) assert.throws(() => normalizeEmbedding(invalid));
 });
 
 test('Gemini emits parsed answer text before provider completion, including split escapes', async () => {
@@ -735,7 +1455,7 @@ test('Gemini emits parsed answer text before provider completion, including spli
     assert.equal(events.join(''), 'First \u00e9\nlast');
     assert.equal(JSON.parse(result.text).answer, events.join(''));
     assert.equal(result.complete, true);
-    assert.equal(result.cost, 13);
+    assert.equal(result.cost, 4);
   } finally { global.fetch = original; }
 });
 
@@ -747,7 +1467,7 @@ test('Gemini rejects malformed, truncated and oversized structured streams witho
         usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 10 } })}\n\n`, { headers: { 'content-type': 'text/event-stream' } });
       await assert.rejects(createGeminiProvider('fixture-only').generate('fixture', new AbortController().signal), error => {
         assert.ok(['INCOMPLETE_ANSWER', 'INVALID_ANSWER', 'ANSWER_TOO_LARGE'].includes(error.code));
-        assert.equal(error.chatCost, 40);
+        assert.equal(error.chatCost, 14);
         return true;
       });
     }
@@ -903,6 +1623,24 @@ test('first question prepares available captions after one permission prompt and
   assert.equal(fixture.calls[1].recentConversation.length, 1);
   assert.equal(find('#chatMessages').children.some(element => element.id === 'chatStarters'), false);
   assert.equal(find('#chatFollowUps').children.length, 2);
+});
+
+test('budget rejection preserves the question without an interrupted assistant response', async context => {
+  const fixture = await apiFixture(context, { environment: { VIDEO_CHAT_MONTHLY_BUDGET_USD: '0.10' } });
+  const { controller, find } = clientFixture({ getUser: () => ({ id: 1 }), getTime: () => 0,
+    notesOpen: () => false, setNotesOpen() {}, onOpen() {}, formatTime: String, showError() {},
+    fetch: (url, options) => fetch(url.replace('/api/video-chat/course1/videos/aqz-KE-bpKQ', fixture.endpoint), { ...options, headers: { ...options.headers, 'x-test-user': '1' } }),
+  });
+  controller.showVideo('course1', 'aqz-KE-bpKQ', 'Lesson');
+  await controller.load();
+  find('#chatQuestion').value = 'Keep my question';
+  await controller.ask();
+  assert.equal(find('#chatQuestion').value, 'Keep my question');
+  assert.equal(fixture.calls.length, 0);
+  assert.equal(fixture.db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage').get().count, 0);
+  assert.equal(controller.needsReload, false);
+  assert.equal(controller.provisional, null);
+  assert.match(find('#chatError').textContent, /monthly video chat budget/);
 });
 
 test('caption retrieval failure keeps the question and never dispatches generation or suggests an upload', async context => {

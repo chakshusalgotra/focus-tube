@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FocusTube Walkthroughs</title>
+  <style>
+    :root { color-scheme: dark; --background: #141c1a; --text: #f5f9f7; --muted: #b4c5bd; --accent: #83d5b9; --line: #34463e; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--background); color: var(--text); font: 16px/1.5 "Avenir Next", "Helvetica Neue", sans-serif; letter-spacing: 0; }
+    main { max-width: 1520px; margin: auto; padding: 28px 24px 48px; }
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid var(--line); }
+    h1 { margin: 0; font-size: 30px; font-weight: 600; }
+    nav, .files { display: flex; gap: 20px; flex-wrap: wrap; }
+    a { color: var(--accent); text-underline-offset: 4px; }
+    a:focus-visible, video:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+    section { padding-top: 26px; scroll-margin-top: 20px; }
+    h2 { margin: 0 0 4px; font-size: 22px; font-weight: 500; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #0b100e; border: 1px solid var(--line); border-radius: 4px; }
+    .files { padding-top: 12px; }
+    footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+    @media (max-width: 600px) { main { padding: 20px 12px 32px; } h1 { font-size: 26px; } h2 { font-size: 20px; } nav a, .files a { min-height: 44px; display: inline-flex; align-items: center; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header><h1>FocusTube Walkthroughs</h1><nav aria-label="Videos"><a href="#features">Feature tour</a><a href="#architecture">Architecture</a></nav></header>
+    <section id="features" aria-labelledby="features-title">
+      <h2 id="features-title">Feature Tour</h2>
+      <p>10:03 | 19 chapters | 1080p motion edition</p>
+      <video controls playsinline preload="metadata" aria-label="FocusTube feature tour" src="focustube-feature-tour-motion.mp4"></video>
+      <div class="files"><a href="focustube-feature-tour-motion.mp4" download>Download MP4</a><a href="focustube-feature-tour-motion.srt" download>English subtitles</a></div>
+    </section>
+    <section id="architecture" aria-labelledby="architecture-title">
+      <h2 id="architecture-title">Architecture and Design Choices</h2>
+      <p>7:42 | 12 chapters | Archify motion edition</p>
+      <video controls playsinline preload="metadata" aria-label="FocusTube architecture and design choices" src="focustube-architecture-motion.mp4"></video>
+      <div class="files"><a href="focustube-architecture-motion.mp4" download>Download MP4</a><a href="focustube-architecture-motion.srt" download>English subtitles</a><a href="architecture.html">Interactive architecture</a></div>
+    </section>
+    <footer>Sample data. Simulated external services. English synthetic narration. Release baseline: 15add2a. Not published to Loom.</footer>
+  </main>
+  <script>
+    for (const current of document.querySelectorAll('video')) current.addEventListener('play', () => {
+      for (const other of document.querySelectorAll('video')) if (other !== current) other.pause();
+    });
+  </script>
+</body>
+</html>

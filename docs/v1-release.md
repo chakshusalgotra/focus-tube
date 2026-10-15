@@ -6,6 +6,39 @@ Updated **2026-09-26**. This is the canonical contract and evidence register for
 
 Setup details live in [README.md](../README.md#video-chat), the current invitation rules in [invite-only-auth-spec.md](invite-only-auth-spec.md#17-member-invitation-lifecycle-v1), and user-facing disclosures in [public/policies.html](../public/policies.html). Keep verification changes in this register rather than creating parallel release plans.
 
+## Publication Candidate: 2026-10-15
+
+Branch: `feature/video-chat-cache-budget-and-walkthroughs`, targeting `dev`. This is a **draft review of the latest local changes**, not approval to merge or deploy. The tested local rollout below and the recorded walkthroughs describe different snapshots; neither certifies the eventual merge with current `dev`.
+
+Included scope:
+
+- Persistent exact/semantic answer caching, public-source verification, consent and context isolation, staged cost accounting, model-specific pricing, administrator budget/cache controls, guarded API/UI integration, configuration examples and runtime packaging.
+- API, monitoring, privacy and rollout documentation, plus the [original and motion-enhanced walkthroughs](videos/README.md), captions, chapter metadata, camera plans, diagrams and verification receipts. These use synthetic accounts and simulated providers; they do not demonstrate the newer cache/admin-budget interface or prove live provider quality.
+- Previously pending deployment-workflow, timeline and regression-test changes. Private environment files, SSH material, local extension ZIPs and the private provider-test script are excluded from Git and Docker contexts. The source remains unpublished to hosted environments until a separate merge/deployment action.
+
+Publication verification on 2026-10-15: **318/318 tests passed with zero failures or skips** from the staged snapshot in an isolated, network-disabled container. The 68-file publication set passed credential/path screening and JavaScript/JSON checks; hashes and sizes for all four original/motion MP4s match their production receipts. Edited documentation links passed. `npm run docs:check` remains blocked by stale evidence, first reported for the deployment workflow. These results do not cover a merge with the newer quota implementation or replace the pending removed regressions.
+
+Before this draft can merge:
+
+1. Reconcile the changes with `dev` commit `6f555d092c4f91ef160072d7b45a65ff3d2c70c5`, which already contains PR #19's 30-request/six-hour quota and active-member access. This branch's local cache/budget implementation was built on `40bf96f` and still uses 20 requests per UTC day and pilot eligibility. Preserve the newer policy, update the admin's read-only quota display and tests, and rerun the complete suite after integration. Do not treat a clean test run on this older base as merge compatibility.
+2. Review or restore the pending removals of workspace account-isolation/foreground-refresh tests, monitoring/analytics privacy and stale-response tests, and generated-timeline synchronization coverage. Passing the remaining suite does not replace those deleted checks. The shortened timeline is also pending review.
+3. Validate the deployment host before accepting the workflow change that removes the explicit `DOCKER_CONFIG` override. The earlier noninteractive Windows/WSL credential-helper issue is documented; this publication does not verify that the default Docker configuration now works. Compose/example changes also need review against the intended hosted model, eligibility and budget configuration.
+4. Update the architecture atlas source/artifact evidence and pass `npm run docs:check`. The existing stale receipts remain unresolved; no unreviewed evidence refresh is implied. Real semantic calibration and any paid/provider activation remain separately authorized gates.
+
+Creating this branch and PR does not restart port 3002, alter its stored limits, enable caching or analytics, send emails, call Gemini, or change hosted environments. Preserve an appropriate stopped-writer backup and the current runtime settings for any later deployment.
+
+## Local Integration And Budget Rollout: 2026-10-11
+
+The repaired application and **Monitoring > Video Chat** budget controls are deployed to **http://localhost:3002** and **http://127.0.0.1:3002**. Reload existing tabs after preserving unsaved work. This supersedes the broken 2026-10-10 disposable preview; it is not a hosted deployment or Git publication.
+
+- Image: `focustube-integration-check:20261011`, SHA-256 `d34d0500dfc805615000b964668fec852283ff60ab3e61f309a702701443e59e`. All 34 runtime/package hashes match the frozen candidate; dependencies were unchanged.
+- Restored the committed frontend navigation, account/settings, signup, invitations, chat and notebook integrations in the original `Local-course` workspace. The budget controller now shares the existing monitoring lifecycle rather than installing duplicate tabs, charts or settings handlers. Budget typography honors the shared text-scale setting.
+- Full exact-image suite: **318 passed, 0 failed, 0 skipped**. All 63 previously failing integration tests now pass. Native Chrome passed 13 checks, including navigation, actual account/course/note persistence, scripted chat, cache/pause controls, dirty-close/conflicting edits, member denial and responsive light/dark layouts. No live user credentials, real emails, captions or Gemini calls were used for those checks.
+- Preserved the live private environment, data/log volumes and loopback ports. Gemini **3.1 Flash-Lite**, its pricing/reservation, the **USD 1 monthly cap**, existing account allowance and disabled analytics remain unchanged. Source default 2.5 is still supported separately; no unverified model switch or automatic fallback was performed. Cache flags remain disabled until an administrator enables them; semantic calibration remains a separate gate.
+- Rehearsed the additive migration on a private immutable copy, then stopped the old writer and took `/app/data/backups/before-admin-budget-cutover-1791706380540.db` with owner-only permissions. Before starting the replacement, integrity/FK checks and per-table digests preserved all **28 original tables**, including accounts/credentials, active sessions, learning data, notes, conversations, spending and invitations. Existing startup expiry cleanup was accounted for only on the relevant operational records. No preview data or dummy accounts were imported.
+- Live health passed on both hostnames; six public assets per hostname matched the candidate. Account/admin endpoints enforce authentication, and foreign-origin budget mutations are rejected. New settings inherit the existing environment defaults and do not reset spending. Private rollout receipt: `/tmp/focustube-admin-budget-release-location-20261011.json`; do not rerun the old-container deployment helper after success or restore an older database over newer writes.
+- The architecture-atlas source receipts remain stale. This rollout does not claim refreshed diagrams, a new dependency/image vulnerability scan, physical-device or assistive-technology certification, hosted readiness, or a new live-provider connectivity/quality evaluation. Unrelated workspace edits and video artifacts were preserved.
+
 ## Local Onboarding Rollout: 2026-09-28
 
 The accepted signup changes are deployed to **http://localhost:3002** and **http://127.0.0.1:3002**. Reload an existing tab when its drafts are safe. This is a local Docker rollout, not a Git commit, Development promotion, or hosted deployment.

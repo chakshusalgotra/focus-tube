@@ -1301,6 +1301,25 @@ input[type="range"]::-moz-range-thumb {
 #analyticsModal p, .analytics-privacy p { font-size: calc(13px * var(--text-scale)); overflow-wrap: anywhere; }
 #analyticsError:empty { display: none; }
 .monitoring-modal { width: 100%; max-width: 1080px; text-align: left; }
+.monitoring-summary.chat-budget-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.monitoring-summary.chat-budget-summary strong { font-size: calc(18px * var(--text-scale)); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.chat-admin-columns { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 28px; margin-block: 24px; }
+.chat-admin-form { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.chat-admin-form > label { font-size: calc(13px * var(--text-scale)); }
+.chat-admin-form > input { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--control-border); border-radius: 4px; padding: 10px; font: inherit; background: var(--panel2); color: var(--text); }
+.chat-admin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; border-bottom: 1px solid var(--border); }
+.chat-admin-toggle small { display: block; color: var(--muted); font-size: calc(12px * var(--text-scale)); }
+.chat-admin-toggle input { width: 20px; height: 20px; flex: 0 0 20px; accent-color: var(--teal); }
+.chat-admin-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.monitoring-system.chat-cost-details { grid-template-columns: minmax(0, 1fr); }
+.chat-cost-details dd { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+#adminChatChanges td { white-space: normal; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .chat-admin-columns { grid-template-columns: minmax(0, 1fr); gap: 24px; }
+  .monitoring-summary.chat-budget-summary { grid-template-columns: minmax(0, 1fr); }
+  .monitoring-summary.chat-budget-summary > div { border-right: 0; border-bottom: 1px solid var(--border); }
+  .chat-admin-actions .btn { min-height: 44px; }
+}
 .admin-tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
 .admin-tabs [role="tab"] { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: calc(13px * var(--text-scale)); cursor: pointer; }
 .admin-tabs [role="tab"][aria-selected="true"] { color: var(--teal); border-bottom-color: currentColor; font-weight: 600; }
