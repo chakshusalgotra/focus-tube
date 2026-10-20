@@ -530,7 +530,6 @@
         <button id="monitoringMembersTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringMembersPanel" data-monitoring-section="members" tabindex="-1"><span data-ui-icon="UsersRound" aria-hidden="true"></span>Members</button>
         <button id="monitoringEventsTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringEventsPanel" data-monitoring-section="events" tabindex="-1"><span data-ui-icon="History" aria-hidden="true"></span>Events</button>
         <button id="monitoringSystemTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringSystem" data-monitoring-section="system" tabindex="-1"><span data-ui-icon="Server" aria-hidden="true"></span>System</button>
-        <button id="monitoringVideoChatTab" type="button" role="tab" aria-selected="false" aria-controls="monitoringVideoChat" data-monitoring-section="video-chat" tabindex="-1"><span data-ui-icon="MessageSquare" aria-hidden="true"></span>Video Chat</button>
       </nav>
       <p id="monitoringError" class="add-error hidden" role="alert"></p>
       <p id="monitoringLoading" class="muted" role="status">Loading monitoring data...</p>
@@ -568,45 +567,6 @@
             <button id="monitoringEventClear" class="icon-btn hidden" type="button" title="Clear event filters" aria-label="Clear event filters"><span data-ui-icon="RotateCcw"></span></button>
           </form>
           <ul id="monitoringEvents" class="monitoring-events"></ul>
-        </section>
-        <section id="monitoringVideoChat" class="monitoring-section hidden" role="tabpanel" aria-labelledby="monitoringVideoChatTab" tabindex="0">
-          <div class="panel-heading"><h3>Video chat budget</h3><span><strong id="adminChatEnvironment" data-chat-value></strong> <span id="adminChatMonth" data-chat-value></span></span></div>
-          <p id="adminChatReadiness" data-chat-value role="status"></p>
-          <div class="monitoring-summary chat-budget-summary">
-            <div><strong id="adminChatLimit" data-chat-value></strong><span>Monthly limit</span></div>
-            <div><strong id="adminChatAccounted" data-chat-value></strong><span>Total accounted</span></div>
-            <div><strong id="adminChatRemaining" data-chat-value></strong><span>Available headroom</span></div>
-          </div>
-          <p id="adminChatOver" class="add-error hidden" data-chat-value role="status"></p>
-          <div class="chat-admin-columns">
-            <form id="adminChatForm" class="chat-admin-form">
-              <label for="adminChatBudget">Monthly spending limit (USD)</label>
-              <input id="adminChatBudget" type="number" inputmode="decimal" min="0" max="1000" step="0.01" required aria-describedby="adminChatSource adminChatError" />
-              <label class="chat-admin-toggle"><span>Pause new requests</span><input id="adminChatPaused" type="checkbox" /></label>
-              <label class="chat-admin-toggle"><span>Answer caching</span><input id="adminChatCache" type="checkbox" /></label>
-              <label class="chat-admin-toggle"><span>Shared public-video answers</span><input id="adminChatShared" type="checkbox" /></label>
-              <label class="chat-admin-toggle"><span>Semantic matching <small id="adminChatCalibration" data-chat-value></small></span><input id="adminChatSemantic" type="checkbox" /></label>
-              <p id="adminChatSource" class="muted" data-chat-value></p>
-              <div class="chat-admin-actions"><button id="adminChatSave" type="submit" class="btn"><span data-ui-icon="Save" aria-hidden="true"></span>Save changes</button><button id="adminChatCancel" type="button" class="btn ghost">Cancel</button></div>
-              <button id="adminChatReview" type="button" class="btn ghost hidden"><span data-ui-icon="RefreshCw" aria-hidden="true"></span>Review latest settings</button>
-              <p id="adminChatStatus" class="muted hidden" role="status"></p>
-              <p id="adminChatError" class="add-error hidden" role="alert"></p>
-            </form>
-            <div><h3>Usage and reservations</h3><dl class="monitoring-system chat-cost-details">
-              <div><dt>Known usage estimate</dt><dd id="adminChatKnown" data-chat-value></dd></div>
-              <div><dt>Pending reservations</dt><dd id="adminChatPending" data-chat-value></dd></div>
-              <div><dt>Retained unknown costs</dt><dd id="adminChatRetained" data-chat-value></dd></div>
-              <div><dt>Older unclassified amounts</dt><dd id="adminChatLegacy" data-chat-value></dd></div>
-              <div><dt>Embedding component</dt><dd id="adminChatEmbedding" data-chat-value></dd></div>
-              <div><dt>Generation component</dt><dd id="adminChatGeneration" data-chat-value></dd></div>
-              <div><dt>Next generation reservation</dt><dd id="adminChatNext" data-chat-value></dd></div>
-              <div><dt>Next UTC month</dt><dd id="adminChatResets" data-chat-value></dd></div>
-              <div><dt>Model</dt><dd id="adminChatModel" data-chat-value></dd></div>
-            </dl><p class="muted">Token-based estimates and reservations, not a Google invoice.</p><p id="adminChatRequests" class="muted" data-chat-value></p></div>
-          </div>
-          <div class="panel-heading"><h3>Recent setting changes</h3></div>
-          <p id="adminChatAuditEmpty" class="muted">No dashboard changes recorded.</p>
-          <div class="monitoring-table-wrap" tabindex="0" role="region" aria-label="Video chat setting changes"><table class="monitoring-table"><thead><tr><th scope="col">Time</th><th scope="col">Administrator</th><th scope="col">Changes</th></tr></thead><tbody id="adminChatChanges"></tbody></table></div>
         </section>
         <section id="monitoringSystem" class="monitoring-section hidden" role="tabpanel" aria-labelledby="monitoringSystemTab" tabindex="0">
         <h3>Application process and storage</h3><dl class="monitoring-system">
@@ -925,7 +885,6 @@
   <script src="notebook-editor.js" defer></script>
   <script src="notebooks.js" defer></script>
   <script src="video-chat.js" defer></script>
-  <script src="video-chat-admin.js" defer></script>
   <script src="invitations.js" defer></script>
   <script src="analytics.js" defer></script>
   <script src="extension-connect.js" defer></script>

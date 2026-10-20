@@ -12,5 +12,3 @@ Dockerfile*
 compose*.yaml
 compose*.yml
 .ssh/
-test/test-api-nvidia.py
-extension/focustube-*.zip
