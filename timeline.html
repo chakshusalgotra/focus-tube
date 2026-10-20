@@ -141,57 +141,1581 @@
 {
   "version": 1,
   "repository": "https://github.com/chakshusalgotra/focus-tube",
-  "generatedAt": "2026-09-13T00:35:34.307Z",
-  "head": "846c51d4bed663d5a8c2926fd9ff638c45d150a9",
-  "branch": "feature/course-notebooks",
+  "generatedAt": "2026-09-19T05:19:45.774Z",
+  "head": "6a048972013ad5f9e2b30acda351b42337c123c1",
+  "branch": "fix/player-touch-text",
   "refs": {
     "prod": {
       "name": "origin/main",
-      "hash": "337eb4379aad37abcf61c3554fe3229e1940dd98"
+      "hash": "88867d376f6452c44bdf113311ee406d2bebac97"
     },
     "dev": {
       "name": "origin/dev",
-      "hash": "fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e"
+      "hash": "a145439916d78f5780a9b27c34080a72c7c1bd75"
     }
   },
-  "commitCount": 20,
+  "commitCount": 37,
   "entries": [
     {
-      "id": "design-language",
-      "title": "Redesign navigation and the notebook layout around a shared design language",
-      "recordedDate": "2026-09-13",
+      "id": "auth-input-feedback",
+      "title": "Make passwords visible on demand and validate signup fields during input",
+      "recordedDate": "2026-09-19",
       "commits": [],
-      "why": "Unify visual identity and navigation across the app and give notebooks a resizable, distraction-preserving layout, ahead of committing the working tree.",
+      "why": "Make mobile and tablet sign-in usable and show username and password feedback immediately, without waiting for blur or a completed signup attempt.",
       "changes": [
-        "Introduce light neutral surfaces, charcoal text, teal actions, and coral brand/streak accents, with dark surfaces reserved for the video and its overlays.",
-        "Serve IBM Plex Sans, Manrope, and Lucide icons locally instead of a remote font or icon CDN.",
-        "Replace the global workspace menu with a collapsible icon rail (220px expanded, 64px collapsed) that remembers its preference, plus a drawer at 900px and below.",
-        "Add a course rail with exactly Course content, Notes, and a coming-soon Chat with video placeholder that does not call any AI provider.",
-        "Make the notebook pane resizable by drag or keyboard on both axes, remembering its dimensions without affecting note content or video playback.",
-        "Add a light/dark theme toggle that follows system preference until a user choice is saved.",
-        "Add a design-language regression test suite and refresh the documentation screenshots."
+        "Add independent, labeled reveal/hide buttons with 44px targets for sign-in/signup passwords and signup confirmation; preserve values and mask them again on mode changes, submission, reset, and page exit.",
+        "Require a unique username for new registrations and guest conversions while preserving existing username-less accounts and learning data.",
+        "Check username format and availability as input changes through an invitation/member-protected, no-store endpoint with its own persistent rate budget. Cancel old lookups, ignore stale responses, and keep error or rate-limit states distinct from availability.",
+        "Recheck username uniqueness inside the existing registration transaction. Report a final conflict without consuming the invitation or verified email proof so another name can be chosen.",
+        "Update password length, advisory strength, and confirmation matching on every input, including the first character. Use pinned, self-hosted zxcvbn locally without password-check requests or new complexity rules.",
+        "Verify actual native Chromium typing and touch input, signup conflict/retry, masking, and both themes at 320-1440 CSS pixels with isolated fixtures. Physical iOS/Safari, real email delivery, live CAPTCHA, and hosted deployment are not implied. This milestone is not yet linked to a commit."
       ],
       "files": [
         "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/auth.test.js"
+      ],
+      "date": "2026-09-19",
+      "dateKind": "recorded",
+      "stage": "pending"
+    },
+    {
+      "id": "commit-a145439916d78f5780a9b27c34080a72c7c1bd75",
+      "title": "Merge pull request #16 from chakshusalgotra/fix/player-touch-text",
+      "date": "2026-09-18T22:44:13+05:30",
+      "dateKind": "commit",
+      "stage": "dev",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Refine compact workspace navigation and player controls"
+      ],
+      "commits": [
+        {
+          "hash": "a145439916d78f5780a9b27c34080a72c7c1bd75",
+          "date": "2026-09-18T22:44:13+05:30",
+          "authoredAt": "2026-09-18T22:44:13+05:30",
+          "subject": "Merge pull request #16 from chakshusalgotra/fix/player-touch-text",
+          "parents": [
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+            "6a048972013ad5f9e2b30acda351b42337c123c1"
+          ],
+          "body": "Refine compact workspace navigation and player controls",
+          "stage": "dev",
+          "files": [
+            "README.md",
+            "docs/timeline-notes.json",
+            "public/app.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/styles.css",
+            "test/design-language.test.js",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "docs/timeline-notes.json",
+        "public/app.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/styles.css",
+        "test/design-language.test.js",
+        "test/timeline.test.js",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "commit-6a048972013ad5f9e2b30acda351b42337c123c1",
+      "title": "Record compact UI fixes in the generated timeline",
+      "date": "2026-09-18T22:18:56+05:30",
+      "dateKind": "commit",
+      "stage": "dev",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Record compact UI fixes in the generated timeline"
+      ],
+      "commits": [
+        {
+          "hash": "6a048972013ad5f9e2b30acda351b42337c123c1",
+          "date": "2026-09-18T22:18:56+05:30",
+          "authoredAt": "2026-09-18T22:18:56+05:30",
+          "subject": "Record compact UI fixes in the generated timeline",
+          "parents": [
+            "18109ccc72e27162d75435813c22a32176f65e35"
+          ],
+          "body": "",
+          "stage": "dev",
+          "files": [
+            "docs/timeline-notes.json",
+            "test/timeline.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "docs/timeline-notes.json",
+        "test/timeline.test.js",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "compact-workspace-controls",
+      "title": "Compact the workspace and align navigation and playback controls",
+      "recordedDate": "2026-09-18",
+      "commits": [
+        {
+          "hash": "18109ccc72e27162d75435813c22a32176f65e35",
+          "date": "2026-09-18T22:15:55+05:30",
+          "authoredAt": "2026-09-18T22:15:55+05:30",
+          "subject": "Refine compact workspace navigation and player controls",
+          "parents": [
+            "0dd95f309bf61f429d72aaf278eb5690c56cbc86"
+          ],
+          "body": "",
+          "stage": "dev",
+          "files": [
+            "README.md",
+            "public/app.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/styles.css",
+            "test/design-language.test.js"
+          ]
+        }
+      ],
+      "why": "Reclaim space for lessons and notes by reducing component dimensions rather than text size, and make navigation and playback actions consistent.",
+      "changes": [
+        "Restore normal text sizes while reducing sidebar widths, taskbar height, desktop control padding, and notes spacing; retain readable text, focus outlines, and mobile touch targets.",
+        "Keep narrow notes formatting in one horizontally scrollable row, use labeled native heading choices, and retain the selected heading when editor focus leaves.",
+        "Move Notes and the disabled Ask placeholder beside Mark complete below the video. Remove the course-tools rail so closing Course content leaves no reserved left column.",
+        "Place the navigation toggle before the app logo on signed-in screens. Workspace collapse retains navigation icons; expansion reveals labels below the unchanged taskbar, with keyboard and backdrop dismissal.",
+        "Align both workspace and course-content toggles with the collapsed sidebar centerline without shifting the logo or shrinking their tap targets.",
+        "Use one consistent resume indicator while paused. Synchronize the toolbar icon from playback events and periodic checks, clear stale overlays when buffering, and allow Pause during buffering.",
+        "Preserve independent layout preferences, existing note data and formatting, Read/Edit mode, autosave, source links, and completion behavior. Ask remains Coming soon without an AI workflow.",
+        "Verify responsive geometry, native mouse/touch and keyboard actions, note persistence, and light/dark themes with isolated browser fixtures. Local port 3002 was updated with existing data and runtime settings preserved; physical iOS/Safari and live YouTube playback remain unverified. Branch membership is not proof of hosted deployment."
+      ],
+      "files": [
+        "README.md",
+        "public/app.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/styles.css",
+        "test/design-language.test.js"
+      ],
+      "date": "2026-09-18T22:15:55+05:30",
+      "dateKind": "commit",
+      "stage": "dev"
+    },
+    {
+      "id": "player-touch-controls",
+      "title": "Make player controls usable across the full touch target",
+      "commits": [
+        {
+          "hash": "0dd95f309bf61f429d72aaf278eb5690c56cbc86",
+          "date": "2026-09-18T04:43:46+05:30",
+          "authoredAt": "2026-09-18T04:43:46+05:30",
+          "subject": "Fix touch player controls and reduce app text size",
+          "parents": [
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
+          ],
+          "body": "",
+          "stage": "dev",
+          "files": [
+            "README.md",
+            "public/app.js",
+            "public/styles.css",
+            "test/design-language.test.js"
+          ]
+        }
+      ],
+      "why": "Speed, quality, and caption controls on phones and tablets should not require precise taps on a small dropdown arrow.",
+      "changes": [
+        "Keep controls visible through touch release and native select interaction, then resume the hide timer after a value is chosen.",
+        "Use 44px player touch targets and wider speed and quality selects; let compact toolbars scroll horizontally without shrinking controls.",
+        "Reveal hidden player controls on the first video tap without pausing playback.",
+        "This change initially reduced text to 80%; the later compact-workspace update restores normal text sizes and reduces component dimensions instead."
+      ],
+      "files": [
+        "README.md",
+        "public/app.js",
+        "public/styles.css",
+        "test/design-language.test.js"
+      ],
+      "date": "2026-09-18T04:43:46+05:30",
+      "dateKind": "commit",
+      "stage": "dev"
+    },
+    {
+      "id": "commit-88867d376f6452c44bdf113311ee406d2bebac97",
+      "title": "Merge pull request #15 from chakshusalgotra/dev",
+      "date": "2026-09-18T03:30:50+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Dev"
+      ],
+      "commits": [
+        {
+          "hash": "88867d376f6452c44bdf113311ee406d2bebac97",
+          "date": "2026-09-18T03:30:50+05:30",
+          "authoredAt": "2026-09-18T03:30:50+05:30",
+          "subject": "Merge pull request #15 from chakshusalgotra/dev",
+          "parents": [
+            "337eb4379aad37abcf61c3554fe3229e1940dd98",
+            "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e"
+          ],
+          "body": "Dev",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".github/workflows/deploy-dev.yml",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.dev.yaml",
+            "compose.monitoring.yaml",
+            "compose.prod.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/timeline.md",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "feedback.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/notebook-model.js",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "scripts/update-timeline.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/feedback.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "test/timeline.test.js",
+            "test/workspace-persistence.test.js",
+            "test/youtube-search.test.js",
+            "timeline.html",
+            "youtube-search.js"
+          ]
+        }
+      ],
+      "files": [
+        ".env.example",
+        ".github/workflows/deploy-dev.yml",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.dev.yaml",
+        "compose.monitoring.yaml",
+        "compose.prod.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
         "docs/screenshots/auth.png",
         "docs/screenshots/dashboard.png",
         "docs/screenshots/library.png",
         "docs/screenshots/player.png",
         "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/timeline.md",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "feedback.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
         "package-lock.json",
         "package.json",
         "public/app.js",
+        "public/auth-entry.js",
+        "public/feedback.html",
+        "public/feedback.js",
         "public/index.html",
+        "public/notebook-editor.js",
+        "public/notebook-model.js",
         "public/notebooks.js",
+        "public/policies.html",
         "public/styles.css",
         "public/theme.js",
+        "scripts/auth-admin.js",
+        "scripts/update-timeline.js",
         "server.js",
+        "test/auth.test.js",
         "test/design-language.test.js",
-        "test/notebooks.test.js"
+        "test/feedback.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "test/timeline.test.js",
+        "test/workspace-persistence.test.js",
+        "test/youtube-search.test.js",
+        "timeline.html",
+        "youtube-search.js"
+      ]
+    },
+    {
+      "id": "commit-14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+      "title": "Merge pull request #13 from chakshusalgotra/feature/feedback-forum-pr",
+      "date": "2026-09-18T03:12:18+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add feedback forum with private reports and screenshots"
       ],
-      "date": "2026-09-13",
-      "dateKind": "recorded",
-      "stage": "pending"
+      "commits": [
+        {
+          "hash": "14d516db9cd18d1e5b56ba4eeab5e49740f8b38e",
+          "date": "2026-09-18T03:12:18+05:30",
+          "authoredAt": "2026-09-18T03:12:18+05:30",
+          "subject": "Merge pull request #13 from chakshusalgotra/feature/feedback-forum-pr",
+          "parents": [
+            "ff1dceca1dee265edf26c1539257e478259380b7",
+            "d21864291121c5b6dd241c562d238e3b627ca1ec"
+          ],
+          "body": "Add feedback forum with private reports and screenshots",
+          "stage": "prod",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "auth.js",
+            "db.js",
+            "feedback.js",
+            "observability.js",
+            "package-lock.json",
+            "package.json",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/policies.html",
+            "public/styles.css",
+            "server.js",
+            "test/feedback.test.js",
+            "test/observability.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "Dockerfile",
+        "README.md",
+        "auth.js",
+        "db.js",
+        "feedback.js",
+        "observability.js",
+        "package-lock.json",
+        "package.json",
+        "public/feedback.html",
+        "public/feedback.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/feedback.test.js",
+        "test/observability.test.js"
+      ]
+    },
+    {
+      "id": "commit-d21864291121c5b6dd241c562d238e3b627ca1ec",
+      "title": "Add feedback forum with private reports and screenshots",
+      "date": "2026-09-18T02:56:39+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Add feedback forum with private reports and screenshots"
+      ],
+      "commits": [
+        {
+          "hash": "d21864291121c5b6dd241c562d238e3b627ca1ec",
+          "date": "2026-09-18T02:56:39+05:30",
+          "authoredAt": "2026-09-18T02:56:39+05:30",
+          "subject": "Add feedback forum with private reports and screenshots",
+          "parents": [
+            "ff1dceca1dee265edf26c1539257e478259380b7"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "Dockerfile",
+            "README.md",
+            "auth.js",
+            "db.js",
+            "feedback.js",
+            "observability.js",
+            "package-lock.json",
+            "package.json",
+            "public/feedback.html",
+            "public/feedback.js",
+            "public/index.html",
+            "public/policies.html",
+            "public/styles.css",
+            "server.js",
+            "test/feedback.test.js",
+            "test/observability.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "Dockerfile",
+        "README.md",
+        "auth.js",
+        "db.js",
+        "feedback.js",
+        "observability.js",
+        "package-lock.json",
+        "package.json",
+        "public/feedback.html",
+        "public/feedback.js",
+        "public/index.html",
+        "public/policies.html",
+        "public/styles.css",
+        "server.js",
+        "test/feedback.test.js",
+        "test/observability.test.js"
+      ]
+    },
+    {
+      "id": "commit-ff1dceca1dee265edf26c1539257e478259380b7",
+      "title": "Merge pull request #11 from chakshusalgotra/feature/reusable-invitations",
+      "date": "2026-09-16T00:30:47+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add reusable invitation links with signup limits"
+      ],
+      "commits": [
+        {
+          "hash": "ff1dceca1dee265edf26c1539257e478259380b7",
+          "date": "2026-09-16T00:30:47+05:30",
+          "authoredAt": "2026-09-16T00:30:47+05:30",
+          "subject": "Merge pull request #11 from chakshusalgotra/feature/reusable-invitations",
+          "parents": [
+            "4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+            "eb8b4ccb3327741e5124dbf96ee926bb2eaa1456"
+          ],
+          "body": "Add reusable invitation links with signup limits",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "auth.js",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "public/app.js",
+            "public/index.html",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "public/app.js",
+        "public/index.html",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-eb8b4ccb3327741e5124dbf96ee926bb2eaa1456",
+      "title": "Add configurable signup limits to member invitations",
+      "date": "2026-09-16T00:11:38+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Keep existing and bootstrap invitations single-use; atomically count successful registrations and guest upgrades. Add Administration controls, migration/HTTP/concurrency regressions, and usage documentation."
+      ],
+      "commits": [
+        {
+          "hash": "eb8b4ccb3327741e5124dbf96ee926bb2eaa1456",
+          "date": "2026-09-16T00:11:38+05:30",
+          "authoredAt": "2026-09-16T00:11:38+05:30",
+          "subject": "Add configurable signup limits to member invitations",
+          "parents": [
+            "4c15d86b522b12dfc0943d6b12cbfc0f9189643e"
+          ],
+          "body": "Keep existing and bootstrap invitations single-use; atomically count successful registrations and guest upgrades. Add Administration controls, migration/HTTP/concurrency regressions, and usage documentation.",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "auth.js",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "public/app.js",
+            "public/index.html",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "auth.js",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "public/app.js",
+        "public/index.html",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+      "title": "Merge pull request #10 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T14:08:47+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Enhance Docker Compose configuration for development and production"
+      ],
+      "commits": [
+        {
+          "hash": "4c15d86b522b12dfc0943d6b12cbfc0f9189643e",
+          "date": "2026-09-15T14:08:47+05:30",
+          "authoredAt": "2026-09-15T14:08:47+05:30",
+          "subject": "Merge pull request #10 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+            "38a882c7641ec83138c6c7c9e59537f74b07d0d9"
+          ],
+          "body": "Enhance Docker Compose configuration for development and production",
+          "stage": "prod",
+          "files": [
+            "compose.dev.yaml",
+            "compose.prod.yaml"
+          ]
+        }
+      ],
+      "files": [
+        "compose.dev.yaml",
+        "compose.prod.yaml"
+      ]
+    },
+    {
+      "id": "commit-38a882c7641ec83138c6c7c9e59537f74b07d0d9",
+      "title": "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options.",
+      "date": "2026-09-15T14:07:26+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options."
+      ],
+      "commits": [
+        {
+          "hash": "38a882c7641ec83138c6c7c9e59537f74b07d0d9",
+          "date": "2026-09-15T14:07:26+05:30",
+          "authoredAt": "2026-09-15T14:07:26+05:30",
+          "subject": "Enhance Docker Compose configuration for development and production environments with additional environment variables, health checks, and logging options.",
+          "parents": [
+            "bd08779f4a2724ae241d6486e2bbf3d49a8c2625"
+          ],
+          "body": "",
+          "stage": "prod",
+          "files": [
+            "compose.dev.yaml",
+            "compose.prod.yaml"
+          ]
+        }
+      ],
+      "files": [
+        "compose.dev.yaml",
+        "compose.prod.yaml"
+      ]
+    },
+    {
+      "id": "commit-75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+      "title": "Merge pull request #8 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T13:06:37+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Feature/course notebooks"
+      ],
+      "commits": [
+        {
+          "hash": "75ee9d24fb1374a7eab1ac49dfa810ba883592f9",
+          "date": "2026-09-15T13:06:37+05:30",
+          "authoredAt": "2026-09-15T13:06:37+05:30",
+          "subject": "Merge pull request #8 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "3d9012d81f5d764671d82756458e8514ef05b22c",
+            "bd08779f4a2724ae241d6486e2bbf3d49a8c2625"
+          ],
+          "body": "Feature/course notebooks",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml",
+            "README.md",
+            "compose.dev.yaml",
+            "server.js",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml",
+        "README.md",
+        "compose.dev.yaml",
+        "server.js",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-bd08779f4a2724ae241d6486e2bbf3d49a8c2625",
+      "title": "Fix dev HTTPS account access behind the reverse proxy",
+      "date": "2026-09-15T12:25:15+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Approve the dev HTTPS origin and interpret numeric TRUST_PROXY settings as proxy-hop counts instead of IP-address strings. Preserve named/IP proxy settings, secure cookies, and exact-origin protections.\n\nAdd regression coverage for approved HTTPS login, bounded proxy trust, rejected HTTP and foreign origins, and untrusted forwarding. Document the connection error and container recreation requirements.\n\nValidation: focused origin/proxy tests, JavaScript syntax, Compose configuration and whitespace checks pass. The full 120-test suite passed during implementation."
+      ],
+      "commits": [
+        {
+          "hash": "bd08779f4a2724ae241d6486e2bbf3d49a8c2625",
+          "date": "2026-09-15T12:25:15+05:30",
+          "authoredAt": "2026-09-15T12:25:15+05:30",
+          "subject": "Fix dev HTTPS account access behind the reverse proxy",
+          "parents": [
+            "cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8"
+          ],
+          "body": "Approve the dev HTTPS origin and interpret numeric TRUST_PROXY settings as proxy-hop counts instead of IP-address strings. Preserve named/IP proxy settings, secure cookies, and exact-origin protections.\n\nAdd regression coverage for approved HTTPS login, bounded proxy trust, rejected HTTP and foreign origins, and untrusted forwarding. Document the connection error and container recreation requirements.\n\nValidation: focused origin/proxy tests, JavaScript syntax, Compose configuration and whitespace checks pass. The full 120-test suite passed during implementation.",
+          "stage": "prod",
+          "files": [
+            "README.md",
+            "compose.dev.yaml",
+            "server.js",
+            "test/auth.test.js"
+          ]
+        }
+      ],
+      "files": [
+        "README.md",
+        "compose.dev.yaml",
+        "server.js",
+        "test/auth.test.js"
+      ]
+    },
+    {
+      "id": "commit-cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8",
+      "title": "Fix dev deployment Docker credential configuration",
+      "date": "2026-09-15T12:01:56+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Select the dedicated helper-free Docker configuration inside the remote WSL session before building the dev application. This avoids the Windows credential-store logon-session error while leaving the normal Docker Desktop configuration unchanged.\n\nValidated the one-line workflow change, runner and remote Bash syntax, and whitespace. The isolated configuration, Docker engine identity, Compose/Buildx access, and Alpine pull were previously verified over non-interactive SSH."
+      ],
+      "commits": [
+        {
+          "hash": "cf3b50c8ef8efe3dbacf2a4a22d67bfddb131bb8",
+          "date": "2026-09-15T12:01:56+05:30",
+          "authoredAt": "2026-09-15T12:01:56+05:30",
+          "subject": "Fix dev deployment Docker credential configuration",
+          "parents": [
+            "7dcdcba7caba0acbba06d0a73ec55559d9163524"
+          ],
+          "body": "Select the dedicated helper-free Docker configuration inside the remote WSL session before building the dev application. This avoids the Windows credential-store logon-session error while leaving the normal Docker Desktop configuration unchanged.\n\nValidated the one-line workflow change, runner and remote Bash syntax, and whitespace. The isolated configuration, Docker engine identity, Compose/Buildx access, and Alpine pull were previously verified over non-interactive SSH.",
+          "stage": "prod",
+          "files": [
+            ".github/workflows/deploy-dev.yml"
+          ]
+        }
+      ],
+      "files": [
+        ".github/workflows/deploy-dev.yml"
+      ]
+    },
+    {
+      "id": "commit-3d9012d81f5d764671d82756458e8514ef05b22c",
+      "title": "Merge pull request #7 from chakshusalgotra/feature/course-notebooks",
+      "date": "2026-09-15T11:01:13+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "Integrate branch history. This records a merge, not a verified deployment.",
+      "changes": [
+        "Add notebooks, private accounts, and a refined learning workspace"
+      ],
+      "commits": [
+        {
+          "hash": "3d9012d81f5d764671d82756458e8514ef05b22c",
+          "date": "2026-09-15T11:01:13+05:30",
+          "authoredAt": "2026-09-15T11:01:13+05:30",
+          "subject": "Merge pull request #7 from chakshusalgotra/feature/course-notebooks",
+          "parents": [
+            "fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e",
+            "7dcdcba7caba0acbba06d0a73ec55559d9163524"
+          ],
+          "body": "Add notebooks, private accounts, and a refined learning workspace",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebook-editor.js",
+            "public/notebook-model.js",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebook-editor.js",
+        "public/notebook-model.js",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "commit-7dcdcba7caba0acbba06d0a73ec55559d9163524",
+      "title": "Record the completed workspace release in the timeline",
+      "date": "2026-09-15T10:17:05+05:30",
+      "dateKind": "commit",
+      "stage": "prod",
+      "why": "No separate feature rationale recorded; see the commit for implementation context.",
+      "changes": [
+        "Link the UI, account, settings, monitoring and local-runtime milestones to\nimplementation commit dcd13de and regenerate the standalone Git snapshot.\n\nKeep hosted promotion as explicit pending work and preserve the historical\ncontext for the resolved local image and API-only download decisions.\n\nValidation: six timeline tests, exact commit/stage assertions, standalone\nbrowser rendering and editor diagnostics pass. The snapshot intentionally\ncovers the implementation commit, not the commit that stores the snapshot."
+      ],
+      "commits": [
+        {
+          "hash": "7dcdcba7caba0acbba06d0a73ec55559d9163524",
+          "date": "2026-09-15T10:17:05+05:30",
+          "authoredAt": "2026-09-15T10:17:05+05:30",
+          "subject": "Record the completed workspace release in the timeline",
+          "parents": [
+            "dcd13de92cd2ce78deaf2521dc6e1aded576da6a"
+          ],
+          "body": "Link the UI, account, settings, monitoring and local-runtime milestones to\nimplementation commit dcd13de and regenerate the standalone Git snapshot.\n\nKeep hosted promotion as explicit pending work and preserve the historical\ncontext for the resolved local image and API-only download decisions.\n\nValidation: six timeline tests, exact commit/stage assertions, standalone\nbrowser rendering and editor diagnostics pass. The snapshot intentionally\ncovers the implementation commit, not the commit that stores the snapshot.",
+          "stage": "prod",
+          "files": [
+            "docs/timeline-notes.json",
+            "timeline.html"
+          ]
+        }
+      ],
+      "files": [
+        "docs/timeline-notes.json",
+        "timeline.html"
+      ]
+    },
+    {
+      "id": "design-language",
+      "title": "Refresh the library, player, navigation, and notes workspace",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Make finding courses, watching lessons, and writing notes feel consistent on desktop and small screens.",
+      "changes": [
+        "Support light and dark themes, using teal actions and coral brand/streak accents; follow the system appearance until a choice is saved.",
+        "Serve IBM Plex Sans, Manrope, and Lucide icons locally instead of a remote font or icon CDN.",
+        "Browse courses in Grid or List, combine Pinned with progress filters, and show duration only as precisely as the available lesson metadata permits.",
+        "Show YouTube result filters only for keyword searches, preserving library filters and ignoring stale search responses.",
+        "Provide a collapsible workspace rail and a focused course rail with Course content, Notes, and a disabled Chat with video placeholder.",
+        "Start course panels closed and remember explicit panel choices per account/course without resetting playback or notes.",
+        "Keep the paused video visible under light dimming and a centered resume button; hide player controls when idle and retain keyboard access.",
+        "Resize notes with drag or keyboard controls. Empty, Read, and Edit states share a borderless mint writing surface inside the blue pane, with theme-aware colors and a focus outline.",
+        "Limit optional glass and cursor sheen to navigation; respect reduced motion, reduced transparency, and increased contrast.",
+        "Add keyboard-friendly dialogs, compact player controls, chart data tables, and design regressions. Keep Board and video chat explicitly Coming soon."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
+    },
+    {
+      "id": "docker-refresh",
+      "title": "Refresh the local Docker app without replacing stored data",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Resolve the older local image observed on 10 September and run the current frontend and backend together.",
+      "changes": [
+        "The 2026-09-10 check found an old localhost:3002 image without YouTube search; that historical pending item is now resolved locally.",
+        "Rebuild the local app on port 3002 with the current assets and matching backend, retaining the existing database and log volumes.",
+        "Verify application/database readiness and that served HTML/CSS match the checkout, including the latest borderless notes surface.",
+        "Keep production and development deployments unchanged. A feature-branch push is not evidence of a hosted deployment."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
+    },
+    {
+      "id": "download-ui-review",
+      "title": "Document course downloads as a backend-only capability",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Describe the accepted website accurately without restoring previously removed download controls.",
+      "changes": [
+        "The 2026-09-10 review preserved a pre-existing browser download-UI removal whose original reason was not recorded.",
+        "The accepted workspace still has no course-download button; document that limitation in the feature guide and PR.",
+        "Retain the authenticated, permission-confirmed backend API for installations that provide yt-dlp and ffmpeg. The basic Docker image does not bundle these tools."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
+    },
+    {
+      "id": "invite-only-accounts",
+      "title": "Add invitation-only accounts with verified email",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Control who can join while preserving existing accounts and keeping each member's learning data private.",
+      "changes": [
+        "Create accounts only after a valid one-use invitation and an emailed six-digit code are verified; require matching password confirmation and allow an optional unique username.",
+        "Let existing members sign in with email or username without another invitation. Preserve old usernames, account IDs, credentials, and learning data during migration.",
+        "Provide a local-only administrator bootstrap command and member invitations from active administrators, with a configurable member limit.",
+        "Disable new anonymous guests while retaining export and invitation-backed conversion for existing guest sessions.",
+        "Use atomic SQLite transactions, durable rate limits, exact-Origin checks, hashed secrets, and bounded password hashing; back up older databases before authentication migration.",
+        "Send codes over TLS-protected SMTP and optionally validate Cloudflare Turnstile on the server. Missing email configuration fails closed for registration.",
+        "Keep Google and GitHub sign-in as disabled Coming soon controls, without OAuth or automatic account linking."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
+    },
+    {
+      "id": "operational-monitoring",
+      "title": "Add private usage monitoring, sanitized logs, and health checks",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Help the operator understand application health and coarse usage without exposing members' courses or notes.",
+      "changes": [
+        "Provide an administrator-only view of approximate active members, account activity, origin traffic, process memory, and application storage.",
+        "Use short-lived presence challenges and bounded retention; ordinary API calls and delayed learning batches do not count as live activity.",
+        "Write rotating structured logs with safe request IDs and route templates, excluding credentials, raw request bodies, email addresses, and learning content.",
+        "Keep Prometheus metrics disabled unless a separate token and private host/source boundary are configured.",
+        "Include an optional Alloy collector, importable Grafana dashboard, alert rules, and external uptime guidance without enabling cloud export automatically.",
+        "Add local application/database health checks and persistent log storage. Do not treat process uptime as proof of external availability."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
+    },
+    {
+      "id": "settings-and-policies",
+      "title": "Add account settings, password changes, and public policies",
+      "recordedDate": "2026-09-15",
+      "commits": [
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
+            "timeline.html"
+          ]
+        }
+      ],
+      "why": "Give members one place to manage their account and workspace without interrupting lessons or losing drafts.",
+      "changes": [
+        "Organize Settings into Account, Appearance, Data, Terms and Privacy, and administrator-only sections with guarded dismissal and keyboard navigation.",
+        "Save display names and unique usernames; require the current password for a username change and keep the active player and notebook in place.",
+        "Allow signed-in members to change a known password. Rotate credentials and revoke old sessions atomically while retaining the current browser with a new cookie.",
+        "Retain private JSON export/import and draft protections; never store password inputs in browser storage.",
+        "Publish basic Terms and Privacy without requiring sign-in. Keep the operator/legal review checklist and make no compliance-certification claim.",
+        "Do not add forgotten-password recovery, arbitrary email changes, or account deletion."
+      ],
+      "files": [
+        ".env.example",
+        ".gitignore",
+        ".vscode/tasks.json",
+        "Dockerfile",
+        "README.md",
+        "auth-services.js",
+        "auth.js",
+        "compose.monitoring.yaml",
+        "compose.yaml",
+        "db.js",
+        "docs/invite-only-auth-spec.md",
+        "docs/monitoring.md",
+        "docs/policies-draft.md",
+        "docs/screenshots/auth.png",
+        "docs/screenshots/dashboard.png",
+        "docs/screenshots/library.png",
+        "docs/screenshots/player.png",
+        "docs/screenshots/profile-export.png",
+        "docs/timeline-notes.json",
+        "docs/youtube-search.md",
+        "downloads.js",
+        "observability.js",
+        "ops/monitoring/alerts.yaml",
+        "ops/monitoring/config.alloy",
+        "ops/monitoring/dashboard.json",
+        "package-lock.json",
+        "package.json",
+        "public/app.js",
+        "public/auth-entry.js",
+        "public/index.html",
+        "public/notebooks.js",
+        "public/policies.html",
+        "public/styles.css",
+        "public/theme.js",
+        "scripts/auth-admin.js",
+        "server.js",
+        "test/auth.test.js",
+        "test/design-language.test.js",
+        "test/notebooks.test.js",
+        "test/observability.test.js",
+        "timeline.html"
+      ],
+      "date": "2026-09-15T10:14:58+05:30",
+      "dateKind": "commit",
+      "stage": "prod"
     },
     {
       "id": "course-notebooks",
@@ -207,7 +1731,7 @@
             "4d0bc9ee66f9c03d57c6548d5405aadae5b080f4"
           ],
           "body": "",
-          "stage": "branch",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -249,14 +1773,14 @@
       ],
       "date": "2026-09-10T23:15:19+05:30",
       "dateKind": "commit",
-      "stage": "branch"
+      "stage": "prod"
     },
     {
       "id": "commit-fc6dfa543b40b09fe1433dfd29f5ac01ebc8d84e",
       "title": "Merge pull request #6 from chakshusalgotra/feature/workspace-discovery-timeline",
       "date": "2026-09-10T18:25:41+05:30",
       "dateKind": "commit",
-      "stage": "dev",
+      "stage": "prod",
       "why": "Integrate branch history. This records a merge, not a verified deployment.",
       "changes": [
         "Feature/workspace discovery timeline"
@@ -272,7 +1796,7 @@
             "4d0bc9ee66f9c03d57c6548d5405aadae5b080f4"
           ],
           "body": "Feature/workspace discovery timeline",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -319,7 +1843,7 @@
       "title": "Record timeline implementation in the release snapshot",
       "date": "2026-09-10T17:31:34+05:30",
       "dateKind": "commit",
-      "stage": "dev",
+      "stage": "prod",
       "why": "No separate feature rationale recorded; see the commit for implementation context.",
       "changes": [
         "Record timeline implementation in the release snapshot"
@@ -334,7 +1858,7 @@
             "2f80577cbf584fc7d60cff39ce6dd24060e32dba"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "docs/timeline-notes.json",
             "timeline.html"
@@ -360,7 +1884,7 @@
             "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
           ],
           "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "docs/timeline-notes.json",
@@ -389,7 +1913,7 @@
       ],
       "date": "2026-09-10T17:31:04+05:30",
       "dateKind": "commit",
-      "stage": "dev"
+      "stage": "prod"
     },
     {
       "id": "workspace-discovery",
@@ -405,7 +1929,7 @@
             "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
           ],
           "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -430,7 +1954,7 @@
             "8caa854d543e610e2a46d4454d1115a8b3db194d"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -468,143 +1992,7 @@
       ],
       "date": "2026-09-10T17:22:07+05:30",
       "dateKind": "commit",
-      "stage": "dev"
-    },
-    {
-      "id": "docker-refresh",
-      "date": "2026-09-10",
-      "stage": "pending",
-      "title": "Refresh the local Docker image",
-      "why": "Source edits are not mounted into the existing application container.",
-      "changes": [
-        "Verified localhost:3002 serves an older image: youtube-search.js is absent, search filters are absent, and /api/search returns 404.",
-        "Rebuild with the existing Compose configuration and verify the resulting image; no container was rebuilt during that check."
-      ],
-      "files": [
-        "Dockerfile",
-        "compose.yaml",
-        "youtube-search.js"
-      ],
-      "relatedMilestones": [
-        "workspace-discovery"
-      ],
-      "dateKind": "observed",
-      "commits": [
-        {
-          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
-          "date": "2026-09-10T17:19:55+05:30",
-          "authoredAt": "2026-09-10T17:19:55+05:30",
-          "subject": "Add workspace planning and YouTube course discovery",
-          "parents": [
-            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
-          ],
-          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
-          "files": [
-            "Dockerfile",
-            "README.md",
-            "db.js",
-            "docs/youtube-search.md",
-            "package.json",
-            "public/app.js",
-            "public/index.html",
-            "public/styles.css",
-            "server.js",
-            "test/youtube-search.test.js",
-            "youtube-search.js"
-          ]
-        },
-        {
-          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
-          "date": "2026-09-10T17:22:07+05:30",
-          "authoredAt": "2026-09-10T17:22:07+05:30",
-          "subject": "Merge dev and preserve workspace data during profile restore",
-          "parents": [
-            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
-            "8caa854d543e610e2a46d4454d1115a8b3db194d"
-          ],
-          "body": "",
-          "stage": "dev",
-          "files": [
-            "README.md",
-            "db.js",
-            "public/app.js",
-            "public/index.html",
-            "public/styles.css",
-            "server.js",
-            "test/workspace-persistence.test.js"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "download-ui-review",
-      "date": "2026-09-10",
-      "stage": "pending",
-      "title": "Review the existing download-UI removal",
-      "why": "The working tree already removed browser download controls when this PR was prepared; the original reason was not recorded in this session.",
-      "changes": [
-        "Preserve the submitted UI removal rather than reverting user changes.",
-        "Keep the authenticated backend download API and document the API-only state; confirm product intent during review."
-      ],
-      "files": [
-        "public/app.js",
-        "public/index.html",
-        "public/styles.css",
-        "README.md",
-        "downloads.js"
-      ],
-      "relatedMilestones": [
-        "workspace-discovery"
-      ],
-      "dateKind": "observed",
-      "commits": [
-        {
-          "hash": "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
-          "date": "2026-09-10T17:19:55+05:30",
-          "authoredAt": "2026-09-10T17:19:55+05:30",
-          "subject": "Add workspace planning and YouTube course discovery",
-          "parents": [
-            "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
-          ],
-          "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
-          "files": [
-            "Dockerfile",
-            "README.md",
-            "db.js",
-            "docs/youtube-search.md",
-            "package.json",
-            "public/app.js",
-            "public/index.html",
-            "public/styles.css",
-            "server.js",
-            "test/youtube-search.test.js",
-            "youtube-search.js"
-          ]
-        },
-        {
-          "hash": "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7",
-          "date": "2026-09-10T17:22:07+05:30",
-          "authoredAt": "2026-09-10T17:22:07+05:30",
-          "subject": "Merge dev and preserve workspace data during profile restore",
-          "parents": [
-            "166fd656daf1551b8f8e74ee82ae2efd18d254ba",
-            "8caa854d543e610e2a46d4454d1115a8b3db194d"
-          ],
-          "body": "",
-          "stage": "dev",
-          "files": [
-            "README.md",
-            "db.js",
-            "public/app.js",
-            "public/index.html",
-            "public/styles.css",
-            "server.js",
-            "test/workspace-persistence.test.js"
-          ]
-        }
-      ]
+      "stage": "prod"
     },
     {
       "id": "release-verification",
@@ -613,8 +2001,9 @@
       "title": "Review and verify dev-to-prod promotion",
       "why": "A commit on a branch is not evidence that a deployment completed or that a running environment has that revision.",
       "changes": [
-        "Review the new feature PR into dev, then use a separate dev-to-main PR for production promotion.",
-        "Check deployment workflow results and the running application's revision before declaring either environment deployed."
+        "Review the feature PR into dev, then use a separate dev-to-main PR for production promotion.",
+        "Before merging the 2026-09-15 account update, configure exact HTTPS origins, trusted proxy settings, SMTP and persistent backups on the target runtime; the existing hosted Compose files do not yet supply the new authentication/mail settings.",
+        "Merging into dev or main can trigger the existing deployment workflow. Check workflow results and the running application's revision before declaring either environment deployed."
       ],
       "files": [
         ".github/workflows/merge-guard.yml",
@@ -623,7 +2012,9 @@
       ],
       "relatedMilestones": [
         "workspace-discovery",
-        "timeline"
+        "timeline",
+        "invite-only-accounts",
+        "operational-monitoring"
       ],
       "dateKind": "observed",
       "commits": [
@@ -636,7 +2027,7 @@
             "7a7cd0a792a732d20cd8cba008bed90648ae0db4"
           ],
           "body": "Add status and sprint boards, tasks, course checklists, roadmaps, and revisioned workspace persistence. Add filtered YouTube search, progress-preserving imports, parser tests, Docker packaging, and search documentation. Preserve the current browser download-UI removal; the server API remains available.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "Dockerfile",
             "README.md",
@@ -661,7 +2052,7 @@
             "8caa854d543e610e2a46d4454d1115a8b3db194d"
           ],
           "body": "",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "db.js",
@@ -681,7 +2072,7 @@
             "f2647bddf91c15b353f7aa34934eb60ed5c5f1d7"
           ],
           "body": "Add a standalone newest-first timeline with searchable feature records, commit links, file lists, branch-stage evidence, and dated bug and pending-work observations. Add a reproducible snapshot command, timeline tests, and maintenance documentation; align the README with workspace restore and API-only downloads.",
-          "stage": "dev",
+          "stage": "prod",
           "files": [
             "README.md",
             "docs/timeline-notes.json",
@@ -689,6 +2080,60 @@
             "package.json",
             "scripts/update-timeline.js",
             "test/timeline.test.js",
+            "timeline.html"
+          ]
+        },
+        {
+          "hash": "dcd13de92cd2ce78deaf2521dc6e1aded576da6a",
+          "date": "2026-09-15T10:14:58+05:30",
+          "authoredAt": "2026-09-15T10:14:58+05:30",
+          "subject": "Complete the FocusTube learning workspace and account settings",
+          "parents": [
+            "846c51d4bed663d5a8c2926fd9ff638c45d150a9"
+          ],
+          "body": "Bring course discovery, playback, notebooks and account management into a\nconsistent desktop and mobile workspace.\n\n- Add invitation-only accounts with six-digit email verification, optional\n  CAPTCHA, durable rate limits and private per-user data access.\n- Add Settings for profile edits, password rotation, appearance and data,\n  plus public Terms and Privacy with an operator review checklist.\n- Refine Grid/List filters, course navigation, player controls, light/dark\n  themes and resizable notes with a borderless accent writing surface.\n- Add private administrator usage monitoring, sanitized rotating logs,\n  health checks and opt-in metrics with dashboard and alert configuration.\n- Document features, setup, migration, limitations and release validation;\n  preserve existing user changes and exclude credential-bearing local files.\n\nValidation: 119 tests pass; JavaScript syntax, documentation links, Compose\nsyntax, whitespace and staged-file secret checks pass. Four existing\nmoderate npm audit findings remain documented. Hosted authentication and\nSMTP settings must be configured before merging into dev and deploying.",
+          "stage": "prod",
+          "files": [
+            ".env.example",
+            ".gitignore",
+            ".vscode/tasks.json",
+            "Dockerfile",
+            "README.md",
+            "auth-services.js",
+            "auth.js",
+            "compose.monitoring.yaml",
+            "compose.yaml",
+            "db.js",
+            "docs/invite-only-auth-spec.md",
+            "docs/monitoring.md",
+            "docs/policies-draft.md",
+            "docs/screenshots/auth.png",
+            "docs/screenshots/dashboard.png",
+            "docs/screenshots/library.png",
+            "docs/screenshots/player.png",
+            "docs/screenshots/profile-export.png",
+            "docs/timeline-notes.json",
+            "docs/youtube-search.md",
+            "downloads.js",
+            "observability.js",
+            "ops/monitoring/alerts.yaml",
+            "ops/monitoring/config.alloy",
+            "ops/monitoring/dashboard.json",
+            "package-lock.json",
+            "package.json",
+            "public/app.js",
+            "public/auth-entry.js",
+            "public/index.html",
+            "public/notebooks.js",
+            "public/policies.html",
+            "public/styles.css",
+            "public/theme.js",
+            "scripts/auth-admin.js",
+            "server.js",
+            "test/auth.test.js",
+            "test/design-language.test.js",
+            "test/notebooks.test.js",
+            "test/observability.test.js",
             "timeline.html"
           ]
         }

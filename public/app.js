@@ -1115,7 +1115,6 @@ function showAuth({ preserveInvite = false } = {}) {
 function updateProfileUI() {
   window.productAnalytics?.configure();
   window.invitationSettings?.syncAccount();
-  globalThis.videoChatAdmin?.syncAccount();
   if (!authUser) return;
   const name = authUser.displayName || authUser.username || 'Guest';
   const initial = name.charAt(0).toUpperCase();
@@ -4822,7 +4821,6 @@ function applyMonitoringFilters(reset = '') {
 }
 
 function clearMonitoring() {
-  globalThis.videoChatAdmin?.reset();
   monitoringRequest?.abort();
   monitoringRequest = null;
   monitoringData = null;
@@ -4914,7 +4912,6 @@ function renderMonitoring(data) {
 
 async function refreshMonitoring() {
   if (!authUser?.isAdmin || !$('#monitoringModal').open || document.hidden || monitoringRequest) return;
-  globalThis.videoChatAdmin?.refresh();
   const controller = new AbortController();
   const generation = sessionGeneration;
   monitoringRequest = controller;
@@ -4955,8 +4952,6 @@ function openMonitoring() {
   clearMonitoring();
   monitoringPage = 1;
   showModal('monitoringModal');
-  globalThis.videoChatAdmin?.open();
-  selectMonitoringSection('video-chat');
   refreshMonitoring();
 }
 
@@ -5695,5 +5690,4 @@ setInterval(() => {
 setInterval(() => flushActivity(), 15_000);
 setInterval(updatePresence, 30_000);
 setInterval(refreshMonitoring, 30_000);
-window.videoChatAdmin = new VideoChatAdmin({ getAccount: () => authUser && { ...authUser, generation: sessionGeneration } });
 bootAuth();

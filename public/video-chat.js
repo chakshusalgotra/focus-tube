@@ -1,6 +1,5 @@
 (function () {
   'use strict';
-  const CACHE_CONSENT = '2026-10-07';
   const find = selector => document.querySelector(selector);
   const textNode = (tag, text, className) => {
     const element = document.createElement(tag);
@@ -37,7 +36,7 @@
           if (!line || encoder.encode(line).byteLength > 128 * 1024) throw new Error('Invalid chat stream record.');
           const event = JSON.parse(line);
           if (!event || final || !['start', 'text', 'final', 'error', 'heartbeat'].includes(event.type)) throw new Error('Invalid chat stream event.');
-          if (event.type === 'error') throw Object.assign(new Error(event.error || 'The answer could not be completed.'), { code: event.code, attempt: event.attempt });
+          if (event.type === 'error') throw Object.assign(new Error(event.error || 'The answer could not be completed.'), { code: event.code });
           if (event.type === 'heartbeat') continue;
           if (event.type === 'start') {
             if (started) throw new Error('The chat stream restarted unexpectedly.');
@@ -346,7 +345,7 @@
         if (!current()) throw new DOMException('Chat changed', 'AbortError');
         if (!response.ok) {
           if (suffix === '/messages' && ['CHAT_WINDOW_LIMIT', 'RATE_LIMITED', 'CHAT_BUDGET', 'CHAT_BUSY'].includes(result?.code)) pending.dispatched = false;
-          throw Object.assign(new Error(result?.error || 'Chat request failed.'), { status: response.status, body: result, code: result?.code, attempt: result?.attempt });
+          throw Object.assign(new Error(result?.error || 'Chat request failed.'), { status: response.status, body: result, code: result?.code });
         }
         return result;
       };
@@ -376,7 +375,6 @@
           this.quotaRejected = true;
         }
         if (requestId) {
-          if (error.attempt?.settled === true && error.attempt.generationDispatched === false && error.attempt.committed === false) pending.dispatched = false;
           this.needsReload = pending.dispatched;
           if (!pending.dispatched) this.provisional = null;
           else if (this.provisional) this.provisional.interrupted = true;
@@ -494,7 +492,7 @@
       const messageIds = scope === 'discussion' ? messages.map(message => message.id) : undefined;
       if (scope === 'discussion' && !messageIds.length) { find('#chatError').textContent = 'There are no completed messages to summarize.'; return; }
       if (!this.permissions.has(this.identity.key)) {
-        if (!confirm('Use AI chat for this video? Captions, questions and this conversation may be sent to Google, including short questions for similarity lookup. Generic answers based only on verified public videos may be reused across accounts; private discussions and uploads are not shared. Continue only if you have permission to use and share this content.')) return;
+        if (!confirm('Use AI chat for this video? Captions and this conversation will be sent to Google. Continue only if you have permission to use and share this content.')) return;
         this.permissions.add(this.identity.key);
       }
       this.provisional = { question, answer: '', context: { scope, playhead, mode } };
@@ -526,7 +524,7 @@
         if (!transcript?.hash || !conversationId || !Number.isSafeInteger(revision)) throw new Error('This video could not be prepared for chat. Please try again.');
         this.pending.conversationId = conversationId;
         this.pending.dispatched = true;
-        const result = await request('/messages', { question, playhead, requestId, revision, conversationId, consent: true, cacheConsent: CACHE_CONSENT, scope, mode, sourceHash: transcript.hash, messageIds }, 'POST', event => {
+        const result = await request('/messages', { question, playhead, requestId, revision, conversationId, consent: true, scope, mode, sourceHash: transcript.hash, messageIds }, 'POST', event => {
           if (event.type === 'start') {
             if (event.requestId !== requestId || event.conversationId !== conversationId ||
                 (!event.replay && (event.sourceHash !== transcript.hash || event.generation !== sourceGeneration))) {
