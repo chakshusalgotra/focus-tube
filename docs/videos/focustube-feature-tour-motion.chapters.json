@@ -1,0 +1,116 @@
+[
+  {
+    "id": "welcome",
+    "title": "A focused learning workspace",
+    "start": 0,
+    "end": 32.12
+  },
+  {
+    "id": "signup",
+    "title": "Invitation-only account creation",
+    "start": 32.12,
+    "end": 60.199999999999996
+  },
+  {
+    "id": "verification",
+    "title": "Optional profile and verified email",
+    "start": 60.199999999999996,
+    "end": 89.6
+  },
+  {
+    "id": "library",
+    "title": "Organize your course library",
+    "start": 89.6,
+    "end": 117.44
+  },
+  {
+    "id": "discovery",
+    "title": "Search and create courses",
+    "start": 117.44,
+    "end": 146.84
+  },
+  {
+    "id": "player",
+    "title": "Playback without losing context",
+    "start": 146.84,
+    "end": 177.68
+  },
+  {
+    "id": "lesson-navigation",
+    "title": "Lessons, chapters, and checklists",
+    "start": 177.68,
+    "end": 205.36
+  },
+  {
+    "id": "notes",
+    "title": "Write notes beside the lesson",
+    "start": 205.36,
+    "end": 235.08
+  },
+  {
+    "id": "notebooks",
+    "title": "Review, export, and recover notes",
+    "start": 235.08,
+    "end": 263.56
+  },
+  {
+    "id": "planning",
+    "title": "Tasks, quick capture, and roadmaps",
+    "start": 263.56,
+    "end": 292.4
+  },
+  {
+    "id": "dashboard",
+    "title": "Learning progress and history",
+    "start": 292.4,
+    "end": 323.2
+  },
+  {
+    "id": "chat",
+    "title": "Ask questions grounded in captions",
+    "start": 323.2,
+    "end": 358
+  },
+  {
+    "id": "chat-notes",
+    "title": "Chat histories and confirmed note append",
+    "start": 358,
+    "end": 390.2
+  },
+  {
+    "id": "settings",
+    "title": "Account, appearance, and data ownership",
+    "start": 390.2,
+    "end": 430.76
+  },
+  {
+    "id": "feedback",
+    "title": "Private and public feedback",
+    "start": 430.76,
+    "end": 462.8
+  },
+  {
+    "id": "administration",
+    "title": "Invitations and moderation",
+    "start": 462.8,
+    "end": 495.92
+  },
+  {
+    "id": "monitoring",
+    "title": "Monitoring and optional analytics",
+    "start": 495.92,
+    "end": 535
+  },
+  {
+    "id": "extension",
+    "title": "Optional browser capture",
+    "start": 535,
+    "end": 568.16
+  },
+  {
+    "id": "finish",
+    "title": "What is included, and what is not",
+    "start": 568.16,
+    "end": 602.8399999999999
+  }
+]

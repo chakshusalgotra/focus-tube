@@ -122,13 +122,13 @@ Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member
 
 | Method | Path | Contract |
 | --- | --- | --- |
-| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag, safe unavailability reason and own-account `quota` |
+| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag, `cache: {enabled,shared,semantic,consentVersion}`, own-account `quota`, and a safe unavailability reason |
 | GET | `C?conversationId=...` | Snapshot: revision/generation, selected history, histories, completed messages and source metadata |
 | POST | `C/conversations` | `{id,revision,title?}` creates a named history under the video's shared transcript |
 | PATCH | `C/conversations/:conversationId` | `{title,revision}` with consistent conversation binding |
 | DELETE | `C/conversations/:conversationId` | `{revision}` deletes that history, not other histories or appended notes |
 | PUT | `C/transcript` | `{revision,conversationId?,source,rightsConfirmed,language?,replace?,text?}`; YouTube acquisition or compatibility SRT/VTT upload |
-| POST | `C/messages` | `{requestId,revision,conversationId?,question,consent,playhead?,sourceHash?,scope?,mode?,messageIds?}`; bounded request and cost reservation |
+| POST | `C/messages` | `{requestId,revision,conversationId?,question,consent,cacheConsent?,playhead?,sourceHash?,scope?,mode?,messageIds?}`; bounded request and staged cost reservation |
 | POST | `C/cancel` | `{requestId,conversationId?}`; cancel matching active work where available; 204 does not promise a refund |
 | POST | `C/notes/validate` | `{conversationId?,sourceHash,generation,proposalId,texts,document,noteRevision}`; validates explicit append intent/destination without saving the notebook itself |
 | DELETE | `C` | `{revision,conversationId?,removeTranscript?}`; clear selected history or remove shared source/all histories according to the request |
@@ -139,7 +139,23 @@ For `C/messages`, `Accept: application/x-ndjson` requests streamed `start`, `tex
 
 An exhausted window returns HTTP `429` / `CHAT_WINDOW_LIMIT`, the own-account `quota`, `retryAfterSeconds`, and `Retry-After` seconds before any NDJSON headers or provider call. The existing five-per-minute limit returns `RATE_LIMITED` with retry seconds; concurrency and monthly cost use `CHAT_BUSY` and `CHAT_BUDGET`. A six-hour reset does not clear monthly spending or provider throttling. The old `CHAT_DAILY_LIMIT` check is removed. See the [quota implementation plan](video-chat-quota-plan.md) for reset and recovery cases.
 
-Limits, note proposal binding, shared transcript consequences, usage reservation and source timing tolerance are defined in [v1-release.md](v1-release.md#chat-and-confirmed-notes), [video-chat.js](../video-chat.js) and [video-chat-store.js](../video-chat-store.js). Citation validation verifies references exist, not that every generated claim is correct.
+When enabled, exact caching precedes Gemini; eligible semantic lookup precedes generation. Shared/semantic requests require `cacheConsent: "2026-10-07"` after the updated permission prompt. Older clients without it remain private and use no semantic lookup. The marker participates in new request fingerprints; an identical completed request still replays without another admission or charge. Cached final responses use the same schema, current revision and fresh recipient-bound message/proposal IDs. Cache-enabled answers add `message.responseSource: "cache_exact" | "cache_semantic" | "generated"`; clients must not interpret it as source accuracy or a Google billing receipt. A hit may send only `start` and `final`, with no artificial text stream.
+
+Private exact keys include the full effective context. Shared seeds are canonical summary/key-ideas answers from trusted, positively verified public sources and empty conversations, without private history or question wording. Semantic reuse is restricted to unconstrained common English requests in whole-video answer mode, within the exact source/task/context partition and calibrated score/margin. Other scopes, personal constraints, imports and note drafts cannot be promoted to shared answers. Transcript provenance and cache records are server-only derived state, not fields accepted from imports or request bodies.
+
+Every admitted new request counts once toward existing request limits, even a hit or a post-admission failure. Exact hits have zero provider cost; semantic hits can retain an embedding cost. Embedding and generation reservations share one request row and the existing monthly cap. Failed top-ups after a lookup do not generate an answer or refund the lookup. Cache-processing errors may add `attempt: {settled,admitted,generationDispatched,embeddingDispatched,committed}` to JSON/NDJSON errors. A settled, uncommitted attempt with no generation can discard provisional UI output while preserving the question; a dispatched embedding may still cost money. A lost connection is not such a receipt and still requires reconciliation. General HTTP responses remain `no-store`; this cache is private application storage, not a CDN/browser cache.
+
+Limits, retention, calibration and cache controls are in [Answer cache](../README.md#answer-cache). Note proposal binding, shared transcript consequences and source timing tolerance are defined in [v1-release.md](v1-release.md#chat-and-confirmed-notes), [video-chat.js](../video-chat.js) and [video-chat-store.js](../video-chat-store.js). Citation validation verifies references exist, not that every generated claim is correct.
+
+### Admin Video Chat Settings
+
+`GET /api/admin/video-chat` returns a consistent `{settings,usage,changes,environment,capabilities}` snapshot. `PATCH /api/admin/video-chat/settings` accepts exactly `{revision,monthlyBudgetCents,paused,cacheEnabled,sharedCacheEnabled,semanticCacheEnabled}`. Budget is an integer from 0 through 100,000 cents; the other settings are booleans. Shared/semantic caching requires the main cache, and semantic activation requires valid server-side thresholds. Settings persist per installation; environment values are defaults until overridden. The provider key is represented only by a configured boolean.
+
+Read-only `capabilities` includes `requestsPerMinute:5`, the configured `requestsPerWindow`, and `requestWindowSeconds:21600`. Invalid quota configuration reports `requestsPerWindow:null` and `configured:false`; the dashboard cannot change these limits.
+
+Both routes require a current active administrator session and the matching `X-Video-Chat-Account` header, echoed on successful responses. Mutations retain the global exact-Origin guard, strict 8 KiB JSON limit, 30 attempts/account/15 minutes, and a second role/session check inside the settings transaction. A stale revision returns `409 CHAT_SETTINGS_CHANGED`; wrong identity returns `409 SESSION_CHANGED`, members receive 403, revoked sessions receive 401, invalid fields receive 400 and exhausted mutation allowance receives 429 with `Retry-After`. Responses remain `no-store`.
+
+Budget changes are consulted inside subsequent reservation transactions. Settings and bounded audit writes commit together; neither clears the ledger or starts model work. Newly recorded cost-basis fields distinguish known estimates from reserved/unknown stages; historical rows remain legacy/unclassified without changing money. The usage snapshot exposes aggregate microdollar totals only, not learner conversations or individual request text. Changes contain revision, actor ID (nullable after account deletion), before/after settings and time; the latest 20 within the 90-day/1,000-record retention bound are returned.
 
 ## Extension Capture
 

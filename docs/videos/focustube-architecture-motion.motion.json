@@ -1,0 +1,375 @@
+{
+  "version": 1,
+  "style": "motion-v2",
+  "sourceViewport": {
+    "width": 1600,
+    "height": 780
+  },
+  "outputViewport": {
+    "width": 1920,
+    "height": 1080
+  },
+  "mediaBounds": {
+    "x": 40,
+    "y": 84,
+    "width": 1840,
+    "height": 898
+  },
+  "fixedCaptions": true,
+  "pointer": "Native event highlight and click ring",
+  "camera": "Recorded target positions; clamped crop with 900ms ease-out moves and stable holds",
+  "chapters": [
+    {
+      "id": "map",
+      "sourceStart": 0.9714388847351074,
+      "start": 0,
+      "seconds": 35.28,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "monolith",
+      "sourceStart": 36.22933888435364,
+      "start": 35.28,
+      "seconds": 37.32,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.651700134277344,
+          "x": 0.6159648513793945,
+          "y": 0.524533217992538,
+          "zoom": 1.32,
+          "target": "node-domain-handlers"
+        },
+        {
+          "time": 36.22,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "sourceStart": 73.54593896865845,
+      "start": 72.6,
+      "seconds": 38.88,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.95299994468689,
+          "x": 0.18508269786834716,
+          "y": 0.5471885094275841,
+          "zoom": 1.32,
+          "target": "node-learner-ui"
+        },
+        {
+          "time": 25.170100088119508,
+          "x": 0.3989042663574219,
+          "y": 0.7070787869966947,
+          "zoom": 1.32,
+          "target": "node-learner-ui"
+        },
+        {
+          "time": 37.78,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "identity",
+      "sourceStart": 112.41803884506226,
+      "start": 111.47999999999999,
+      "seconds": 40.44,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.181800003051757,
+          "x": 0.3768300437927246,
+          "y": 0.6575361007299179,
+          "zoom": 1.32,
+          "target": "node-request-guards"
+        },
+        {
+          "time": 39.339999999999996,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "sqlite",
+      "sourceStart": 152.84923887252808,
+      "start": 151.92,
+      "seconds": 40.04,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.17780005455017,
+          "x": 0.9132964324951172,
+          "y": 0.5553788796449319,
+          "zoom": 1.32,
+          "target": "node-learning-store"
+        },
+        {
+          "time": 25.910800094604493,
+          "x": 0.7081649780273438,
+          "y": 0.5430058405949519,
+          "zoom": 1.32,
+          "target": "node-learning-store"
+        },
+        {
+          "time": 38.94,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "notes-state",
+      "sourceStart": 192.8707389831543,
+      "start": 191.95999999999998,
+      "seconds": 36.6,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.436299915313721,
+          "x": 0.18515702724456787,
+          "y": 0.5472319187262119,
+          "zoom": 1.32,
+          "target": "node-learner-ui"
+        },
+        {
+          "time": 23.657100076675416,
+          "x": 0.3766862106323242,
+          "y": 0.6907349806565505,
+          "zoom": 1.32,
+          "target": "node-learner-ui"
+        },
+        {
+          "time": 35.5,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "media-ai",
+      "sourceStart": 229.44873905181885,
+      "start": 228.55999999999997,
+      "seconds": 40.64,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.296199913024902,
+          "x": 0.5756124496459961,
+          "y": 0.25326780661558496,
+          "zoom": 1.32,
+          "target": "node-caption-ai"
+        },
+        {
+          "time": 26.39489995956421,
+          "x": 0.6185496139526367,
+          "y": 0.3847709068885216,
+          "zoom": 1.32,
+          "target": "node-caption-ai"
+        },
+        {
+          "time": 39.54,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "quotas",
+      "sourceStart": 270.07663893699646,
+      "start": 269.2,
+      "seconds": 37.04,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.479800100326538,
+          "x": 0.6360194587707519,
+          "y": 0.5553788796449319,
+          "zoom": 1.32,
+          "target": "node-domain-handlers"
+        },
+        {
+          "time": 35.94,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "capture",
+      "sourceStart": 307.103138923645,
+      "start": 306.24,
+      "seconds": 39.08,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 7.9771999073028566,
+          "x": 0.23746981620788574,
+          "y": 0.7734872671274039,
+          "zoom": 1.32,
+          "target": "node-capture-client"
+        },
+        {
+          "time": 25.384600038528443,
+          "x": 0.354494571685791,
+          "y": 0.7690259884565305,
+          "zoom": 1.32,
+          "target": "node-capture-client"
+        },
+        {
+          "time": 37.98,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "feedback-ops",
+      "sourceStart": 346.186439037323,
+      "start": 345.32,
+      "seconds": 39.2,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.019499893188476,
+          "x": 0.42680572509765624,
+          "y": 0.7699012951973158,
+          "zoom": 1.32,
+          "target": "node-service-observability"
+        },
+        {
+          "time": 38.1,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "deployment",
+      "sourceStart": 385.3783390522003,
+      "start": 384.52,
+      "seconds": 43.12,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        },
+        {
+          "time": 8.758700008392333,
+          "x": 0.6354889297485351,
+          "y": 0.38683827718098956,
+          "zoom": 1.32,
+          "target": "node-learning-store"
+        },
+        {
+          "time": 27.958099956512452,
+          "x": 0.6493224334716797,
+          "y": 0.4878399188701923,
+          "zoom": 1.32,
+          "target": "node-learning-store"
+        },
+        {
+          "time": 42.019999999999996,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    },
+    {
+      "id": "evolution",
+      "sourceStart": 428.4986388683319,
+      "start": 427.64,
+      "seconds": 34.4,
+      "transitionSeconds": 0.9,
+      "keys": [
+        {
+          "time": 0,
+          "x": 0.5,
+          "y": 0.5,
+          "zoom": 1
+        }
+      ]
+    }
+  ]
+}

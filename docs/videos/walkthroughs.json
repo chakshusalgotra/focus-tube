@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "language": "en",
+  "voice": "Samantha",
+  "wordsPerMinute": 165,
+  "sourceRevision": "15add2abd3b5606371055dc2b19575ed5dac8be5",
+  "recordingDisclosure": "Sample accounts and original demo media. YouTube, email, AI, and extension connection services are simulated. No real account data or paid provider calls.",
+  "features": [
+    {
+      "id": "welcome",
+      "title": "A focused learning workspace",
+      "text": "Focus Tube turns YouTube videos and playlists into a personal learning workspace. The idea is simple: keep the lesson, your progress, notes, and next actions together. This tour uses sample accounts and original demonstration media. YouTube discovery, playback, email, AI responses, and extension connections are simulated. Account, planning, notebook, and feedback changes use a disposable local database. Nothing here exposes a real learner's account or spends money on a provider."
+    },
+    {
+      "id": "signup",
+      "title": "Invitation-only account creation",
+      "text": "New members join through an invitation. Opening the link removes its secret from the visible address and keeps it in page memory. The account step asks for an email address, display name, required username, and matching passwords. Username availability appears while typing, and the server checks uniqueness again at registration. Password length and estimated strength update from the first character. The eye buttons reveal either password independently without changing its value."
+    },
+    {
+      "id": "verification",
+      "title": "Optional profile and verified email",
+      "text": "When optional analytics is enabled, About you asks for a self-reported learning role, goal, and discovery source. Sharing is off by default, and skipping is a valid path. These answers are not inferred from social accounts. Next, the member enters a six-digit email code. This demo uses a simulated mail adapter, not a real inbox. Back and retry preserve the form where appropriate. Existing members can sign in with email or username, without another invitation."
+    },
+    {
+      "id": "library",
+      "title": "Organize your course library",
+      "text": "For the rest of the tour, we switch to a populated demo workspace. Grid and List show the same courses, including lesson counts, duration, and completion. Pin useful courses and combine the Pinned filter with Not started, In progress, or Completed. An empty filtered view offers Clear filters. Removing a course is separate from opening it, and does not delete its written notebook. The compact sidebar keeps navigation available without consuming the whole screen."
+    },
+    {
+      "id": "discovery",
+      "title": "Search and create courses",
+      "text": "Search a topic, or paste a supported YouTube video or playlist link. Keyword searches offer All, Videos, Playlists, and Courses filters. Typing alone does not send a search. Results show the creator, available duration, and a preview when metadata provides one. Create course saves a result without leaving the list, then changes its action to Open course. Direct links follow the import path. Refreshing a playlist can discover new lessons while preserving existing progress."
+    },
+    {
+      "id": "player",
+      "title": "Playback without losing context",
+      "text": "The player provides play and pause, previous and next, seeking, ten-second jumps, volume, mute, captions, quality, and fullscreen. Playback speed is remembered per course. Real YouTube embeds can clamp speed or override quality, so a requested value is not a guarantee. Pausing lightly dims the frame. Controls hide when idle and remain accessible through pointer, keyboard, and touch interaction. A first touch can reveal hidden controls without unexpectedly pausing the lesson."
+    },
+    {
+      "id": "lesson-navigation",
+      "title": "Lessons, chapters, and checklists",
+      "text": "Course content sits beside the player on a wide screen and becomes a dismissible overlay on smaller screens. It combines the lesson list, completed status, progress, time remaining, and a course checklist. Chapters and description timestamps jump to their source moments. You can mark a lesson complete manually; playback can also drive completion and a next-lesson countdown. The important distinction is that opening a course alone does not mean you started or completed it."
+    },
+    {
+      "id": "notes",
+      "title": "Write notes beside the lesson",
+      "text": "Notes share the study area with the video. Choose Edit to write with headings, emphasis, lists, links, and code formatting. Drag the divider or bottom grip to adjust the writing area; keyboard resizing is also available. Notes autosave after a short pause. Saved means the server acknowledged the document, not merely that text appeared on screen. Closing and reopening the pane preserves the editor and its draft. In Read mode, source-linked paragraphs take you back to the captured lesson moment."
+    },
+    {
+      "id": "notebooks",
+      "title": "Review, export, and recover notes",
+      "text": "The Notebooks view brings written lessons together without starting playback. Filter to one lesson or read the whole course notebook. Export Markdown creates a portable document, and Print or Save PDF uses a clean print layout with source links. Removed courses can remain as archived notebooks. A failed save keeps a recovery draft when browser storage is available. A conflicting edit presents an explicit choice between your draft and the saved version rather than silently merging or overwriting either."
+    },
+    {
+      "id": "planning",
+      "title": "Tasks, quick capture, and roadmaps",
+      "text": "Tasks turn a lesson into something actionable. Add a title, notes, priority, due date, and optional course association. The quick panel lets you capture a task without leaving your current screen, while the Tasks page offers course and priority filters. Roadmaps arrange courses into an ordered learning path with combined progress and a Continue action. Course checklists stay close to their lessons. The global Board entry is marked Coming soon; it is not a working board hidden behind this tour."
+    },
+    {
+      "id": "dashboard",
+      "title": "Learning progress and history",
+      "text": "The Dashboard separates time on Focus Tube from recorded video watch time. It shows streaks, completed lessons and courses, daily activity, course focus, consistency, and watch history. Change the time range to compare recent learning with the longer view. Expand the data tables for an accessible alternative to the charts. These are application activity records, not proof that a person paid attention for every second. The values in this recording are demonstration data, not real product analytics."
+    },
+    {
+      "id": "chat",
+      "title": "Ask questions grounded in captions",
+      "text": "When configured by the operator, Ask opens private video chat. The first question requests permission to process the video's content with Google. Available captions are prepared only after that choice. Summarize video and Explain the key ideas are ordinary chat starters. Text appears provisionally while the response is processed. Only a validated completed answer gains actionable source timestamps and note actions. This is caption-grounded assistance, not analysis of unseen slides, code, or video frames, and citations do not guarantee that every claim is correct."
+    },
+    {
+      "id": "chat-notes",
+      "title": "Chat histories and confirmed note append",
+      "text": "New chat starts a separate conversation for the same video. Histories can be selected, renamed, or deleted, and unsent drafts stay with their conversation. Add to notes first opens an editable preview. Cancel writes nothing; Append to notes is the explicit insertion step, with the normal save acknowledgement and immediate Undo. The composer displays the remaining six-hour request allowance. That allowance is separate from the shared monthly AI budget. A refill does not reset spending, and stopping an admitted request is not a refund promise."
+    },
+    {
+      "id": "settings",
+      "title": "Account, appearance, and data ownership",
+      "text": "Settings groups account details, password changes, email verification, appearance, data, and policies. Sensitive changes require the current password, and password changes rotate sessions. Light and dark themes, optional navigation reflection, and reduced transparency let the workspace adapt to your preferences. A learning backup includes your courses, planning, notes, transcripts, and completed conversations, but not passwords, sessions, provider keys, or spending ledgers. Import replaces the current member's learning data after validation and confirmation. It is not an administrator's full-instance database restore."
+    },
+    {
+      "id": "feedback",
+      "title": "Private and public feedback",
+      "text": "Feedback opens as a separate page, so reporting a problem does not need to replace your lesson or note draft. Choose a category, describe the issue, and optionally attach screenshots. Private is the default. Public reports require explicit agreement to publish the text, username, and images. Replies stay in the report's conversation. Image processing removes metadata, but it cannot redact secrets visible in the picture itself. Forum version one does not automatically send feedback email or publish a GitHub issue."
+    },
+    {
+      "id": "administration",
+      "title": "Invitations and moderation",
+      "text": "An administrator can issue a reusable invitation with a chosen successful-signup limit and expiry. Raw links are shown once; the issued list contains metadata, status, and remaining uses. Expiry edits and revocation are guarded, and revoking an invitation does not remove members who already joined. In Feedback, administrators can change status, lock replies, or hide a thread. Resolved is not the same as locked, and hidden is not the same as deleted. Administrator status does not grant access to another member's private learning notebook."
+    },
+    {
+      "id": "monitoring",
+      "title": "Monitoring and optional analytics",
+      "text": "Site monitoring gives administrators an Overview, Members, Events, and System view. Filter account metadata, inspect bounded activity events, and check the application process and its storage. Presence is approximate, and the traffic chart is not a permanent outage history. Optional product analytics is separately configured and consent-based. It distinguishes engagement, retention, and self-reported audience information, while withholding small groups. Enabling these screens in this disposable demo does not enable collection on the real installation. External Grafana and uptime integrations also require operator configuration."
+    },
+    {
+      "id": "extension",
+      "title": "Optional browser capture",
+      "text": "The optional desktop browser extension captures one supported YouTube video through its popup or context-menu action. This scene shows the real popup interface with simulated browser connection and save receipts. Choose one destination, grant its site permission, connect the current profile, and save. Already-saved videos return a receipt instead of a duplicate course. Pending operations offer manual Retry or Discard. The extension does not read browsing history, import a whole playlist, or give mobile browsers the same extension capability."
+    },
+    {
+      "id": "finish",
+      "title": "What is included, and what is not",
+      "text": "A completed course unlocks the application's PDF certificate. It records completion inside Focus Tube; it is not accreditation. The core experience is the loop from discovery to watching, writing, asking, planning, and reviewing. Manual notes need no AI service. Optional backend media downloads require separate tools and appropriate rights. Social sign-in, the Board interface, and the proposed motion improvements are not demonstrated as shipped features. Newer uncommitted cache work is discussed in the architecture video, separately from this released demo baseline."
+    }
+  ],
+  "architecture": [
+    {
+      "id": "map",
+      "title": "Start with the system boundary",
+      "view": "one-service",
+      "text": "This Archify map explains the released Focus Tube architecture and the choices behind it. It is linked to the documented release source, not to a live production inspection. The highlighted path runs from the browser, through Express security checks and feature handlers, into SQLite. The boxes inside the instance boundary are logical responsibilities, not separately deployed microservices. Animated paths illustrate those relationships. They are not measured requests or live traffic. We will separate the design rationale, its tradeoffs, and later work that is not included in this baseline."
+    },
+    {
+      "id": "monolith",
+      "title": "Why one Node service",
+      "view": "one-service",
+      "focus": "domain-handlers",
+      "text": "The application uses a modular monolith: one Node and Express process, with separate modules for identity, notes, chat, feedback, capture, and observability. This keeps self-hosting and local development small. There is no required message broker, Redis service, or separate authentication deployment. Keeping related state in one process and database also makes transactional operations straightforward. The tradeoff is shared process capacity and coordinated releases. More infrastructure would only be justified by measured workload or ownership needs, not by the diagram having several boxes."
+    },
+    {
+      "id": "browser",
+      "title": "Why vanilla JavaScript and local assets",
+      "view": "one-service",
+      "focus": "learner-ui",
+      "text": "The frontend is vanilla JavaScript, HTML, and CSS. Express serves the application, fonts, Lucide icons, Quill, charts, and PDF tools locally. That avoids a separate frontend build server and reduces routine third-party asset requests. The browser owns temporary interaction state, such as the current route, panel visibility, selection, and unsent drafts. The server owns durable account and learning records. This small stack still needs discipline: imperative code must cancel stale work, preserve editor instances, and prevent a response from one account or course painting over another."
+    },
+    {
+      "id": "identity",
+      "title": "Identity is a server-owned boundary",
+      "view": "trust-and-identity",
+      "focus": "request-guards",
+      "text": "Authentication uses salted scrypt password hashes and opaque session tokens. Only token hashes are stored, and the browser receives an HttpOnly cookie with strict same-site behavior and Secure on HTTPS. This allows explicit server-side revocation instead of trusting a browser token indefinitely. Exact Host and Origin checks sit alongside authentication. Account-binding headers help reject stale tabs, but are not credentials. Invitations, email proof, username uniqueness, capacity, account creation, and session issuance are rechecked together. A failed registration must not spend an invitation or consume a valid proof partially."
+    },
+    {
+      "id": "sqlite",
+      "title": "Why SQLite WAL and transactions",
+      "view": "durable-learning",
+      "focus": "learning-store",
+      "text": "SQLite provides a durable local database without another server to provision. Write-ahead logging, foreign keys, bounded busy waits, and immediate transactions give the application a concrete consistency boundary. Profiles hold revisioned course and planning data, while notes and conversations have their own records and revisions. An invitation redemption, capture receipt, or AI reservation can succeed atomically with its related changes. The important tradeoff is that SQLite serializes writes. A larger deployment would need measured capacity planning, and potentially a different database or workload architecture, rather than assuming unlimited horizontal scaling."
+    },
+    {
+      "id": "notes-state",
+      "title": "Preserve drafts without hiding conflicts",
+      "view": "durable-learning",
+      "focus": "learner-ui",
+      "text": "Notes use a validated document model around Quill instead of treating arbitrary HTML as trusted storage. Source anchors attach to paragraphs only when the matching player supplies a real timestamp; zero seconds remains valid. A local edit updates recovery state, then sends a revision-checked save. Saved means the server acknowledged that revision. New edits during a request remain dirty, and conflicting revisions require an explicit choice. Separating document state from pane visibility lets the user resize, switch views, or move between Chat and Notes without recreating the editor or losing its history."
+    },
+    {
+      "id": "media-ai",
+      "title": "Media stays external; AI is opt-in",
+      "view": "optional-integrations",
+      "focus": "caption-ai",
+      "text": "YouTube's official embedded player owns playback, including its speed, quality, and content restrictions. Public metadata and permitted captions are separate retrieval paths. Chat sends bounded caption context and the selected conversation to Google only after permission. It does not automatically send existing notebooks or unrelated videos. The browser can show provisional streamed text, but only a validated final answer is persisted and can expose citations or a note preview. This boundary avoids presenting partial output as durable work. It also makes the limitations explicit: missing captions and provider failures are real failures, not reasons to invent a source."
+    },
+    {
+      "id": "quotas",
+      "title": "Request allowance is not a money budget",
+      "view": "durable-learning",
+      "focus": "domain-handlers",
+      "text": "The released quota policy allows thirty admitted requests per account in a six-hour window, alongside the short-term rate limit and one active answer per account. SQLite reserves a request slot and estimated maximum cost together. The first admitted request starts the window; later requests do not move its deadline. The shared monthly cost ledger is independent. A full personal allowance can still be blocked by insufficient budget headroom. Known usage is reconciled, while unknown usage after a failed or canceled call can retain the reservation. Replaying the same completed request does not generate twice or spend another slot."
+    },
+    {
+      "id": "capture",
+      "title": "Why a narrowly scoped extension",
+      "view": "optional-integrations",
+      "focus": "capture-client",
+      "text": "The Manifest version three extension has a narrow job: add one chosen video to one selected Focus Tube environment. Optional host permissions, exact extension identity, and account-bound operations limit its reach. It tries the existing session first. Where browser policy requires a separate connection, the first-party consent flow uses state, PKCE, a single-use code, and a scoped opaque grant bounded by its parent session. Saves are additive and return idempotent receipts, rather than replacing the whole profile. A bounded queue supports manual recovery without silently retrying forever or changing the destination account."
+    },
+    {
+      "id": "feedback-ops",
+      "title": "Feedback and observability preserve ownership",
+      "view": "operate-and-evolve",
+      "focus": "service-observability",
+      "text": "Feedback is a separate public and private forum, with authorization checked again for reports, replies, and screenshots. Sharp validates and normalizes selected images, and storage commits with the parent record. Public posting needs explicit consent. Operational logs and metrics are bounded and sanitized; private scrape credentials are separate from an administrator's session. Optional audience and usage analytics have their own consent and retention rules. These choices distinguish troubleshooting from collecting private learning content. They also preserve an important limit: removing image metadata does not remove a password that is visibly present in a screenshot."
+    },
+    {
+      "id": "deployment",
+      "title": "Deployment, backup, and recovery",
+      "view": "operate-and-evolve",
+      "focus": "learning-store",
+      "text": "Docker Compose keeps local, development, and production configurations explicit, with separate projects and persistent data volumes. A learning export is not a full operational backup: it excludes credentials, sessions, grants, shared feedback, and spending records. Instance recovery needs a consistent SQLite backup and securely managed runtime configuration. The documented branch-triggered deployment jobs build and start services, but do not automatically prove every test, backup, health, or acceptance gate. A green job is therefore not the whole release decision. Safe rollout still means a scoped artifact, verified data preservation, and an explicit rollback plan."
+    },
+    {
+      "id": "evolution",
+      "title": "What changes next, and what remains a proposal",
+      "view": "operate-and-evolve",
+      "text": "Newer uncommitted work explores an answer cache with exact private-context matching and tightly constrained sharing of canonical public-source answers. Semantic matching remains gated on real calibration, so it should not be described as a validated production capability. Social sign-in and the motion integration plan are also separate proposals, not facts inferred from this map. The recurring design principle is to keep state ownership and failure behavior explicit. Start small, preserve user control, and add complexity only when there is a measured reason and a testable contract."
+    }
+  ]
+}

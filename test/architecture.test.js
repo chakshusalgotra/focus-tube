@@ -15,7 +15,9 @@ test('architecture catalog covers current flows and keeps draft automation disti
     assert.equal(catalog.diagrams.find(item => item.id === id)?.state, 'current');
   }
   const inventory = docs.sourceInventory(catalog);
-  assert.equal(inventory.tables.length, 26);
+  assert.equal(inventory.tables.length, 29);
+  for (const name of ['video_chat_settings', 'video_chat_settings_audit', 'video_chat_quota_windows']) assert.ok(inventory.tables.some(table => table.name === name));
+  assert.ok(inventory.tables.some(table => table.name === 'video_chat_answer_cache' && table.source === 'video-chat-store.js'));
   assert.equal(inventory.tables.filter(table => table.source === 'extension-store.js').length, 4);
   assert.ok(inventory.sources.every(source => /^[a-f0-9]{64}$/.test(source.sha256)));
   assert.equal(inventory.sources.some(source => source.path === '.env' || source.path.startsWith('data/')), false);

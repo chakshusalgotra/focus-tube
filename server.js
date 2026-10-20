@@ -10,7 +10,7 @@ const { createFeedback } = require('./feedback');
 const { createDownloads } = require('./downloads');
 const { createSearchRequest, parseSearchResults } = require('./youtube-search');
 const noteModel = require('./public/notebook-model');
-const { createVideoChat } = require('./video-chat');
+const { createVideoChat, publicVideoMetadata } = require('./video-chat');
 const { validateChatBackup } = require('./video-chat-store');
 const { createExtension } = require('./extension');
 const { createObservability } = require('./observability');
@@ -103,6 +103,7 @@ app.use(['/api/auth', '/api/invites'], (req, res, next) => {
   next();
 }, express.json({ limit: '8kb' }));
 app.use('/api/extension', express.json({ limit: '8kb' }));
+app.use('/api/admin/video-chat', express.json({ limit: '8kb', strict: true }));
 app.use(['/api/analytics', '/api/admin/analytics'], express.json({ limit: '8kb' }));
 app.use('/api/import', express.json({ limit: '25mb' }));
 app.use('/api/notebooks', express.json({ limit: '300kb' }));
@@ -119,7 +120,9 @@ const analytics = createAnalytics(store, auth, process.env);
 app.use('/api/analytics', analytics.router);
 app.use('/api/admin/analytics', analytics.adminRouter);
 app.use('/api/extension', extension.router);
-app.use('/api/video-chat', createVideoChat(store, auth).router);
+const videoChat = createVideoChat(store, auth, { verifyPublicVideo });
+app.use('/api/video-chat', videoChat.router);
+app.use('/api/admin/video-chat', videoChat.adminRouter);
 const feedback = createFeedback(store, auth, { environment: process.env, observe: monitoring.observe });
 app.use('/api/feedback', feedback.router);
 app.use('/api/admin/feedback', feedback.adminRouter);
@@ -550,6 +553,12 @@ async function fetchWatchHtml(videoId, { signal = AbortSignal.timeout(15000) } =
     },
   });
   return readVideoResponse(res, signal);
+}
+
+async function verifyPublicVideo(videoId, { signal }) {
+  const html = await fetchWatchHtml(videoId, { signal });
+  const player = extractJson(html, 'var ytInitialPlayerResponse = ') || extractJson(html, 'window["ytInitialPlayerResponse"] = ');
+  return publicVideoMetadata(player, videoId);
 }
 
 async function fetchVideo(videoId, { signal = AbortSignal.timeout(15000) } = {}) {
