@@ -62,7 +62,7 @@ Exact route contracts are in [api.md](api.md). Authentication details and histor
 
 SQLite uses WAL, foreign keys and a bounded busy timeout. Core schema changes use guarded additive migrations; transactional operations serialize with `BEGIN IMMEDIATE` through better-sqlite3 where required. Do not mistake a logical module boundary for a separate database.
 
-The source declares **25 application tables**, excluding SQLite's own internal tables. Extension tables are initialized lazily by the extension store, so an instance that has never used capture may not contain all 25. Legacy feedback integration tables may remain on older installations without being created or processed by the current forum. This is a source inventory, not a query of a live database.
+The core, chat and extension sources declare **26 application tables**, including `video_chat_quota_windows`, excluding SQLite's own internal tables. Optional analytics adds six tables in [analytics-store.js](../analytics-store.js#L1), for 32 total source declarations. Extension tables are initialized lazily, so a live instance may contain fewer; legacy feedback tables can remain on older installations. This is source evidence, not a live-database query. The older diagram catalog still needs its separate analytics/receipt refresh and is not a complete current analytics inventory.
 
 | Tables | Ownership and purpose |
 | --- | --- |
@@ -76,6 +76,7 @@ The source declares **25 application tables**, excluding SQLite's own internal t
 | `feedback_threads`, `feedback_replies`, `feedback_screenshots` | Shared forum with public/private ownership and moderation; screenshot BLOBs inherit parent access |
 | `video_chats`, `video_chat_conversations` | Per-user/course/video shared transcript and generation/revision, plus up to 20 named message histories |
 | `video_chat_usage` | Request identity, state, cost reservation and actual/unknown usage; account deletion detaches ownership rather than resetting spending |
+| `video_chat_quota_windows` | One account-owned six-hour window start/count; updated atomically with a new usage reservation and excluded from learning imports/exports |
 | `extension_receipts`, `extension_codes`, `extension_grants`, `extension_session_revocations` | Additive capture deduplication, hashed short-lived PKCE codes, parent-session grants and replacement/disconnect revocation |
 
 ```mermaid
@@ -86,6 +87,7 @@ erDiagram
     users ||--o{ video_chats : owns
     video_chats ||--o{ video_chat_conversations : contains
     users o|--o{ video_chat_usage : accounts_for
+    users ||--o| video_chat_quota_windows : limits_requests
     users o|--o{ feedback_threads : reports
     feedback_threads ||--o{ feedback_replies : contains
     feedback_threads ||--o{ feedback_screenshots : contains

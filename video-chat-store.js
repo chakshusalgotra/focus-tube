@@ -7,6 +7,9 @@ const MAX_CONVERSATIONS = 20;
 const CACHE_TTL_MS = 7 * 86400000;
 const CACHE_LIMITS = { entries: 5000, bytes: 64 * 1024 * 1024, privateEntries: 200, privateBytes: 5 * 1024 * 1024 };
 const SETTING_KEYS = ['monthlyBudgetCents', 'paused', 'cacheEnabled', 'sharedCacheEnabled', 'semanticCacheEnabled'];
+const REQUEST_WINDOW_SECONDS = 6 * 60 * 60;
+const DEFAULT_REQUEST_LIMIT = 30;
+const validRequestLimit = value => Number.isSafeInteger(value) && value > 0 && value <= 1000;
 const validConversationId = value => typeof value === 'string' && (value === 'default' || /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(value));
 const validTitle = value => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 80 && !/[\u0000-\u001f]/.test(value);
 
@@ -72,7 +75,7 @@ function validateChatBackup(records) {
   });
 }
 
-function createChatStore(db, onCompleted = () => {}) {
+function createChatStore(db, onCompleted = () => {}, { clock = Date.now } = {}) {
   if (!db.pragma('table_info(user_data)').some(column => column.name === 'chat_revision')) db.exec('ALTER TABLE user_data ADD COLUMN chat_revision INTEGER NOT NULL DEFAULT 0');
   db.transaction(() => {
   const migrateConversations = !db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'video_chat_conversations'").get();
@@ -94,6 +97,11 @@ function createChatStore(db, onCompleted = () => {}) {
     );
     CREATE INDEX IF NOT EXISTS video_chat_usage_month ON video_chat_usage(month);
     CREATE INDEX IF NOT EXISTS video_chat_usage_user ON video_chat_usage(user_id, created_at);
+    CREATE TABLE IF NOT EXISTS video_chat_quota_windows (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      window_started_at INTEGER NOT NULL CHECK(window_started_at >= 0),
+      used_requests INTEGER NOT NULL CHECK(used_requests >= 0)
+    );
     CREATE TABLE IF NOT EXISTS video_chat_conversations (
       user_id INTEGER NOT NULL, course_id TEXT NOT NULL, video_id TEXT NOT NULL,
       conversation_id TEXT NOT NULL, title TEXT NOT NULL, generation TEXT NOT NULL,
@@ -290,6 +298,17 @@ function createChatStore(db, onCompleted = () => {}) {
   const rowByKey = db.prepare('SELECT * FROM video_chats WHERE user_id = ? AND course_id = ? AND video_id = ?');
   const conversationByKey = db.prepare('SELECT * FROM video_chat_conversations WHERE user_id = ? AND course_id = ? AND video_id = ? AND conversation_id = ?');
   const bump = db.prepare('UPDATE user_data SET chat_revision = chat_revision + 1 WHERE user_id = ?');
+  const quotaByUser = db.prepare('SELECT window_started_at, used_requests FROM video_chat_quota_windows WHERE user_id = ?');
+  const getQuota = (userId, limit = DEFAULT_REQUEST_LIMIT, timestamp = clock()) => {
+    if (!validRequestLimit(limit)) throw new ChatError(503, 'CHAT_CONFIGURATION', 'Video chat request quota is not configured correctly.');
+    const record = quotaByUser.get(userId);
+    const resetAt = record ? record.window_started_at + REQUEST_WINDOW_SECONDS * 1000 : null;
+    const active = resetAt !== null && timestamp < resetAt;
+    const used = active ? record.used_requests : 0;
+    return { limit, used, remaining: Math.max(0, limit - used), windowSeconds: REQUEST_WINDOW_SECONDS,
+      windowStartedAt: active ? new Date(record.window_started_at).toISOString() : null,
+      resetAt: active ? new Date(resetAt).toISOString() : null, serverNow: new Date(timestamp).toISOString() };
+  };
   const list = (userId, courseId, videoId) => db.prepare(`SELECT conversation_id, title, created_at, updated_at,
     json_array_length(messages_json) AS message_count FROM video_chat_conversations
     WHERE user_id = ? AND course_id = ? AND video_id = ? ORDER BY updated_at DESC, conversation_id`).all(userId, courseId, videoId)
@@ -307,8 +326,8 @@ function createChatStore(db, onCompleted = () => {}) {
       messages: JSON.parse(conversation?.messages_json || '[]'), updatedAt: conversation?.updated_at || row?.updated_at };
   };
   const conflict = () => { throw new ChatError(409, 'CHAT_CHANGED', 'Chat changed in another tab. Reload it before continuing.'); };
-  const hasPending = (userId, courseId, videoId) => {
-    db.prepare("UPDATE video_chat_usage SET state = 'failed' WHERE state = 'pending' AND created_at < ?").run(Date.now() - 120000);
+  const hasPending = (userId, courseId, videoId, timestamp = clock()) => {
+    db.prepare("UPDATE video_chat_usage SET state = 'failed' WHERE state = 'pending' AND created_at < ?").run(timestamp - 120000);
     return !!db.prepare(`SELECT 1 FROM video_chat_usage WHERE user_id = ? AND state = 'pending'
       ${courseId === undefined ? '' : 'AND course_id = ? AND video_id = ?'} LIMIT 1`).get(...(courseId === undefined ? [userId] : [userId, courseId, videoId]));
   };
@@ -389,7 +408,7 @@ function createChatStore(db, onCompleted = () => {}) {
     touch(userId, courseId, videoId);
     return get(userId, courseId, videoId);
   }).immediate;
-  const reserve = db.transaction(({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision, maximumCost, budgetMicros }) => {
+  const reserve = db.transaction(({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision, maximumCost, budgetMicros, requestLimit = DEFAULT_REQUEST_LIMIT }) => {
     const thread = get(userId, courseId, videoId, conversationId);
     const previous = db.prepare('SELECT * FROM video_chat_usage WHERE request_id = ?').get(requestId);
     if (previous) {
@@ -399,22 +418,27 @@ function createChatStore(db, onCompleted = () => {}) {
       if (previous.state === 'completed' && message) return { previous: { message, revision: thread.revision, conversationId: thread.conversationId, title: thread.title } };
       throw new ChatError(409, 'REQUEST_USED', 'This request is pending or already attempted. Reload chat before sending a new request.');
     }
+    const timestamp = clock();
     if (thread.revision !== revision) conflict();
     budgetMicros = currentBudget(budgetMicros);
-    if (hasPending(userId)) throw new ChatError(409, 'CHAT_BUSY', 'Another chat is answering. Stop it or wait before sending another message.');
+    if (hasPending(userId, undefined, undefined, timestamp)) throw new ChatError(409, 'CHAT_BUSY', 'Another chat is answering. Stop it or wait before sending another message.');
     if (!thread.transcript) throw new ChatError(409, 'NO_TRANSCRIPT', 'Load a timed transcript before asking a question.');
     if (!thread.conversationId) throw new ChatError(409, 'CHAT_NOT_FOUND', 'Start a new conversation before asking a question.');
     if (thread.messages.length >= 100) throw new ChatError(413, 'CHAT_FULL', 'This chat has reached 100 answers. Start a new conversation to continue.');
-    const recent = db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage WHERE user_id = ? AND created_at > ?').get(userId, Date.now() - 60000).count;
-    if (recent >= 5) throw new ChatError(429, 'RATE_LIMITED', 'Wait a minute before asking another question.');
-    const today = Math.floor(Date.now() / 86400000) * 86400000;
-    const daily = db.prepare('SELECT COUNT(*) AS count FROM video_chat_usage WHERE user_id = ? AND created_at >= ?').get(userId, today).count;
-    if (daily >= 20) throw new ChatError(429, 'CHAT_DAILY_LIMIT', 'You have reached 20 video chat requests for today. Try again after midnight UTC.');
-    const month = new Date().toISOString().slice(0, 7);
+    const quota = getQuota(userId, requestLimit, timestamp);
+    if (!quota.remaining) throw Object.assign(new ChatError(429, 'CHAT_WINDOW_LIMIT', 'Your six-hour video chat allowance is used up. Try again when it resets.'),
+      { quota, retryAfterSeconds: Math.max(1, Math.ceil((Date.parse(quota.resetAt) - timestamp) / 1000)) });
+    const recent = db.prepare('SELECT COUNT(*) AS count, MIN(created_at) AS earliest FROM video_chat_usage WHERE user_id = ? AND created_at > ?').get(userId, timestamp - 60000);
+    if (recent.count >= 5) throw Object.assign(new ChatError(429, 'RATE_LIMITED', 'Wait a minute before asking another question.'),
+      { retryAfterSeconds: Math.max(1, Math.ceil((recent.earliest + 60000 - timestamp) / 1000)) });
+    const month = new Date(timestamp).toISOString().slice(0, 7);
     const spent = db.prepare('SELECT COALESCE(SUM(cost_micros), 0) AS spent FROM video_chat_usage WHERE month = ?').get(month).spent;
     if (maximumCost > 0 && spent + maximumCost > budgetMicros) throw new ChatError(429, 'CHAT_BUDGET', 'The monthly video chat budget has been reached.');
+    db.prepare(`INSERT INTO video_chat_quota_windows(user_id, window_started_at, used_requests) VALUES (?, ?, ?)
+      ON CONFLICT(user_id) DO UPDATE SET window_started_at = excluded.window_started_at, used_requests = excluded.used_requests`)
+      .run(userId, quota.windowStartedAt === null ? timestamp : Date.parse(quota.windowStartedAt), quota.used + 1);
     db.prepare(`INSERT INTO video_chat_usage (request_id, user_id, course_id, video_id, conversation_id, generation, fingerprint, state, month, cost_micros, created_at, generation_cost_basis, embedding_cost_basis)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 'known')`).run(requestId, userId, courseId, videoId, thread.conversationId, thread.generation, fingerprint, month, maximumCost, Date.now(), maximumCost > 0 ? 'reserved' : 'known');
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, 'known')`).run(requestId, userId, courseId, videoId, thread.conversationId, thread.generation, fingerprint, month, maximumCost, timestamp, maximumCost > 0 ? 'reserved' : 'known');
     return { thread };
   }).immediate;
   const reserveCost = db.transaction((requestId, stage, maximumCost, budgetMicros) => {
@@ -489,8 +513,8 @@ function createChatStore(db, onCompleted = () => {}) {
       for (const conversation of record.conversations) write(userId, record.courseId, record.videoId, record.transcript, conversation);
     }
   }).immediate;
-  return { get, list, saveTranscript, clear, createConversation, renameConversation, deleteConversation, reserve, reserveCost, settleEmbedding, finish, exportRecords, restore, hasPending,
+  return { get, list, getQuota, saveTranscript, clear, createConversation, renameConversation, deleteConversation, reserve, reserveCost, settleEmbedding, finish, exportRecords, restore, hasPending,
     getCachedAnswer, putCachedAnswer, cacheCandidates, cachedEmbedding, getSettings, saveSettings, adminSnapshot, markDispatched };
 }
 
-module.exports = { createChatStore, validateChatBackup, validConversationId, MAX_CONVERSATIONS };
+module.exports = { createChatStore, validateChatBackup, validConversationId, MAX_CONVERSATIONS, DEFAULT_REQUEST_LIMIT, REQUEST_WINDOW_SECONDS, validRequestLimit };

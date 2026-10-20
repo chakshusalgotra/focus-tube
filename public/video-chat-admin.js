@@ -119,7 +119,7 @@ window.VideoChatAdmin = class VideoChatAdmin {
       adminChatKnown: this.money(usage.knownMicros), adminChatPending: this.money(usage.pendingMicros), adminChatRetained: this.money(usage.retainedMicros),
       adminChatLegacy: this.money(usage.legacyMicros), adminChatEmbedding: this.money(usage.embeddingMicros), adminChatGeneration: this.money(usage.generationMicros),
       adminChatNext: this.money(capabilities.maximumGenerationMicros), adminChatResets: this.date(usage.resetsAt), adminChatModel: capabilities.model,
-      adminChatRequests: `${usage.requests} this month; ${capabilities.requestsPerMinute}/minute and ${capabilities.requestsPerDay}/UTC day per account`,
+      adminChatRequests: `${usage.requests} this month; ${capabilities.requestsPerMinute}/minute and ${capabilities.requestsPerWindow ?? 'Unavailable'}/${capabilities.requestWindowSeconds / 3600} hours per account`,
       adminChatSource: settings.source === 'dashboard' ? `Dashboard settings, revision ${settings.revision}` : 'Environment defaults',
       adminChatReadiness: !capabilities.deploymentEnabled ? 'Deployment disabled' : !capabilities.keyConfigured ? 'Provider key not configured' :
         !capabilities.configured ? 'Provider configuration unavailable' : settings.paused || !settings.monthlyBudgetCents ? 'Paused' : 'Configured',

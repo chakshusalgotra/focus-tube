@@ -118,11 +118,11 @@ Report body: `{submissionId,category,visibility,publicConsent?,title,body,steps?
 
 ## Video Chat
 
-Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member session and enforce supplied `X-Video-Chat-Account` binding. Generation/source preparation additionally require enabled/eligible access. Retained-history reads and deletion have separate rules, so a disabled pilot is not equivalent to deleting stored conversations.
+Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member session and enforce supplied `X-Video-Chat-Account` binding. Generation/source preparation additionally require configured/enabled chat and an active registered account; there is no pilot-ID gate. Retained-history reads and deletion have separate rules, so disabled generation is not equivalent to deleting stored conversations. Exhausted request allowance does not change the `available` capability flag.
 
 | Method | Path | Contract |
 | --- | --- | --- |
-| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag, `cache: {enabled,shared,semantic,consentVersion}`, and a safe unavailability reason |
+| GET | `/api/video-chat/config` | Availability, model/limit metadata, automatic-caption flag, `cache: {enabled,shared,semantic,consentVersion}`, own-account `quota`, and a safe unavailability reason |
 | GET | `C?conversationId=...` | Snapshot: revision/generation, selected history, histories, completed messages and source metadata |
 | POST | `C/conversations` | `{id,revision,title?}` creates a named history under the video's shared transcript |
 | PATCH | `C/conversations/:conversationId` | `{title,revision}` with consistent conversation binding |
@@ -135,6 +135,10 @@ Let `C = /api/video-chat/:courseId/videos/:videoId`. All routes require a member
 
 For `C/messages`, `Accept: application/x-ndjson` requests streamed `start`, `text`, heartbeat and final/error events; the default final-JSON path remains compatible. Provisional text is not a validated answer. Scope is `moment|video|discussion`, default `video`; mode is `answer|note_draft`, default `answer`. The simplified website exposes whole-video conversation, starters and follow-ups rather than the legacy upload/scope controls. No tools or automatic billable retry are enabled. Source/current-account/history checks run again before committing an answer.
 
+`quota` in config and snapshot config contains `{limit,used,remaining,windowSeconds:21600,windowStartedAt,resetAt,serverNow}`. Dates are UTC ISO strings; a missing/expired window reports full remaining allowance and null start/reset until a new request is admitted. Default limit is 30; `VIDEO_CHAT_REQUESTS_PER_WINDOW` accepts 1-1,000. Reading status does not start a window. The stored counter and usage reservation commit in one immediate transaction; later failure/cancellation retains the request slot, while rejected admission and completed-ID replay consume none.
+
+An exhausted window returns HTTP `429` / `CHAT_WINDOW_LIMIT`, the own-account `quota`, `retryAfterSeconds`, and `Retry-After` seconds before any NDJSON headers or provider call. The existing five-per-minute limit returns `RATE_LIMITED` with retry seconds; concurrency and monthly cost use `CHAT_BUSY` and `CHAT_BUDGET`. A six-hour reset does not clear monthly spending or provider throttling. The old `CHAT_DAILY_LIMIT` check is removed. See the [quota implementation plan](video-chat-quota-plan.md) for reset and recovery cases.
+
 When enabled, exact caching precedes Gemini; eligible semantic lookup precedes generation. Shared/semantic requests require `cacheConsent: "2026-10-07"` after the updated permission prompt. Older clients without it remain private and use no semantic lookup. The marker participates in new request fingerprints; an identical completed request still replays without another admission or charge. Cached final responses use the same schema, current revision and fresh recipient-bound message/proposal IDs. Cache-enabled answers add `message.responseSource: "cache_exact" | "cache_semantic" | "generated"`; clients must not interpret it as source accuracy or a Google billing receipt. A hit may send only `start` and `final`, with no artificial text stream.
 
 Private exact keys include the full effective context. Shared seeds are canonical summary/key-ideas answers from trusted, positively verified public sources and empty conversations, without private history or question wording. Semantic reuse is restricted to unconstrained common English requests in whole-video answer mode, within the exact source/task/context partition and calibrated score/margin. Other scopes, personal constraints, imports and note drafts cannot be promoted to shared answers. Transcript provenance and cache records are server-only derived state, not fields accepted from imports or request bodies.
@@ -146,6 +150,8 @@ Limits, retention, calibration and cache controls are in [Answer cache](../READM
 ### Admin Video Chat Settings
 
 `GET /api/admin/video-chat` returns a consistent `{settings,usage,changes,environment,capabilities}` snapshot. `PATCH /api/admin/video-chat/settings` accepts exactly `{revision,monthlyBudgetCents,paused,cacheEnabled,sharedCacheEnabled,semanticCacheEnabled}`. Budget is an integer from 0 through 100,000 cents; the other settings are booleans. Shared/semantic caching requires the main cache, and semantic activation requires valid server-side thresholds. Settings persist per installation; environment values are defaults until overridden. The provider key is represented only by a configured boolean.
+
+Read-only `capabilities` includes `requestsPerMinute:5`, the configured `requestsPerWindow`, and `requestWindowSeconds:21600`. Invalid quota configuration reports `requestsPerWindow:null` and `configured:false`; the dashboard cannot change these limits.
 
 Both routes require a current active administrator session and the matching `X-Video-Chat-Account` header, echoed on successful responses. Mutations retain the global exact-Origin guard, strict 8 KiB JSON limit, 30 attempts/account/15 minutes, and a second role/session check inside the settings transaction. A stale revision returns `409 CHAT_SETTINGS_CHANGED`; wrong identity returns `409 SESSION_CHANGED`, members receive 403, revoked sessions receive 401, invalid fields receive 400 and exhausted mutation allowance receives 429 with `Retry-After`. Responses remain `no-store`.
 

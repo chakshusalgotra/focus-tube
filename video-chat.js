@@ -396,14 +396,15 @@ function createVideoChat(store, auth, { environment = process.env, provider, emb
   loadCaptions = fetchCaptions, timeoutMs = 70000, heartbeatMs = 15000 } = {}) {
   const router = require('express').Router();
   const adminRouter = require('express').Router();
-  const { validConversationId, MAX_CONVERSATIONS } = require('./video-chat-store');
+  const { validConversationId, MAX_CONVERSATIONS, DEFAULT_REQUEST_LIMIT, REQUEST_WINDOW_SECONDS, validRequestLimit } = require('./video-chat-store');
   const modelName = environment.VIDEO_CHAT_MODEL || MODEL;
   const pricing = Object.hasOwn(MODELS, modelName) ? MODELS[modelName] : null;
   const maximumCost = pricing ? Math.ceil(INPUT_LIMIT * pricing.inputMicros + OUTPUT_LIMIT * pricing.outputMicros) : 0;
   const enabled = environment.VIDEO_CHAT_ENABLED === '1' && !!environment.GEMINI_API_KEY && !!pricing;
   const budget = environment.VIDEO_CHAT_MONTHLY_BUDGET_USD ?? '5';
   const budgetMicros = /^\d+(?:\.\d{1,2})?$/.test(budget) && Number(budget) <= 1000 ? Math.round(Number(budget) * 1000000) : 0;
-  const allowedIds = new Set(String(environment.VIDEO_CHAT_ALLOWED_USER_IDS || '').split(',').filter(value => /^\d+$/.test(value)).map(Number));
+  const configuredLimit = String(environment.VIDEO_CHAT_REQUESTS_PER_WINDOW ?? DEFAULT_REQUEST_LIMIT);
+  const requestLimit = /^[1-9]\d{0,3}$/.test(configuredLimit) && validRequestLimit(Number(configuredLimit)) ? Number(configuredLimit) : null;
   const minimumScore = Number(environment.VIDEO_CHAT_SEMANTIC_MIN_SCORE);
   const minimumMargin = Number(environment.VIDEO_CHAT_SEMANTIC_MIN_MARGIN);
   const semanticReady = minimumScore > 0 && minimumScore <= 1 && minimumMargin > 0 && minimumMargin <= 1;
@@ -438,13 +439,15 @@ function createVideoChat(store, auth, { environment = process.env, provider, emb
   let embeddings = embeddingProvider;
   const access = (user, finishing = false) => {
     const account = store.getUserById(user.id);
-    const permitted = account && !account.is_guest && account.account_state !== 'disabled' && (account.is_admin || allowedIds.has(user.id));
+    const permitted = account && !account.is_guest && account.account_state === 'active';
     const settings = policy();
-    return { available: !!(enabled && permitted && (finishing || (settings.budgetMicros > 0 && !settings.paused))), model: modelName,
+    return { available: !!(enabled && permitted && requestLimit && (finishing || (settings.budgetMicros > 0 && !settings.paused))), model: modelName,
       inputTokenLimit: INPUT_LIMIT, maxConversations: MAX_CONVERSATIONS,
+      quota: permitted && requestLimit ? store.chat.getQuota(user.id, requestLimit) : null,
       cache: { enabled: settings.cacheEnabled, semantic: settings.semanticCacheEnabled, shared: settings.sharedCacheEnabled, consentVersion: CACHE_CONSENT },
       autoCaptions: (environment.VIDEO_CHAT_AUTO_CAPTIONS ?? '1') === '1',
-      reason: !enabled ? 'Video chat has not been configured by the administrator.' : !permitted ? 'Video chat is limited to approved pilot accounts.' :
+      reason: !enabled ? 'Video chat has not been configured by the administrator.' : !requestLimit ? 'Video chat request quota is not configured correctly. Contact the administrator.' :
+        !permitted ? 'Video chat requires an active member account.' :
         settings.paused || !settings.budgetMicros ? 'Video chat is paused by the administrator.' : '' };
   };
   const snapshot = (userId, courseId, videoId, conversationId) => {
@@ -476,6 +479,11 @@ function createVideoChat(store, auth, { environment = process.env, provider, emb
       if (body.attempt?.settled && !body.attempt.generationDispatched && body.attempt.embeddingDispatched) {
         body.error += ' A similarity lookup may still incur a charge.';
       }
+      if (known && error.code === 'CHAT_WINDOW_LIMIT') body.quota = error.quota;
+      if (known && Number.isSafeInteger(error.retryAfterSeconds) && error.retryAfterSeconds > 0) {
+        body.retryAfterSeconds = error.retryAfterSeconds;
+        if (!res.headersSent) res.set('Retry-After', String(error.retryAfterSeconds));
+      }
       if (res.locals.chatStream) res.locals.chatStream.fail(body);
       else if (!res.destroyed && !res.headersSent) res.status(known ? error.status : controller.signal.aborted ? 504 : 502).json(body);
     } finally { clearTimeout(timeout); res.locals.chatStream?.close(); res.off('close', disconnected); }
@@ -499,9 +507,9 @@ function createVideoChat(store, auth, { environment = process.env, provider, emb
   };
   const administration = () => ({ ...store.chat.adminSnapshot(defaults),
     environment: ['local', 'dev', 'production', 'test'].includes(environment.APP_ENV) ? environment.APP_ENV : 'local',
-    capabilities: { configured: enabled, deploymentEnabled: environment.VIDEO_CHAT_ENABLED === '1', keyConfigured: !!environment.GEMINI_API_KEY,
+    capabilities: { configured: !!(enabled && requestLimit), deploymentEnabled: environment.VIDEO_CHAT_ENABLED === '1', keyConfigured: !!environment.GEMINI_API_KEY,
       model: modelName, semanticReady, maximumGenerationMicros: maximumCost, maximumEmbeddingMicros: MAXIMUM_EMBEDDING_COST,
-      requestsPerMinute: 5, requestsPerDay: 20 } });
+      requestsPerMinute: 5, requestsPerWindow: requestLimit, requestWindowSeconds: REQUEST_WINDOW_SECONDS } });
   adminRouter.use(auth.requireAdmin);
   adminRouter.use(route(async (req, res) => {
     requireCurrentAdmin(req);
@@ -627,7 +635,7 @@ function createVideoChat(store, auth, { environment = process.env, provider, emb
       throw new ChatError(409, 'CHAT_CHANGED', 'The transcript changed. Reload chat before continuing.');
     }
     const useCache = policy().cacheEnabled && mode === 'answer';
-    const reservation = store.chat.reserve({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision: expected, maximumCost: useCache ? 0 : maximumCost, budgetMicros });
+    const reservation = store.chat.reserve({ userId, courseId, videoId, conversationId, requestId, fingerprint, revision: expected, maximumCost: useCache ? 0 : maximumCost, budgetMicros, requestLimit });
     const wantsStream = req.get('accept')?.split(',').some(value => value.split(';')[0].trim() === 'application/x-ndjson') && req.accepts('application/x-ndjson');
     const delivery = wantsStream ? (res.locals.chatStream = streamResponse(res, signal, heartbeatMs)) : null;
     if (reservation.previous) {
