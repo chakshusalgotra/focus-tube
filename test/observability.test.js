@@ -46,9 +46,10 @@ test('request monitoring counts once and logs only safe templates and generated 
   assert.equal((await monitor.registry.getSingleMetric('focustube_http_inflight').get()).values[0].value, 0);
 });
 
-test('forum route metrics use templates without leaking report content or account details', async () => {
+test('feature route metrics use templates without leaking content or account details', async () => {
   const { monitor, lines } = fixture();
-  for (const [baseUrl, route] of [['/api/feedback', '/:id/replies'], ['/api/admin/feedback', '/:id']]) {
+  for (const [baseUrl, route] of [['/api/feedback', '/:id/replies'], ['/api/admin/feedback', '/:id'],
+    ['/api/video-chat', '/:courseId/videos/:videoId/messages'], ['/api/admin/video-chat', '/settings'], ['/api/extension', '/videos']]) {
     const req = { method: 'POST', baseUrl, route: { path: route }, url: '/PRIVATE_ID?q=PRIVATE_QUERY',
       headers: { cookie: 'PRIVATE_COOKIE' }, body: { title: 'PRIVATE_TITLE', body: 'PRIVATE_BODY', email: 'private@example.test' } };
     const res = response(); monitor.middleware(req, res, () => {}); res.emit('finish');

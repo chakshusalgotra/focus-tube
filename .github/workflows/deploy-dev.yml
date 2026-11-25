@@ -9,7 +9,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Test application and documentation
+        run: |
+          npm test
+          npm run docs:check
+          git diff --check
+      - name: Validate Compose projects
+        run: |
+          docker compose -f compose.yaml config --quiet
+          docker compose -f compose.dev.yaml config --quiet
+          docker compose -f compose.prod.yaml config --quiet
+      - name: Build and verify the runtime image
+        run: |
+          docker build --tag focustube:ci .
+          docker run --detach --name focustube-ci --network none --env AUTH_ALLOW_LOOPBACK_HTTP=1 focustube:ci
+          docker exec focustube-ci node scripts/check-runtime.js
+      - name: Remove isolated verification container
+        if: always()
+        run: docker rm --force focustube-ci 2>/dev/null || true
+
   deploy:
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -27,10 +60,11 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           APP_DIR: /mnt/c/Users/csalg/projects/server/focustube/focus-tube-dev
+          DEPLOY_COMMIT: ${{ github.sha }}
         run: |
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           # Windows OpenSSH entry point; inner double quotes survive cmd/powershell parsing
           ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=accept-new "$SSH_USER@$SSH_HOST" \
-            "wsl -e bash -lc \"export DOCKER_CONFIG=~/.docker-focustube-ci && cd $APP_DIR && git fetch origin dev && git reset --hard origin/dev && docker compose -f compose.dev.yaml up -d --build && docker image prune -f\""
+            "wsl -e bash -lc \"export DOCKER_CONFIG=~/.docker-focustube-ci && cd $APP_DIR && git fetch origin dev && git reset --hard $DEPLOY_COMMIT && docker compose -f compose.dev.yaml up -d --build --wait --wait-timeout 120 && docker image prune -f\""

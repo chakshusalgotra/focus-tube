@@ -1,0 +1,32 @@
+/* Keep every viewer action reachable when the diagram is opened on a phone. */
+@media (max-width: 600px) {
+  html:not([data-embed="true"]) body {
+    padding: 16px;
+  }
+
+  html:not([data-embed="true"]) .toolbar {
+    position: relative;
+    inset: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 8px;
+    margin: 0 0 20px;
+  }
+
+  html:not([data-embed="true"]) .header {
+    padding: 0;
+    margin-bottom: 16px;
+  }
+
+  html:not([data-embed="true"]) .toolbar .preset-menu,
+  html:not([data-embed="true"]) .toolbar .export-menu {
+    position: fixed;
+    inset: auto 16px;
+    width: auto;
+    min-width: 0;
+    max-height: 65dvh;
+    overflow-y: auto;
+  }
+}

@@ -22,6 +22,11 @@ services:
       VIDEO_CHAT_REQUESTS_PER_WINDOW: ${VIDEO_CHAT_REQUESTS_PER_WINDOW:-30}
       VIDEO_CHAT_AUTO_CAPTIONS: ${VIDEO_CHAT_AUTO_CAPTIONS:-1}
       VIDEO_CHAT_MONTHLY_BUDGET_USD: ${VIDEO_CHAT_MONTHLY_BUDGET_USD:-1}
+      VIDEO_CHAT_CACHE_ENABLED: ${VIDEO_CHAT_CACHE_ENABLED:-0}
+      VIDEO_CHAT_SHARED_CACHE_ENABLED: ${VIDEO_CHAT_SHARED_CACHE_ENABLED:-0}
+      VIDEO_CHAT_SEMANTIC_CACHE_ENABLED: ${VIDEO_CHAT_SEMANTIC_CACHE_ENABLED:-0}
+      VIDEO_CHAT_SEMANTIC_MIN_SCORE: ${VIDEO_CHAT_SEMANTIC_MIN_SCORE:-}
+      VIDEO_CHAT_SEMANTIC_MIN_MARGIN: ${VIDEO_CHAT_SEMANTIC_MIN_MARGIN:-}
       EXTENSION_ENABLED: ${EXTENSION_ENABLED:-0}
       EXTENSION_ALLOWED_IDS: ${EXTENSION_ALLOWED_IDS:-}
       EXTENSION_PUBLIC_ORIGIN: https://dev-ft.neuralnest.co.in
@@ -39,7 +44,7 @@ services:
       - focustube-logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('https://dev-ft.neuralnest.co.in/api/health', { signal: AbortSignal.timeout(4000) }).then(async response => { if (!response.ok || (await response.json()).database !== 'ok') process.exit(1); }).catch(() => process.exit(1));"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health', { signal: AbortSignal.timeout(4000) }).then(async response => { if (!response.ok || (await response.json()).database !== 'ok') process.exit(1); }).catch(() => process.exit(1));"]
       interval: 30s
       timeout: 5s
       retries: 3

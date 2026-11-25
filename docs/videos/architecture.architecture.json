@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FocusTube: architecture and design choices",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "repository": {
+      "url": "https://github.com/chakshusalgotra/focus-tube",
+      "provider": "github",
+      "revision": "15add2abd3b5606371055dc2b19575ed5dac8be5",
+      "link_mode": "web"
+    },
+    "views": [
+      { "id": "one-service", "label": "One service, clear modules", "focus": ["learner-ui", "request-guards", "domain-handlers", "learning-store"], "note": "Vanilla JavaScript, one Express process, and SQLite keep self-hosting simple; modules remain logical, not microservices." },
+      { "id": "trust-and-identity", "label": "Identity and ownership", "focus": ["learner-ui", "request-guards", "account-providers", "learning-store"], "note": "Exact origins, opaque sessions, verified invitations, and per-account checks protect private learning records." },
+      { "id": "durable-learning", "label": "Reliable learning state", "focus": ["learner-ui", "domain-handlers", "learning-store"], "note": "Profile and notebook revisions expose conflicts; acknowledged saves and idempotent operations protect recovery." },
+      { "id": "optional-integrations", "label": "Media, AI, and capture", "focus": ["youtube-media", "caption-ai", "capture-client", "request-guards", "domain-handlers"], "note": "YouTube owns playback; AI needs permission and atomic budgets; capture uses minimal permissions and scoped grants." },
+      { "id": "operate-and-evolve", "label": "Operate and evolve", "focus": ["domain-handlers", "learning-store", "service-observability", "operator-collector"], "note": "Separate environment volumes and private observability help operations; release checks and backups remain explicit." }
+    ]
+  },
+  "components": [
+    { "id": "youtube-media", "type": "external", "label": "YouTube", "sublabel": "Embedded media and metadata", "pos": [30, 40], "size": [210, 76], "sources": [{ "path": "docs/architecture.md", "label": "Media boundary" }] },
+    { "id": "account-providers", "type": "external", "label": "SMTP / Turnstile", "sublabel": "Configured account services", "pos": [390, 40], "size": [210, 76], "sources": [{ "path": "auth-services.js", "label": "Account adapters" }] },
+    { "id": "caption-ai", "type": "external", "label": "Google Gemini", "sublabel": "Consented caption context", "pos": [750, 40], "size": [210, 76], "sources": [{ "path": "video-chat.js", "label": "Validated AI requests" }] },
+    { "id": "learner-ui", "type": "frontend", "label": "Browser workspace", "sublabel": "Vanilla JS, Quill, local assets", "pos": [30, 310], "size": [210, 76], "sources": [{ "path": "public/app.js", "label": "Learning workspace" }, { "path": "public/notebooks.js", "label": "Notebook lifecycle" }] },
+    { "id": "request-guards", "type": "security", "label": "Express + auth", "sublabel": "Host, Origin, session, account", "pos": [390, 310], "size": [210, 76], "sources": [{ "path": "server.js", "label": "Request boundaries" }, { "path": "auth.js", "label": "Identity controls" }] },
+    { "id": "domain-handlers", "type": "backend", "label": "Feature modules", "sublabel": "Courses, notes, chat, feedback", "pos": [750, 310], "size": [210, 76], "sources": [{ "path": "server.js", "label": "Module composition" }, { "path": "video-chat-store.js", "label": "Atomic AI admission" }] },
+    { "id": "learning-store", "type": "database", "label": "SQLite WAL", "sublabel": "Owned records and transactions", "pos": [1110, 310], "size": [210, 76], "sources": [{ "path": "db.js", "label": "Persistence and revisions" }] },
+    { "id": "capture-client", "type": "frontend", "label": "MV3 extension", "sublabel": "Optional single-video capture", "pos": [30, 580], "size": [210, 76], "sources": [{ "path": "extension/service-worker.js", "label": "Capture and manual retry" }] },
+    { "id": "service-observability", "type": "backend", "label": "Private observability", "sublabel": "Pino, metrics, optional analytics", "pos": [750, 580], "size": [210, 76], "sources": [{ "path": "observability.js", "label": "Sanitized operations" }, { "path": "analytics.js", "label": "Opt-in analytics" }] },
+    { "id": "operator-collector", "type": "external", "label": "Alloy / Grafana", "sublabel": "Optional operator integration", "pos": [1110, 580], "size": [210, 76], "sources": [{ "path": "compose.monitoring.yaml", "label": "Private collector" }] }
+  ],
+  "boundaries": [
+    { "kind": "region", "label": "One self-hosted instance: Node process and persistent data", "wraps": ["request-guards", "domain-handlers", "learning-store", "service-observability"], "pad": 28 }
+  ],
+  "connections": [
+    { "id": "same-origin-api", "from": "learner-ui", "to": "request-guards", "label": "HTTP / JSON", "variant": "emphasis" },
+    { "id": "authorized-operations", "from": "request-guards", "to": "domain-handlers", "label": "Authorize", "variant": "emphasis" },
+    { "id": "atomic-persistence", "from": "domain-handlers", "to": "learning-store", "label": "Transactions", "variant": "emphasis" },
+    { "id": "official-playback", "from": "learner-ui", "to": "youtube-media", "label": "IFrame API" },
+    { "id": "verified-identity", "from": "request-guards", "to": "account-providers", "label": "SMTP / HTTPS", "variant": "security", "labelAt": [495, 204] },
+    { "id": "consented-generation", "from": "domain-handlers", "to": "caption-ai", "label": "Google SDK", "variant": "dashed" },
+    { "id": "scoped-capture", "from": "capture-client", "to": "request-guards", "label": "Capture API", "variant": "security" },
+    { "id": "bounded-telemetry", "from": "domain-handlers", "to": "service-observability", "label": "Sanitized events", "labelAt": [855, 483] },
+    { "id": "configured-export", "from": "service-observability", "to": "operator-collector", "label": "Opt-in export", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Why this shape", "items": ["Small deployment surface; explicit modules rather than separate services.", "Transactions protect invitation use, saves, capture receipts, and AI admission."] },
+    { "dot": "amber", "title": "Boundaries and tradeoffs", "items": ["SQLite writes serialize; provider availability and costs remain external.", "Metadata/captions also use YouTube. Trace motion is explanatory, not live traffic."] }
+  ]
+}

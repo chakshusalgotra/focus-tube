@@ -11,12 +11,13 @@
       "id": "system",
       "type": "architecture",
       "specification": {
-        "sha256": "7d04254badac700b55d571290aa8627e3f44502866ca2124518572010856ea88",
-        "bytes": 4332
+        "sha256": "638691d24c85d3b802830941258bd2d2c7a07e564968dd6942622039a46c88b2",
+        "bytes": 6637
       },
       "artifact": {
-        "sha256": "6bf5e6c3cb3ff674d675e8d9e34ec459a261d81978179badaeebd32b84f33f74",
-        "bytes": 814119
+        "sha256": "edf2894bec4a058400d5365be1a056a711b7f9303de3cf07e17818162dde5fe3",
+        "bytes": 817436,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/system.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -25,18 +26,73 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
+      }
+    },
+    {
+      "id": "services",
+      "type": "architecture",
+      "specification": {
+        "sha256": "cb0ddc0c33a0f98a48ba47f9dcc3be3f6ea20642616fe4c88e610e302b5cf81b",
+        "bytes": 8383
+      },
+      "artifact": {
+        "sha256": "ef281adc18c82a85afea5120aa784d85575113d1779a7fe029ceb80a27c045c7",
+        "bytes": 815194,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/services.html"
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
+      }
+    },
+    {
+      "id": "chat-budget",
+      "type": "workflow",
+      "specification": {
+        "sha256": "6948d1049bb2be70f900c8f270172973caa3fa876fd69d1d106b3d122197f56c",
+        "bytes": 6554
+      },
+      "artifact": {
+        "sha256": "a00f6fddb532be46ad2c020133de8681d54b3314a809acda8ec17fe623dfff28",
+        "bytes": 817069,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/chat-budget.html"
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "account",
       "type": "workflow",
       "specification": {
-        "sha256": "ad56ccd1f2ac7d31df7fa1b96b9a56b468458ebbd27e1064b575e30368089466",
-        "bytes": 3004
+        "sha256": "273a6263f647441bc9d24f304cb3371c0fec239f6db9696087a36951f9dc4e68",
+        "bytes": 3635
       },
       "artifact": {
-        "sha256": "28c5895494b4417c6c5b36531b6115a5648b44b7b4b1f0d1e8ec117870e4bec6",
-        "bytes": 805806
+        "sha256": "0dd81fa53efaa7f2c844a1d71ae71815fbd33100aca55d0fe8ca773cb8cff20c",
+        "bytes": 805493,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/account.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -45,18 +101,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "learning",
       "type": "workflow",
       "specification": {
-        "sha256": "525825276bba604904dda638b86a7f6fa04c419cb96f49372cb1e13ca9ee8a2d",
-        "bytes": 2922
+        "sha256": "abfcc633204169b87d5d973b13e060f8d06c206d013b2ca5ac8f72fbe2fd49f5",
+        "bytes": 3575
       },
       "artifact": {
-        "sha256": "cab895282ad5d6f23544d66ca342c1e595bcc3c5f1c05b1090f5ccea077b4c21",
-        "bytes": 804965
+        "sha256": "c4bbb872a5135421a6f0a087728d68a3dc63ae7ef7a48bb4eeb2b9826d8e29f3",
+        "bytes": 804885,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/learning.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -65,18 +126,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "notes",
       "type": "workflow",
       "specification": {
-        "sha256": "600f4192d058a53574112f065cf5c7429eb313d24f68815e75098e9eed85e44f",
-        "bytes": 3168
+        "sha256": "c2d166b46a31c25e3480a4e4c89196f3d636544dd361e694cd74591fee3aed3a",
+        "bytes": 4497
       },
       "artifact": {
-        "sha256": "ff56748a3285b4d8ccb1d0dffe28b296448c236183b0a663783ca8dd0df530c8",
-        "bytes": 807322
+        "sha256": "3156f8b4a8f82c3066df6fd3f022f111d6732e5bebaf8f0be0c7730dc3afc434",
+        "bytes": 808080,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/notes.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -85,18 +151,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "chat",
       "type": "workflow",
       "specification": {
-        "sha256": "bcf6731636884a10174ab3b0f05600135c0f30339164798dc8da3ddcf4f86452",
-        "bytes": 3063
+        "sha256": "cfab15185122b8f58504b0933fe169a727575bebc0226440926c020fe0d745d4",
+        "bytes": 3648
       },
       "artifact": {
-        "sha256": "2e191e94022a8fc9b015f185cac8970f4c1048a1b81f7b824c969fad036a785d",
-        "bytes": 806084
+        "sha256": "a808a6461e08008775904b14e9d9ccf1a5141f1f3e60ce22a0fae6f8ea6459bd",
+        "bytes": 805857,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/chat.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -105,18 +176,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "capture",
       "type": "workflow",
       "specification": {
-        "sha256": "57432521da2748269aa7bce056cd850e46c667106304435ecb1f097f9a670d82",
-        "bytes": 3018
+        "sha256": "d34b3308c47d0949da6d2ef756c2ff19d3b3222193cfe1d62bc7e9d48f6d20e6",
+        "bytes": 3646
       },
       "artifact": {
-        "sha256": "12fcbcc7d36d1f5dc09e529d64907d2aded50b3d320dec927f70d0d8c78375f4",
-        "bytes": 805633
+        "sha256": "d66b1fb58f52fdbff55f78cc6abd3f1b1ddaf6c5603d18a35f40a3e3c5ac492b",
+        "bytes": 805528,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/capture.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -125,18 +201,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "feedback",
       "type": "workflow",
       "specification": {
-        "sha256": "4373ebb2de3983d4bb99e32795974ab09eaf565886cfdad934d952bd006ec40f",
-        "bytes": 2703
+        "sha256": "32f886a9733ed6c5c6b5a03502a259103d2d87e77ac0a83ed0447362d155ab86",
+        "bytes": 3848
       },
       "artifact": {
-        "sha256": "acb57cd62244de2f8f249ab11069c11b00ceb56828a9311d9d41e2924dbe8fc6",
-        "bytes": 803215
+        "sha256": "9a18b990064a445e06d63051ef94e9dde2a58e6ac56f95d6508dea1a22be9762",
+        "bytes": 803956,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/feedback.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -145,18 +226,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "deployment",
       "type": "workflow",
       "specification": {
-        "sha256": "3655c40d2fa078d038ede12c9def0aeed467ed565b9e36d46f0ef2e41e13b40a",
-        "bytes": 2594
+        "sha256": "2cc16a7d4fb24e73b3e13ec681ecbd4be530b676316fa87a55b9b9c08fcfadf9",
+        "bytes": 4702
       },
       "artifact": {
-        "sha256": "13b06c2c7ef8816d64b4c8e3bb2086382c429b7b9e65bcd2971aa5b8ef78e7d3",
-        "bytes": 802719
+        "sha256": "abf26add9681a08ef7d530abe6e476f1d5ffd6048750e8cd257bebb4111a0ab4",
+        "bytes": 807780,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/deployment.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -165,18 +251,23 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     },
     {
       "id": "release-draft",
       "type": "workflow",
       "specification": {
-        "sha256": "4df54fb00bed44e9b445e5a51852d133db4111091acf25d512fd60679ca10b8f",
-        "bytes": 2828
+        "sha256": "cb878e74f7c2558ffc9f08088564f1c9320391775d1943369522da9874bbd07c",
+        "bytes": 4011
       },
       "artifact": {
-        "sha256": "28a0c2c626e1e430d4e9640f9a76d19fe98868216d4f3a2202d2298b947fd117",
-        "bytes": 805398
+        "sha256": "63052041584bed5f8b5ceb1af48ddf5326b8990145f7f221e7a67e358a1618b4",
+        "bytes": 806126,
+        "path": "/Users/chakshusalgotra/project_code/ClaudeCode/Local-course/docs/diagrams/release-draft.html"
       },
       "validation": {
         "checksPassed": 9,
@@ -185,6 +276,10 @@
         "compositionStatus": "pass",
         "errors": 0,
         "warnings": 0
+      },
+      "presentation": {
+        "stylesheet": "viewer.css",
+        "sha256": "c4557805484de807b8f3cb22145a204d79c59926e4d346937c4c64a6fc8f29f4"
       }
     }
   ]

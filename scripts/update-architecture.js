@@ -40,7 +40,7 @@ function sourceInventory(catalog, base = root) {
     return { path: file, sha256: digest(fs.readFileSync(path.join(base, file))) };
   });
   const tables = [];
-  for (const file of ['db.js', 'video-chat-store.js', 'extension-store.js']) {
+  for (const file of ['db.js', 'video-chat-store.js', 'extension-store.js', 'analytics-store.js']) {
     const text = fs.readFileSync(path.join(base, file), 'utf8');
     for (const match of text.matchAll(/CREATE TABLE IF NOT EXISTS ([a-z_]+)/g)) tables.push({ name: match[1], source: file });
   }
@@ -86,9 +86,11 @@ choice.addEventListener('change',()=>{location.hash=choice.value});window.addEve
 function verifyArtifacts(catalog, base = root) {
   const folder = path.join(base, 'docs', 'diagrams');
   const receipts = readJson(path.join(folder, 'receipts.json'));
+  const viewerStyleHash = digest(fs.readFileSync(path.join(folder, 'viewer.css')));
   for (const item of catalog.diagrams) {
     const receipt = receipts.diagrams.find(value => value.id === item.id);
     if (!receipt || receipt.validation.checksPassed !== 9 || receipt.validation.errors || receipt.validation.warnings) throw new Error('Missing showcase receipt: ' + item.id);
+    if (receipt.presentation?.stylesheet !== 'viewer.css' || receipt.presentation.sha256 !== viewerStyleHash) throw new Error('Stale viewer presentation: ' + item.id);
     for (const [kind, filename] of [['specification', `${item.id}.${item.type}.json`], ['artifact', `${item.id}.html`]]) {
       const bytes = fs.readFileSync(path.join(folder, filename));
       if (digest(bytes) !== receipt[kind].sha256 || bytes.length !== receipt[kind].bytes) throw new Error('Stale diagram ' + kind + ': ' + item.id);
@@ -134,12 +136,27 @@ function commandLine() {
   if (command !== 'build') throw new Error('Use check, build [--refresh-evidence], or preview <diagram-id>.');
   if (fs.existsSync(path.join(directory, 'source-inventory.json')) && selection !== '--refresh-evidence') verifySources(catalog);
   const receipts = [];
+  const viewerStyle = fs.readFileSync(path.join(directory, 'viewer.css'), 'utf8');
   for (const item of catalog.diagrams) {
-    const result = spawnSync(process.execPath, [cli, 'deliver', item.type, path.join(directory, `${item.id}.${item.type}.json`), path.join(directory, `${item.id}.html`), '--quality', 'showcase', '--json'], { env: environment, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
-    const receipt = JSON.parse(result.stdout || '{}');
-    if (result.status !== 0 || !receipt.ok) throw new Error(item.id + ': ' + (receipt.error || result.stderr || 'Archify delivery failed.'));
-    receipts.push({ id: item.id, type: item.type, specification: receipt.specification, artifact: receipt.artifact, validation: receipt.validation });
-    console.log(`PASS: ${item.id}, ${receipt.validation.checksPassed}/9 showcase checks`);
+    const staging = fs.mkdtempSync(path.join(os.tmpdir(), 'focustube-diagram-'));
+    try {
+      const stagedHtml = path.join(staging, `${item.id}.html`);
+      const finalHtml = path.join(directory, `${item.id}.html`);
+      const result = spawnSync(process.execPath, [cli, 'deliver', item.type, path.join(directory, `${item.id}.${item.type}.json`), stagedHtml, '--quality', 'showcase', '--json'], { env: environment, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+      const receipt = JSON.parse(result.stdout || '{}');
+      if (result.status !== 0 || !receipt.ok) throw new Error(item.id + ': ' + (receipt.error || result.stderr || 'Archify delivery failed.') + '\n' + JSON.stringify(receipt.diagnostics || []));
+      const html = fs.readFileSync(stagedHtml, 'utf8');
+      if (!html.includes('</head>')) throw new Error('Missing viewer style insertion point: ' + item.id);
+      fs.writeFileSync(stagedHtml, html.replace('</head>', () => `<style id="focustube-viewer-style">\n${viewerStyle}\n</style>\n</head>`));
+      const checked = spawnSync(process.execPath, [cli, 'check', stagedHtml], { env: environment, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
+      if (checked.status !== 0) throw new Error(item.id + ': styled artifact check failed.\n' + checked.stdout + checked.stderr);
+      const bytes = fs.readFileSync(stagedHtml);
+      fs.renameSync(stagedHtml, finalHtml);
+      receipts.push({ id: item.id, type: item.type, specification: receipt.specification,
+        artifact: { ...receipt.artifact, path: finalHtml, bytes: bytes.length, sha256: digest(bytes) }, validation: receipt.validation,
+        presentation: { stylesheet: 'viewer.css', sha256: digest(viewerStyle) } });
+      console.log(`PASS: ${item.id}, ${receipt.validation.checksPassed}/9 showcase checks`);
+    } finally { fs.rmSync(staging, { recursive: true, force: true }); }
   }
   writeJson(path.join(directory, 'source-inventory.json'), sourceInventory(catalog));
   writeJson(path.join(directory, 'receipts.json'), { version: 1, generator: catalog.archify, diagrams: receipts });

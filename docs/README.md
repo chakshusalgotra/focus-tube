@@ -1,6 +1,6 @@
 # FocusTube Documentation
 
-Reviewed **2026-09-28** against the working-tree source. This includes local changes beyond the recorded Git base; it is not a claim that the same version is deployed on every environment. The source fingerprints and diagram receipts are in [diagrams/source-inventory.json](diagrams/source-inventory.json) and [diagrams/receipts.json](diagrams/receipts.json).
+Reviewed **2026-11-25** against the source prepared for `dev`. Start with the [detailed platform architecture](architecture.md) or [open the interactive Architecture Atlas](diagrams/index.html). The source fingerprints and diagram receipts are in [diagrams/source-inventory.json](diagrams/source-inventory.json) and [diagrams/receipts.json](diagrams/receipts.json); deployed runtime settings are separate.
 
 ## Start Here
 
@@ -19,6 +19,8 @@ Open [the Architecture Atlas](diagrams/index.html) directly in a browser. Each l
 | Diagram | Editable source | Meaning |
 | --- | --- | --- |
 | [System map](diagrams/system.html) | [Architecture JSON](diagrams/system.architecture.json) | Browser, service, storage and external boundaries |
+| [Platform modules and storage](diagrams/services.html) | [Architecture JSON](diagrams/services.architecture.json) | Feature ownership, 35 table declarations, analytics and temporary state |
+| [Chat budget and cache accounting](diagrams/chat-budget.html) | [Workflow JSON](diagrams/chat-budget.workflow.json) | Monthly USD policy, six-hour request quota, reservations, cache hits and unknown usage |
 | [Invitation and sign-up](diagrams/account.html) | [Workflow JSON](diagrams/account.workflow.json) | Email proof and atomic account admission |
 | [Learning workspace](diagrams/learning.html) | [Workflow JSON](diagrams/learning.workflow.json) | Discovery, course creation, playback and progress |
 | [Notes and recovery](diagrams/notes.html) | [Workflow JSON](diagrams/notes.workflow.json) | Drafts, revision checks, save acknowledgement and conflicts |
@@ -33,6 +35,7 @@ Open [the Architecture Atlas](diagrams/index.html) directly in a browser. Each l
 ## Documentation Ownership
 
 - [architecture.md](architecture.md) owns the code structure, state ownership, storage map, security boundaries and diagram maintenance procedure.
+- [Chat budget architecture](architecture.md#chat-budget-quotas-and-provider-calls) explains the administrator cap, independent request quota, provider stages and failure accounting.
 - [flows.md](flows.md) owns the end-to-end user journeys and their recovery/permission behavior.
 - [api.md](api.md) indexes the implemented HTTP routes, account bindings, body limits and response contracts.
 - [invite-only-auth-spec.md](invite-only-auth-spec.md) owns the detailed account/invitation contract. Its early numbered sections are explicitly historical; use Current Release and the current lifecycle section first.

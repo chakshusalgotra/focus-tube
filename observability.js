@@ -9,9 +9,12 @@ const pino = require('pino');
 const client = require('@prometheus-io/client');
 
 const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']);
-const routerPrefixes = new Set(['', '/api/auth', '/api/invites', '/api/downloads', '/api/feedback', '/api/admin/feedback', '/api/analytics', '/api/admin/analytics']);
-const assets = new Set(['/', '/index.html', '/policies.html', '/feedback.html', '/feedback.js', '/app.js', '/styles.css', '/auth-entry.js', '/theme.js', '/notebooks.js', '/notebook-model.js', '/notebook-editor.js']);
-const operations = new Set(['login', 'register', 'upgrade', 'logout', 'email', 'profile', 'password', 'verification', 'invite', 'sqlite', 'smtp', 'captcha', 'health', 'startup', 'shutdown', 'application', 'download', 'feedback']);
+const routerPrefixes = new Set(['', '/api/auth', '/api/invites', '/api/downloads', '/api/feedback', '/api/admin/feedback', '/api/analytics', '/api/admin/analytics',
+  '/api/video-chat', '/api/admin/video-chat', '/api/extension']);
+const assets = new Set(['/', '/index.html', '/policies.html', '/feedback.html', '/feedback.js', '/app.js', '/styles.css', '/auth-entry.js', '/theme.js', '/notebooks.js', '/notebook-model.js', '/notebook-editor.js',
+  '/video-chat.js', '/video-chat-admin.js', '/analytics.js', '/extension-connect.js', '/invitations.js']);
+const operations = new Set(['login', 'register', 'upgrade', 'logout', 'email', 'profile', 'password', 'verification', 'invite', 'sqlite', 'smtp', 'captcha', 'health', 'startup', 'shutdown', 'application', 'download', 'feedback',
+  'chat_cache', 'chat_cache_exact', 'chat_cache_semantic', 'chat_embedding', 'chat_generation']);
 const outcomes = new Set(['success', 'rejected', 'unavailable', 'failed', 'busy', 'accepted', 'limited']);
 
 function requestRoute(req) {

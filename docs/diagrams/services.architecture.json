@@ -1,0 +1,426 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "FocusTube modules and storage",
+    "subtitle": "One Express process, explicit ownership, one SQLite file per environment",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "learning",
+        "label": "Learning and identity",
+        "focus": [
+          "identity",
+          "workspace",
+          "notes",
+          "sqlite"
+        ],
+        "note": "Session ownership and independent revisions protect profiles and notes from stale tabs."
+      },
+      {
+        "id": "chat",
+        "label": "Chat and spending",
+        "focus": [
+          "chat",
+          "sqlite"
+        ],
+        "note": "Conversations, cache, request quotas, budget settings and the usage ledger share transactional storage."
+      },
+      {
+        "id": "community",
+        "label": "Capture and feedback",
+        "focus": [
+          "capture",
+          "forum",
+          "sqlite"
+        ],
+        "note": "Extension receipts deduplicate saves; forum screenshot access follows each thread's visibility."
+      },
+      {
+        "id": "analytics",
+        "label": "Analytics and operations",
+        "focus": [
+          "analytics",
+          "monitoring",
+          "sqlite"
+        ],
+        "note": "Opt-in product analytics is separate from sanitized operational metrics and rotating logs."
+      },
+      {
+        "id": "downloads",
+        "label": "Optional downloads",
+        "focus": [
+          "downloads",
+          "temporary"
+        ],
+        "note": "Authorized yt-dlp/ffmpeg jobs use process memory and temporary files, not a durable job queue."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "identity",
+      "type": "security",
+      "label": "Accounts + invitations",
+      "sublabel": "Cookies, scrypt, email proof",
+      "pos": [
+        30,
+        49
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "workspace",
+      "type": "backend",
+      "label": "Learning workspace",
+      "sublabel": "Library, plans, progress, search",
+      "pos": [
+        380,
+        49
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "notes",
+      "type": "backend",
+      "label": "Notebooks",
+      "sublabel": "Quill Delta + revision checks",
+      "pos": [
+        730,
+        49
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "chat",
+      "type": "backend",
+      "label": "Video chat + budgets",
+      "sublabel": "Captions, cache, Gemini, notes",
+      "pos": [
+        1080,
+        49
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "capture",
+      "type": "security",
+      "label": "Extension capture",
+      "sublabel": "Exact origins, PKCE, receipts",
+      "pos": [
+        30,
+        230.99999999999997
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "forum",
+      "type": "backend",
+      "label": "Feedback forum",
+      "sublabel": "Visibility, replies, image BLOBs",
+      "pos": [
+        380,
+        230.99999999999997
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "analytics",
+      "type": "backend",
+      "label": "Product analytics",
+      "sublabel": "Consent, cohorts, usage, survey",
+      "pos": [
+        730,
+        230.99999999999997
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "downloads",
+      "type": "backend",
+      "label": "Optional downloads",
+      "sublabel": "Rights check, yt-dlp, ffmpeg",
+      "pos": [
+        1080,
+        230.99999999999997
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "monitoring",
+      "type": "backend",
+      "label": "Operational monitoring",
+      "sublabel": "Private metrics + rotating logs",
+      "pos": [
+        30,
+        454.99999999999994
+      ],
+      "size": [
+        230,
+        56
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite / better-sqlite3",
+      "sublabel": "35 table declarations; WAL + FK",
+      "pos": [
+        530,
+        454.99999999999994
+      ],
+      "size": [
+        290,
+        56
+      ]
+    },
+    {
+      "id": "temporary",
+      "type": "backend",
+      "label": "Temporary files + jobs",
+      "sublabel": "ZIP delivery; memory lifecycle",
+      "pos": [
+        1080,
+        454.99999999999994
+      ],
+      "size": [
+        230,
+        56
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Feature routers inside one Express process",
+      "wraps": [
+        "identity",
+        "workspace",
+        "notes",
+        "chat",
+        "capture",
+        "forum",
+        "analytics",
+        "downloads"
+      ],
+      "pad": 25
+    },
+    {
+      "kind": "security-group",
+      "label": "Persistent data volume",
+      "wraps": [
+        "sqlite"
+      ],
+      "pad": 25
+    }
+  ],
+  "connections": [
+    {
+      "id": "account-state",
+      "from": "identity",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          145,
+          150.5
+        ],
+        [
+          315,
+          150.5
+        ],
+        [
+          315,
+          395.5
+        ],
+        [
+          675,
+          395.5
+        ]
+      ],
+      "variant": "security"
+    },
+    {
+      "id": "profile-state",
+      "from": "workspace",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          495,
+          164.5
+        ],
+        [
+          655,
+          164.5
+        ],
+        [
+          655,
+          392
+        ],
+        [
+          675,
+          392
+        ]
+      ]
+    },
+    {
+      "id": "note-state",
+      "from": "notes",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          845,
+          150.5
+        ],
+        [
+          1010,
+          150.5
+        ],
+        [
+          1010,
+          482.99999999999994
+        ]
+      ]
+    },
+    {
+      "id": "chat-state",
+      "from": "chat",
+      "to": "sqlite",
+      "fromSide": "left",
+      "toSide": "right",
+      "via": [
+        [
+          1040,
+          77
+        ],
+        [
+          1040,
+          482.99999999999994
+        ]
+      ],
+      "variant": "emphasis"
+    },
+    {
+      "id": "capture-state",
+      "from": "capture",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "left",
+      "via": [
+        [
+          145,
+          350
+        ],
+        [
+          450,
+          350
+        ],
+        [
+          450,
+          482.99999999999994
+        ]
+      ],
+      "variant": "security"
+    },
+    {
+      "id": "forum-state",
+      "from": "forum",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          495,
+          364
+        ],
+        [
+          675,
+          364
+        ]
+      ]
+    },
+    {
+      "id": "analytics-state",
+      "from": "analytics",
+      "to": "sqlite",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "via": [
+        [
+          845,
+          350
+        ],
+        [
+          675,
+          350
+        ]
+      ]
+    },
+    {
+      "id": "database-probe",
+      "from": "monitoring",
+      "to": "sqlite",
+      "label": "Read probe + size",
+      "variant": "dashed"
+    },
+    {
+      "id": "download-files",
+      "from": "downloads",
+      "to": "temporary",
+      "label": "Progress + ZIP",
+      "labelAt": [
+        1195,
+        385
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Data ownership",
+      "items": [
+        "35 table declarations across core, chat, extension and analytics stores. Profiles use JSON; notes and conversations have independent revisions.",
+        "Budget policy, cost accounting and request quotas survive learning imports and history deletion."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Separate lifecycles",
+      "items": [
+        "Product analytics is opt-in. Operational logs use bounded route templates without prompts or note text.",
+        "Dev and production have separate volumes. Optional downloads use temporary files and process memory."
+      ]
+    }
+  ]
+}

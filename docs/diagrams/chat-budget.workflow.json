@@ -1,0 +1,289 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Chat budget and cache accounting",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
+    "views": [
+      {
+        "id": "admission",
+        "label": "Admit one request",
+        "focus": [
+          "question",
+          "admit"
+        ],
+        "note": "Active account, consent, revision, one in-flight answer, five/minute and 30/six-hours precede atomic admission."
+      },
+      {
+        "id": "spending",
+        "label": "Reserve before spending",
+        "focus": [
+          "lookup",
+          "reserve",
+          "provider",
+          "settle"
+        ],
+        "note": "Every paid stage rechecks persisted policy and reserves monthly headroom; embedding and generation share one ledger row."
+      },
+      {
+        "id": "cache",
+        "label": "Reuse an answer",
+        "focus": [
+          "lookup",
+          "hit",
+          "settle",
+          "reply"
+        ],
+        "note": "An exact hit skips provider calls but consumes one request slot. Semantic reuse may incur an embedding charge."
+      },
+      {
+        "id": "failure",
+        "label": "Reject or retain",
+        "focus": [
+          "reserve",
+          "blocked",
+          "provider",
+          "unknown"
+        ],
+        "note": "Insufficient headroom blocks dispatch. Unknown usage after dispatch retains its reservation until reconciled."
+      }
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Browser"
+        },
+        "backend": {
+          "label": "Application"
+        },
+        "database": {
+          "label": "Storage"
+        },
+        "security": {
+          "label": "Guard"
+        },
+        "cloud": {
+          "label": "Runtime"
+        },
+        "external": {
+          "label": "External service"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "browser",
+      "label": "Member browser"
+    },
+    {
+      "id": "service",
+      "label": "Chat API + SQLite"
+    },
+    {
+      "id": "external",
+      "label": "Google provider"
+    },
+    {
+      "id": "failure",
+      "label": "Recovery",
+      "variant": "exception"
+    }
+  ],
+  "mainPath": [
+    "question",
+    "admit",
+    "lookup",
+    "reserve",
+    "provider",
+    "settle",
+    "reply"
+  ],
+  "nodes": [
+    {
+      "id": "question",
+      "lane": "browser",
+      "col": 0,
+      "type": "frontend",
+      "label": "Ask with consent",
+      "sublabel": "Account + video",
+      "width": 150
+    },
+    {
+      "id": "admit",
+      "lane": "service",
+      "col": 0,
+      "type": "security",
+      "label": "Admit once",
+      "sublabel": "Policy, quota, request ID",
+      "width": 150
+    },
+    {
+      "id": "lookup",
+      "lane": "service",
+      "col": 1,
+      "type": "backend",
+      "label": "Check cache",
+      "sublabel": "Owner, source, context",
+      "width": 150
+    },
+    {
+      "id": "hit",
+      "lane": "service",
+      "col": 2,
+      "type": "backend",
+      "label": "Exact hit",
+      "sublabel": "Zero provider cost",
+      "width": 150
+    },
+    {
+      "id": "reserve",
+      "lane": "service",
+      "col": 3,
+      "type": "database",
+      "label": "Reserve stage",
+      "sublabel": "Recheck monthly headroom",
+      "width": 150
+    },
+    {
+      "id": "provider",
+      "lane": "external",
+      "col": 4,
+      "type": "external",
+      "label": "Google call",
+      "sublabel": "Embedding / generation",
+      "width": 150
+    },
+    {
+      "id": "settle",
+      "lane": "service",
+      "col": 5,
+      "type": "database",
+      "label": "Validate + settle",
+      "sublabel": "Usage + answer commit",
+      "width": 150
+    },
+    {
+      "id": "reply",
+      "lane": "browser",
+      "col": 5,
+      "type": "frontend",
+      "label": "Final answer",
+      "sublabel": "Citations + note preview",
+      "width": 150
+    },
+    {
+      "id": "blocked",
+      "lane": "failure",
+      "col": 3,
+      "type": "security",
+      "label": "Block dispatch",
+      "sublabel": "Paused or no headroom",
+      "width": 150
+    },
+    {
+      "id": "unknown",
+      "lane": "failure",
+      "col": 5,
+      "type": "database",
+      "label": "Keep reservation",
+      "sublabel": "Unknown provider usage",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "submit",
+      "from": "question",
+      "to": "admit",
+      "label": "POST message",
+      "variant": "security"
+    },
+    {
+      "id": "one-slot",
+      "from": "admit",
+      "to": "lookup",
+      "label": "One slot",
+      "variant": "emphasis"
+    },
+    {
+      "id": "miss",
+      "from": "lookup",
+      "to": "reserve",
+      "label": "Miss / paid lookup",
+      "variant": "emphasis"
+    },
+    {
+      "id": "exact-hit",
+      "from": "lookup",
+      "to": "hit",
+      "label": "Exact hit",
+      "role": "branch"
+    },
+    {
+      "id": "cache-settle",
+      "from": "hit",
+      "to": "settle",
+      "label": "Reuse",
+      "role": "branch"
+    },
+    {
+      "id": "dispatch",
+      "from": "reserve",
+      "to": "provider",
+      "label": "Reserved",
+      "variant": "security"
+    },
+    {
+      "id": "actual-cost",
+      "from": "provider",
+      "to": "settle",
+      "label": "Usage",
+      "variant": "emphasis"
+    },
+    {
+      "id": "final",
+      "from": "settle",
+      "to": "reply",
+      "label": "Validated final",
+      "variant": "emphasis"
+    },
+    {
+      "id": "no-headroom",
+      "from": "reserve",
+      "to": "blocked",
+      "label": "Reject stage",
+      "role": "error",
+      "variant": "security"
+    },
+    {
+      "id": "usage-unknown",
+      "from": "provider",
+      "to": "unknown",
+      "label": "Usage unavailable",
+      "role": "error",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Separate limits",
+      "items": [
+        "Admin cap: $0-$1,000 per database per UTC month. Pause or $0 stops new requests. A $3 entry is a monthly dollar cap.",
+        "Member quota: 30 admitted attempts per six hours and five/minute. Cache hits count once; completed-ID replay is free."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Conservative accounting",
+      "items": [
+        "Embedding and generation share one request row. Every paid stage rechecks headroom; a blocked reply does not refund its embedding.",
+        "Unknown dispatched usage retains its reservation. Clearing chats or importing a learning backup cannot reset spending."
+      ]
+    }
+  ]
+}

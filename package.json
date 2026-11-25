@@ -29,13 +29,16 @@
     "express": "^4.19.2",
     "jspdf": "^4.2.1",
     "lucide": "1.44.0",
-    "nodemailer": "10.0.9",
+    "nodemailer": "10.6.1",
     "pino": "10.3.1",
     "pino-roll": "4.0.0",
     "quill": "2.0.2",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "subtitle": "4.2.2",
     "youtube-transcript-plus": "2.0.1",
     "zxcvbn": "4.4.2"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.2": true
   }
 }

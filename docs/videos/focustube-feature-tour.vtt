@@ -1,0 +1,481 @@
+WEBVTT
+
+00:00:00.000 --> 00:00:04.703
+Focus Tube turns YouTube videos and
+playlists into a personal learning workspace.
+
+00:00:04.703 --> 00:00:10.553
+The idea is simple: keep the lesson, your
+progress, notes, and next actions together.
+
+00:00:10.553 --> 00:00:14.337
+This tour uses sample accounts
+and original demonstration media.
+
+00:00:14.337 --> 00:00:20.865
+YouTube discovery, playback, email, AI responses,
+and extension connections are simulated.
+
+00:00:20.865 --> 00:00:26.539
+Account, planning, notebook, and feedback
+changes use a disposable local database.
+
+00:00:26.539 --> 00:00:30.656
+Nothing here exposes a real learner's
+account or spends money on a provider.
+
+00:00:32.160 --> 00:00:34.384
+New members join through an invitation.
+
+00:00:34.384 --> 00:00:39.045
+Opening the link removes its secret from the
+visible address and keeps it in page memory.
+
+00:00:39.045 --> 00:00:45.765
+The account step asks for an email address, display
+name, required username, and matching passwords.
+
+00:00:45.765 --> 00:00:51.377
+Username availability appears while typing, and
+the server checks uniqueness again at registration.
+
+00:00:51.377 --> 00:00:55.231
+Password length and estimated strength
+update from the first character.
+
+00:00:55.231 --> 00:00:59.583
+The eye buttons reveal either password
+independently without changing its value.
+
+00:01:00.240 --> 00:01:07.278
+When optional analytics is enabled, About you asks for a
+self-reported learning role, goal, and discovery source.
+
+00:01:07.278 --> 00:01:10.863
+Sharing is off by default, and skipping is a valid path.
+
+00:01:10.863 --> 00:01:13.834
+These answers are not inferred from social accounts.
+
+00:01:13.834 --> 00:01:17.173
+Next, the member enters a six-digit email code.
+
+00:01:17.173 --> 00:01:21.292
+This demo uses a simulated mail adapter, not a real inbox.
+
+00:01:21.292 --> 00:01:24.106
+Back and retry preserve the form where appropriate.
+
+00:01:24.106 --> 00:01:28.967
+Existing members can sign in with email
+or username, without another invitation.
+
+00:01:29.600 --> 00:01:33.735
+For the rest of the tour, we switch
+to a populated demo workspace.
+
+00:01:33.735 --> 00:01:39.257
+Grid and List show the same courses, including
+lesson counts, duration, and completion.
+
+00:01:39.257 --> 00:01:44.757
+Pin useful courses and combine the Pinned filter
+with Not started, In progress, or Completed.
+
+00:01:44.757 --> 00:01:47.470
+An empty filtered view offers Clear filters.
+
+00:01:47.470 --> 00:01:52.087
+Removing a course is separate from opening
+it, and does not delete its written notebook.
+
+00:01:52.087 --> 00:01:56.766
+The compact sidebar keeps navigation
+available without consuming the whole screen.
+
+00:01:57.480 --> 00:02:01.744
+Search a topic, or paste a supported
+YouTube video or playlist link.
+
+00:02:01.744 --> 00:02:06.630
+Keyword searches offer All, Videos,
+Playlists, and Courses filters.
+
+00:02:06.630 --> 00:02:08.777
+Typing alone does not send a search.
+
+00:02:08.777 --> 00:02:14.102
+Results show the creator, available duration,
+and a preview when metadata provides one.
+
+00:02:14.102 --> 00:02:19.452
+Create course saves a result without leaving the
+list, then changes its action to Open course.
+
+00:02:19.452 --> 00:02:21.712
+Direct links follow the import path.
+
+00:02:21.712 --> 00:02:26.305
+Refreshing a playlist can discover new
+lessons while preserving existing progress.
+
+00:02:26.960 --> 00:02:36.215
+The player provides play and pause, previous and next,
+seeking, ten-second jumps, volume, mute, captions, quality, and
+
+00:02:36.215 --> 00:02:36.759
+fullscreen.
+
+00:02:36.759 --> 00:02:39.056
+Playback speed is remembered per course.
+
+00:02:39.056 --> 00:02:45.182
+Real YouTube embeds can clamp speed or override
+quality, so a requested value is not a guarantee.
+
+00:02:45.182 --> 00:02:46.993
+Pausing lightly dims the frame.
+
+00:02:46.993 --> 00:02:52.658
+Controls hide when idle and remain accessible
+through pointer, keyboard, and touch interaction.
+
+00:02:52.658 --> 00:02:57.194
+A first touch can reveal hidden controls
+without unexpectedly pausing the lesson.
+
+00:02:58.000 --> 00:03:04.014
+Course content sits beside the player on a wide screen
+and becomes a dismissible overlay on smaller screens.
+
+00:03:04.014 --> 00:03:10.489
+It combines the lesson list, completed status,
+progress, time remaining, and a course checklist.
+
+00:03:10.489 --> 00:03:14.016
+Chapters and description timestamps
+jump to their source moments.
+
+00:03:14.016 --> 00:03:20.069
+You can mark a lesson complete manually; playback can
+also drive completion and a next-lesson countdown.
+
+00:03:20.069 --> 00:03:25.002
+The important distinction is that opening a course
+alone does not mean you started or completed it.
+
+00:03:25.640 --> 00:03:28.003
+Notes share the study area with the video.
+
+00:03:28.003 --> 00:03:33.458
+Choose Edit to write with headings,
+emphasis, lists, links, and code formatting.
+
+00:03:33.458 --> 00:03:39.151
+Drag the divider or bottom grip to adjust the
+writing area; keyboard resizing is also available.
+
+00:03:39.151 --> 00:03:41.468
+Notes autosave after a short pause.
+
+00:03:41.468 --> 00:03:46.521
+Saved means the server acknowledged the document,
+not merely that text appeared on screen.
+
+00:03:46.521 --> 00:03:50.072
+Closing and reopening the pane
+preserves the editor and its draft.
+
+00:03:50.072 --> 00:03:54.724
+In Read mode, source-linked paragraphs take
+you back to the captured lesson moment.
+
+00:03:55.360 --> 00:03:59.389
+The Notebooks view brings written lessons
+together without starting playback.
+
+00:03:59.389 --> 00:04:02.374
+Filter to one lesson or read the whole course notebook.
+
+00:04:02.374 --> 00:04:09.058
+Export Markdown creates a portable document, and Print
+or Save PDF uses a clean print layout with source links.
+
+00:04:09.058 --> 00:04:12.038
+Removed courses can remain as archived notebooks.
+
+00:04:12.038 --> 00:04:16.063
+A failed save keeps a recovery draft
+when browser storage is available.
+
+00:04:16.063 --> 00:04:22.220
+A conflicting edit presents an explicit choice between your
+draft and the saved version rather than silently merging
+
+00:04:22.220 --> 00:04:23.246
+or overwriting either.
+
+00:04:23.840 --> 00:04:26.452
+Tasks turn a lesson into something actionable.
+
+00:04:26.452 --> 00:04:31.813
+Add a title, notes, priority, due
+date, and optional course association.
+
+00:04:31.813 --> 00:04:38.536
+The quick panel lets you capture a task without leaving
+your current screen, while the Tasks page offers course and
+
+00:04:38.536 --> 00:04:39.209
+priority filters.
+
+00:04:39.209 --> 00:04:44.475
+Roadmaps arrange courses into an ordered learning
+path with combined progress and a Continue action.
+
+00:04:44.475 --> 00:04:46.971
+Course checklists stay close to their lessons.
+
+00:04:46.971 --> 00:04:51.998
+The global Board entry is marked Coming soon; it
+is not a working board hidden behind this tour.
+
+00:04:52.640 --> 00:04:57.134
+The Dashboard separates time on Focus
+Tube from recorded video watch time.
+
+00:04:57.134 --> 00:05:04.816
+It shows streaks, completed lessons and courses, daily
+activity, course focus, consistency, and watch history.
+
+00:05:04.816 --> 00:05:08.355
+Change the time range to compare
+recent learning with the longer view.
+
+00:05:08.355 --> 00:05:12.369
+Expand the data tables for an
+accessible alternative to the charts.
+
+00:05:12.369 --> 00:05:18.021
+These are application activity records, not proof
+that a person paid attention for every second.
+
+00:05:18.021 --> 00:05:22.782
+The values in this recording are demonstration
+data, not real product analytics.
+
+00:05:23.480 --> 00:05:27.580
+When configured by the operator,
+Ask opens private video chat.
+
+00:05:27.580 --> 00:05:32.062
+The first question requests permission to
+process the video's content with Google.
+
+00:05:32.062 --> 00:05:35.344
+Available captions are prepared only after that choice.
+
+00:05:35.344 --> 00:05:39.538
+Summarize video and Explain the key
+ideas are ordinary chat starters.
+
+00:05:39.538 --> 00:05:42.894
+Text appears provisionally while the response is processed.
+
+00:05:42.894 --> 00:05:47.868
+Only a validated completed answer gains
+actionable source timestamps and note actions.
+
+00:05:47.868 --> 00:05:55.109
+This is caption-grounded assistance, not analysis of
+unseen slides, code, or video frames, and citations do not
+
+00:05:55.109 --> 00:05:57.665
+guarantee that every claim is correct.
+
+00:05:58.280 --> 00:06:01.770
+New chat starts a separate conversation for the same video.
+
+00:06:01.770 --> 00:06:07.780
+Histories can be selected, renamed, or deleted,
+and unsent drafts stay with their conversation.
+
+00:06:07.780 --> 00:06:10.354
+Add to notes first opens an editable preview.
+
+00:06:10.354 --> 00:06:16.939
+Cancel writes nothing; Append to notes is the explicit
+insertion step, with the normal save acknowledgement and
+
+00:06:16.939 --> 00:06:17.714
+immediate Undo.
+
+00:06:17.714 --> 00:06:21.337
+The composer displays the remaining
+six-hour request allowance.
+
+00:06:21.337 --> 00:06:24.505
+That allowance is separate from the shared monthly AI budget.
+
+00:06:24.505 --> 00:06:29.842
+A refill does not reset spending, and stopping
+an admitted request is not a refund promise.
+
+00:06:30.520 --> 00:06:38.162
+Settings groups account details, password changes,
+email verification, appearance, data, and policies.
+
+00:06:38.162 --> 00:06:43.610
+Sensitive changes require the current
+password, and password changes rotate sessions.
+
+00:06:43.610 --> 00:06:50.596
+Light and dark themes, optional navigation reflection,
+and reduced transparency let the workspace adapt to your
+
+00:06:50.596 --> 00:06:51.033
+preferences.
+
+00:06:51.033 --> 00:06:59.149
+A learning backup includes your courses, planning, notes,
+transcripts, and completed conversations, but not passwords,
+
+00:06:59.149 --> 00:07:02.396
+sessions, provider keys, or spending ledgers.
+
+00:07:02.396 --> 00:07:07.106
+Import replaces the current member's learning
+data after validation and confirmation.
+
+00:07:07.106 --> 00:07:10.447
+It is not an administrator's full-instance database restore.
+
+00:07:11.040 --> 00:07:17.415
+Feedback opens as a separate page, so reporting a problem
+does not need to replace your lesson or note draft.
+
+00:07:17.415 --> 00:07:22.173
+Choose a category, describe the issue,
+and optionally attach screenshots.
+
+00:07:22.173 --> 00:07:23.565
+Private is the default.
+
+00:07:23.565 --> 00:07:29.277
+Public reports require explicit agreement
+to publish the text, username, and images.
+
+00:07:29.277 --> 00:07:31.873
+Replies stay in the report's conversation.
+
+00:07:31.873 --> 00:07:37.385
+Image processing removes metadata, but it cannot
+redact secrets visible in the picture itself.
+
+00:07:37.385 --> 00:07:42.413
+Forum version one does not automatically send
+feedback email or publish a GitHub issue.
+
+00:07:43.040 --> 00:07:48.842
+An administrator can issue a reusable invitation
+with a chosen successful-signup limit and expiry.
+
+00:07:48.842 --> 00:07:54.677
+Raw links are shown once; the issued list
+contains metadata, status, and remaining uses.
+
+00:07:54.677 --> 00:08:01.024
+Expiry edits and revocation are guarded, and revoking an
+invitation does not remove members who already joined.
+
+00:08:01.024 --> 00:08:06.524
+In Feedback, administrators can change
+status, lock replies, or hide a thread.
+
+00:08:06.524 --> 00:08:10.618
+Resolved is not the same as locked,
+and hidden is not the same as deleted.
+
+00:08:10.618 --> 00:08:15.514
+Administrator status does not grant access to
+another member's private learning notebook.
+
+00:08:16.080 --> 00:08:21.690
+Site monitoring gives administrators an
+Overview, Members, Events, and System view.
+
+00:08:21.690 --> 00:08:28.472
+Filter account metadata, inspect bounded activity events,
+and check the application process and its storage.
+
+00:08:28.472 --> 00:08:33.056
+Presence is approximate, and the traffic
+chart is not a permanent outage history.
+
+00:08:33.056 --> 00:08:37.068
+Optional product analytics is
+separately configured and consent-based.
+
+00:08:37.068 --> 00:08:44.182
+It distinguishes engagement, retention, and self-reported
+audience information, while withholding small groups.
+
+00:08:44.182 --> 00:08:49.496
+Enabling these screens in this disposable demo does
+not enable collection on the real installation.
+
+00:08:49.496 --> 00:08:54.508
+External Grafana and uptime integrations
+also require operator configuration.
+
+00:08:55.200 --> 00:09:02.118
+The optional desktop browser extension captures one supported
+YouTube video through its popup or context-menu action.
+
+00:09:02.118 --> 00:09:07.411
+This scene shows the real popup interface with
+simulated browser connection and save receipts.
+
+00:09:07.411 --> 00:09:13.109
+Choose one destination, grant its site
+permission, connect the current profile, and save.
+
+00:09:13.109 --> 00:09:17.153
+Already-saved videos return a receipt
+instead of a duplicate course.
+
+00:09:17.153 --> 00:09:20.413
+Pending operations offer manual Retry or Discard.
+
+00:09:20.413 --> 00:09:27.318
+The extension does not read browsing history, import a
+whole playlist, or give mobile browsers the same extension
+
+00:09:27.318 --> 00:09:27.702
+capability.
+
+00:09:28.320 --> 00:09:32.218
+A completed course unlocks the application's PDF certificate.
+
+00:09:32.218 --> 00:09:36.452
+It records completion inside Focus
+Tube; it is not accreditation.
+
+00:09:36.452 --> 00:09:42.583
+The core experience is the loop from discovery to
+watching, writing, asking, planning, and reviewing.
+
+00:09:42.583 --> 00:09:44.874
+Manual notes need no AI service.
+
+00:09:44.874 --> 00:09:49.431
+Optional backend media downloads require
+separate tools and appropriate rights.
+
+00:09:49.431 --> 00:09:56.087
+Social sign-in, the Board interface, and the proposed motion
+improvements are not demonstrated as shipped features.
+
+00:09:56.087 --> 00:10:02.372
+Newer uncommitted cache work is discussed in the architecture
+video, separately from this released demo baseline.

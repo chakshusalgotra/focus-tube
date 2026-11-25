@@ -1,0 +1,74 @@
+[
+  {
+    "id": "map",
+    "title": "Start with the system boundary",
+    "start": 0,
+    "end": 35.2
+  },
+  {
+    "id": "monolith",
+    "title": "Why one Node service",
+    "start": 35.2,
+    "end": 72.52000000000001
+  },
+  {
+    "id": "browser",
+    "title": "Why vanilla JavaScript and local assets",
+    "start": 72.52000000000001,
+    "end": 111.44000000000001
+  },
+  {
+    "id": "identity",
+    "title": "Identity is a server-owned boundary",
+    "start": 111.44000000000001,
+    "end": 151.92000000000002
+  },
+  {
+    "id": "sqlite",
+    "title": "Why SQLite WAL and transactions",
+    "start": 151.92000000000002,
+    "end": 191.88000000000002
+  },
+  {
+    "id": "notes-state",
+    "title": "Preserve drafts without hiding conflicts",
+    "start": 191.88000000000002,
+    "end": 228.40000000000003
+  },
+  {
+    "id": "media-ai",
+    "title": "Media stays external; AI is opt-in",
+    "start": 228.40000000000003,
+    "end": 269.04
+  },
+  {
+    "id": "quotas",
+    "title": "Request allowance is not a money budget",
+    "start": 269.04,
+    "end": 306.12
+  },
+  {
+    "id": "capture",
+    "title": "Why a narrowly scoped extension",
+    "start": 306.12,
+    "end": 345.24
+  },
+  {
+    "id": "feedback-ops",
+    "title": "Feedback and observability preserve ownership",
+    "start": 345.24,
+    "end": 384.44
+  },
+  {
+    "id": "deployment",
+    "title": "Deployment, backup, and recovery",
+    "start": 384.44,
+    "end": 427.52
+  },
+  {
+    "id": "evolution",
+    "title": "What changes next, and what remains a proposal",
+    "start": 427.52,
+    "end": 461.96
+  }
+]

@@ -4973,6 +4973,41 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
       svg [data-node-id], svg [data-edge-from], svg [data-detail], svg [data-detail-anchor], svg [data-legend-hit], svg { transition: none !important; }
     }
   </style>
+<style id="focustube-viewer-style">
+/* Keep every viewer action reachable when the diagram is opened on a phone. */
+@media (max-width: 600px) {
+  html:not([data-embed="true"]) body {
+    padding: 16px;
+  }
+
+  html:not([data-embed="true"]) .toolbar {
+    position: relative;
+    inset: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+    gap: 8px;
+    margin: 0 0 20px;
+  }
+
+  html:not([data-embed="true"]) .header {
+    padding: 0;
+    margin-bottom: 16px;
+  }
+
+  html:not([data-embed="true"]) .toolbar .preset-menu,
+  html:not([data-embed="true"]) .toolbar .export-menu {
+    position: fixed;
+    inset: auto 16px;
+    width: auto;
+    min-width: 0;
+    max-height: 65dvh;
+    overflow-y: auto;
+  }
+}
+
+</style>
 </head>
 <body>
   <!-- Toolbar: theme, live visual style, trace motion, presentation stage, and export.
@@ -5280,17 +5315,17 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <!-- Legend -->
         <g data-legend="" data-legend-bridge="">
           <text x="20" y="428" class="t-primary" font-size="12" font-weight="650">Legend</text>
-          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="User UI" data-legend-x="20" data-legend-baseline="448" data-legend-width="74">
+          <g data-legend-semantic-kind="frontend" data-legend-kind="frontend" data-legend-label="Browser" data-legend-x="20" data-legend-baseline="448" data-legend-width="74">
             <rect x="20" y="440" width="14" height="9" rx="2" class="c-frontend" stroke-width="1"/>
-            <text x="42" y="448" class="t-muted" font-size="7.5" font-weight="500">User UI</text>
+            <text x="42" y="448" class="t-muted" font-size="7.5" font-weight="500">Browser</text>
           </g>
-          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Agent logic" data-legend-x="101" data-legend-baseline="448" data-legend-width="91">
+          <g data-legend-semantic-kind="backend" data-legend-kind="backend" data-legend-label="Application" data-legend-x="101" data-legend-baseline="448" data-legend-width="91">
             <rect x="101" y="440" width="14" height="9" rx="2" class="c-backend" stroke-width="1"/>
-            <text x="123" y="448" class="t-muted" font-size="7.5" font-weight="500">Agent logic</text>
+            <text x="123" y="448" class="t-muted" font-size="7.5" font-weight="500">Application</text>
           </g>
-          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Context / trace" data-legend-x="199" data-legend-baseline="448" data-legend-width="109">
+          <g data-legend-semantic-kind="database" data-legend-kind="database" data-legend-label="Storage" data-legend-x="199" data-legend-baseline="448" data-legend-width="74">
             <rect x="199" y="440" width="14" height="9" rx="2" class="c-database" stroke-width="1"/>
-            <text x="221" y="448" class="t-muted" font-size="7.5" font-weight="500">Context / trace</text>
+            <text x="221" y="448" class="t-muted" font-size="7.5" font-weight="500">Storage</text>
           </g>
         </g>
       </svg>

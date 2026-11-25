@@ -1,0 +1,457 @@
+1
+00:00:00,000 --> 00:00:05,025
+This Archify map explains the released Focus
+Tube architecture and the choices behind it.
+
+2
+00:00:05,025 --> 00:00:09,794
+It is linked to the documented release
+source, not to a live production inspection.
+
+3
+00:00:09,794 --> 00:00:16,319
+The highlighted path runs from the browser, through
+Express security checks and feature handlers, into SQLite.
+
+4
+00:00:16,319 --> 00:00:22,972
+The boxes inside the instance boundary are logical
+responsibilities, not separately deployed microservices.
+
+5
+00:00:22,972 --> 00:00:25,802
+Animated paths illustrate those relationships.
+
+6
+00:00:25,802 --> 00:00:28,378
+They are not measured requests or live traffic.
+
+7
+00:00:28,378 --> 00:00:34,475
+We will separate the design rationale, its tradeoffs,
+and later work that is not included in this baseline.
+
+8
+00:00:35,200 --> 00:00:43,578
+The application uses a modular monolith: one Node and
+Express process, with separate modules for identity, notes,
+
+9
+00:00:43,578 --> 00:00:46,042
+chat, feedback, capture, and observability.
+
+10
+00:00:46,042 --> 00:00:49,024
+This keeps self-hosting and local development small.
+
+11
+00:00:49,024 --> 00:00:54,491
+There is no required message broker, Redis
+service, or separate authentication deployment.
+
+12
+00:00:54,491 --> 00:01:00,456
+Keeping related state in one process and database
+also makes transactional operations straightforward.
+
+13
+00:01:00,456 --> 00:01:04,462
+The tradeoff is shared process
+capacity and coordinated releases.
+
+14
+00:01:04,462 --> 00:01:11,462
+More infrastructure would only be justified by measured
+workload or ownership needs, not by the diagram having several
+
+15
+00:01:11,462 --> 00:01:11,850
+boxes.
+
+16
+00:01:12,520 --> 00:01:16,967
+The frontend is vanilla JavaScript, HTML, and CSS.
+
+17
+00:01:16,967 --> 00:01:24,231
+Express serves the application, fonts, Lucide
+icons, Quill, charts, and PDF tools locally.
+
+18
+00:01:24,231 --> 00:01:29,559
+That avoids a separate frontend build server
+and reduces routine third-party asset requests.
+
+19
+00:01:29,559 --> 00:01:37,000
+The browser owns temporary interaction state, such as the
+current route, panel visibility, selection, and unsent
+
+20
+00:01:37,000 --> 00:01:37,465
+drafts.
+
+21
+00:01:37,465 --> 00:01:40,403
+The server owns durable account and learning records.
+
+22
+00:01:40,403 --> 00:01:46,539
+This small stack still needs discipline: imperative code
+must cancel stale work, preserve editor instances, and
+
+23
+00:01:46,539 --> 00:01:50,757
+prevent a response from one account
+or course painting over another.
+
+24
+00:01:51,440 --> 00:01:56,204
+Authentication uses salted scrypt
+password hashes and opaque session tokens.
+
+25
+00:01:56,204 --> 00:02:04,337
+Only token hashes are stored, and the browser receives an
+HttpOnly cookie with strict same-site behavior and Secure on
+
+26
+00:02:04,337 --> 00:02:04,765
+HTTPS.
+
+27
+00:02:04,765 --> 00:02:10,116
+This allows explicit server-side revocation
+instead of trusting a browser token indefinitely.
+
+28
+00:02:10,116 --> 00:02:13,793
+Exact Host and Origin checks sit alongside authentication.
+
+29
+00:02:13,793 --> 00:02:18,271
+Account-binding headers help reject
+stale tabs, but are not credentials.
+
+30
+00:02:18,271 --> 00:02:25,663
+Invitations, email proof, username uniqueness, capacity,
+account creation, and session issuance are rechecked
+
+31
+00:02:25,663 --> 00:02:26,232
+together.
+
+32
+00:02:26,232 --> 00:02:31,210
+A failed registration must not spend an
+invitation or consume a valid proof partially.
+
+33
+00:02:31,920 --> 00:02:36,479
+SQLite provides a durable local database
+without another server to provision.
+
+34
+00:02:36,479 --> 00:02:43,790
+Write-ahead logging, foreign keys, bounded busy waits,
+and immediate transactions give the application a concrete
+
+35
+00:02:43,790 --> 00:02:44,764
+consistency boundary.
+
+36
+00:02:44,764 --> 00:02:51,101
+Profiles hold revisioned course and planning data, while
+notes and conversations have their own records and revisions.
+
+37
+00:02:51,101 --> 00:02:57,994
+An invitation redemption, capture receipt, or AI
+reservation can succeed atomically with its related changes.
+
+38
+00:02:57,994 --> 00:03:01,627
+The important tradeoff is that SQLite serializes writes.
+
+39
+00:03:01,627 --> 00:03:08,171
+A larger deployment would need measured capacity
+planning, and potentially a different database or workload
+
+40
+00:03:08,171 --> 00:03:11,225
+architecture, rather than assuming
+unlimited horizontal scaling.
+
+41
+00:03:11,880 --> 00:03:18,133
+Notes use a validated document model around Quill
+instead of treating arbitrary HTML as trusted storage.
+
+42
+00:03:18,133 --> 00:03:24,934
+Source anchors attach to paragraphs only when the matching
+player supplies a real timestamp; zero seconds remains
+
+43
+00:03:24,934 --> 00:03:25,334
+valid.
+
+44
+00:03:25,334 --> 00:03:29,673
+A local edit updates recovery state,
+then sends a revision-checked save.
+
+45
+00:03:29,673 --> 00:03:32,346
+Saved means the server acknowledged that revision.
+
+46
+00:03:32,346 --> 00:03:37,958
+New edits during a request remain dirty, and
+conflicting revisions require an explicit choice.
+
+47
+00:03:37,958 --> 00:03:44,728
+Separating document state from pane visibility lets the
+user resize, switch views, or move between Chat and Notes
+
+48
+00:03:44,728 --> 00:03:47,736
+without recreating the editor or losing its history.
+
+49
+00:03:48,400 --> 00:03:55,068
+YouTube's official embedded player owns playback,
+including its speed, quality, and content restrictions.
+
+50
+00:03:55,068 --> 00:03:58,957
+Public metadata and permitted
+captions are separate retrieval paths.
+
+51
+00:03:58,957 --> 00:04:04,505
+Chat sends bounded caption context and the selected
+conversation to Google only after permission.
+
+52
+00:04:04,505 --> 00:04:08,635
+It does not automatically send
+existing notebooks or unrelated videos.
+
+53
+00:04:08,635 --> 00:04:14,995
+The browser can show provisional streamed text, but only
+a validated final answer is persisted and can expose
+
+54
+00:04:14,995 --> 00:04:16,762
+citations or a note preview.
+
+55
+00:04:16,762 --> 00:04:20,499
+This boundary avoids presenting
+partial output as durable work.
+
+56
+00:04:20,499 --> 00:04:27,177
+It also makes the limitations explicit: missing captions
+and provider failures are real failures, not reasons to
+
+57
+00:04:27,177 --> 00:04:28,356
+invent a source.
+
+58
+00:04:29,040 --> 00:04:35,127
+The released quota policy allows thirty admitted requests
+per account in a six-hour window, alongside the short-term
+
+59
+00:04:35,127 --> 00:04:37,992
+rate limit and one active answer per account.
+
+60
+00:04:37,992 --> 00:04:42,284
+SQLite reserves a request slot and
+estimated maximum cost together.
+
+61
+00:04:42,284 --> 00:04:47,428
+The first admitted request starts the window;
+later requests do not move its deadline.
+
+62
+00:04:47,428 --> 00:04:50,029
+The shared monthly cost ledger is independent.
+
+63
+00:04:50,029 --> 00:04:54,275
+A full personal allowance can still be
+blocked by insufficient budget headroom.
+
+64
+00:04:54,275 --> 00:05:00,676
+Known usage is reconciled, while unknown usage after
+a failed or canceled call can retain the reservation.
+
+65
+00:05:00,676 --> 00:05:05,363
+Replaying the same completed request does
+not generate twice or spend another slot.
+
+66
+00:05:06,120 --> 00:05:13,017
+The Manifest version three extension has a narrow job: add
+one chosen video to one selected Focus Tube environment.
+
+67
+00:05:13,017 --> 00:05:19,327
+Optional host permissions, exact extension identity,
+and account-bound operations limit its reach.
+
+68
+00:05:19,327 --> 00:05:21,611
+It tries the existing session first.
+
+69
+00:05:21,611 --> 00:05:28,608
+Where browser policy requires a separate connection, the
+first-party consent flow uses state, PKCE, a single-use code,
+
+70
+00:05:28,608 --> 00:05:32,724
+and a scoped opaque grant bounded by its parent session.
+
+71
+00:05:32,724 --> 00:05:38,137
+Saves are additive and return idempotent
+receipts, rather than replacing the whole profile.
+
+72
+00:05:38,137 --> 00:05:44,531
+A bounded queue supports manual recovery without silently
+retrying forever or changing the destination account.
+
+73
+00:05:45,240 --> 00:05:52,322
+Feedback is a separate public and private forum, with
+authorization checked again for reports, replies, and
+
+74
+00:05:52,322 --> 00:05:52,765
+screenshots.
+
+75
+00:05:52,765 --> 00:05:58,138
+Sharp validates and normalizes selected images,
+and storage commits with the parent record.
+
+76
+00:05:58,138 --> 00:06:00,623
+Public posting needs explicit consent.
+
+77
+00:06:00,623 --> 00:06:06,897
+Operational logs and metrics are bounded and sanitized;
+private scrape credentials are separate from an
+
+78
+00:06:06,897 --> 00:06:07,734
+administrator's session.
+
+79
+00:06:07,734 --> 00:06:12,175
+Optional audience and usage analytics have
+their own consent and retention rules.
+
+80
+00:06:12,175 --> 00:06:16,492
+These choices distinguish troubleshooting
+from collecting private learning content.
+
+81
+00:06:16,492 --> 00:06:23,446
+They also preserve an important limit: removing image metadata
+does not remove a password that is visibly present in a
+
+82
+00:06:23,446 --> 00:06:23,794
+screenshot.
+
+83
+00:06:24,440 --> 00:06:31,822
+Docker Compose keeps local, development, and production
+configurations explicit, with separate projects and persistent
+
+84
+00:06:31,822 --> 00:06:32,876
+data volumes.
+
+85
+00:06:32,876 --> 00:06:40,955
+A learning export is not a full operational backup: it
+excludes credentials, sessions, grants, shared feedback, and
+
+86
+00:06:40,955 --> 00:06:41,905
+spending records.
+
+87
+00:06:41,905 --> 00:06:47,858
+Instance recovery needs a consistent SQLite
+backup and securely managed runtime configuration.
+
+88
+00:06:47,858 --> 00:06:54,971
+The documented branch-triggered deployment jobs build and
+start services, but do not automatically prove every test,
+
+89
+00:06:54,971 --> 00:06:57,193
+backup, health, or acceptance gate.
+
+90
+00:06:57,193 --> 00:07:00,220
+A green job is therefore not the whole release decision.
+
+91
+00:07:00,220 --> 00:07:06,875
+Safe rollout still means a scoped artifact, verified
+data preservation, and an explicit rollback plan.
+
+92
+00:07:07,520 --> 00:07:14,418
+Newer uncommitted work explores an answer cache with exact
+private-context matching and tightly constrained sharing of
+
+93
+00:07:14,418 --> 00:07:15,712
+canonical public-source answers.
+
+94
+00:07:15,712 --> 00:07:22,589
+Semantic matching remains gated on real calibration,
+so it should not be described as a validated production
+
+95
+00:07:22,589 --> 00:07:22,994
+capability.
+
+96
+00:07:22,994 --> 00:07:29,313
+Social sign-in and the motion integration plan are also
+separate proposals, not facts inferred from this map.
+
+97
+00:07:29,313 --> 00:07:34,317
+The recurring design principle is to keep
+state ownership and failure behavior explicit.
+
+98
+00:07:34,317 --> 00:07:41,215
+Start small, preserve user control, and add complexity only
+when there is a measured reason and a testable contract.

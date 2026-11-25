@@ -2,33 +2,206 @@
   "schema_version": 2,
   "diagram_type": "workflow",
   "meta": {
-    "title": "Checked-in hosted deployment flow",
-    "locale": "en", "quality_profile": "showcase", "animation": "trace",
+    "title": "Validation and hosted deployment",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "animation": "trace",
     "views": [
-      { "id": "automation", "label": "Push-triggered automation", "focus": ["push", "runner", "host", "compose"], "note": "dev and main select separate deployment jobs, checkouts, Compose projects and data volumes." },
-      { "id": "verify", "label": "Configured healthcheck", "focus": ["compose", "health"], "note": "A periodic container healthcheck is distinct from manual release acceptance and is not awaited by the workflow." }
-    ]
+      {
+        "id": "dev",
+        "label": "Dev validation gate",
+        "focus": [
+          "dev",
+          "tests",
+          "devSsh",
+          "compose",
+          "health"
+        ],
+        "note": "Dev validates source and the runtime image before SSH, then waits up to 120 seconds for local container health."
+      },
+      {
+        "id": "production",
+        "label": "Existing production path",
+        "focus": [
+          "main",
+          "prodSsh",
+          "compose",
+          "health"
+        ],
+        "note": "Main retains its separate deploy workflow. It does not inherit the new dev validation or health-wait gate."
+      }
+    ],
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "frontend": {
+          "label": "Browser"
+        },
+        "backend": {
+          "label": "Application"
+        },
+        "database": {
+          "label": "Storage"
+        },
+        "security": {
+          "label": "Guard"
+        },
+        "cloud": {
+          "label": "Runtime"
+        },
+        "external": {
+          "label": "External service"
+        }
+      }
+    }
   },
   "lanes": [
-    { "id": "github", "label": "GitHub Actions" },
-    { "id": "host", "label": "Deployment host" }
+    {
+      "id": "dev-ci",
+      "label": "GitHub Actions: dev"
+    },
+    {
+      "id": "prod-ci",
+      "label": "GitHub Actions: main"
+    },
+    {
+      "id": "host",
+      "label": "Windows SSH → WSL / Docker"
+    }
   ],
-  "mainPath": ["push", "runner", "host", "compose", "health"],
+  "mainPath": [
+    "dev",
+    "tests",
+    "devSsh",
+    "compose",
+    "health"
+  ],
   "nodes": [
-    { "id": "push", "lane": "github", "col": 0, "type": "external", "label": "Push dev or main", "sublabel": "Different deployment jobs", "width": 175 },
-    { "id": "runner", "lane": "github", "col": 1, "type": "security", "label": "Tailnet + SSH", "sublabel": "Configured secret references", "width": 180 },
-    { "id": "host", "lane": "host", "col": 2, "type": "backend", "label": "Sync host checkout", "sublabel": "Windows SSH into WSL", "width": 180 },
-    { "id": "compose", "lane": "host", "col": 3, "type": "cloud", "label": "Compose up --build", "sublabel": "Same environment volumes", "width": 180 },
-    { "id": "health", "lane": "host", "col": 4, "type": "backend", "label": "Healthcheck", "sublabel": "HTTPS /api/health", "width": 145 }
+    {
+      "id": "dev",
+      "lane": "dev-ci",
+      "col": 0,
+      "type": "external",
+      "label": "Push dev",
+      "sublabel": "Source commit",
+      "width": 160
+    },
+    {
+      "id": "tests",
+      "lane": "dev-ci",
+      "col": 1,
+      "type": "backend",
+      "label": "Validate source + image",
+      "sublabel": "Tests, docs, image smoke",
+      "width": 160
+    },
+    {
+      "id": "devSsh",
+      "lane": "dev-ci",
+      "col": 2,
+      "type": "security",
+      "label": "Tailnet + SSH",
+      "sublabel": "Validated commit / WSL",
+      "width": 160
+    },
+    {
+      "id": "main",
+      "lane": "prod-ci",
+      "col": 0,
+      "type": "external",
+      "label": "Push main",
+      "sublabel": "Separate production workflow",
+      "width": 160
+    },
+    {
+      "id": "prodSsh",
+      "lane": "prod-ci",
+      "col": 2,
+      "type": "security",
+      "label": "Tailnet + SSH",
+      "sublabel": "Production checkout",
+      "width": 160
+    },
+    {
+      "id": "compose",
+      "lane": "host",
+      "col": 3,
+      "type": "cloud",
+      "label": "Compose build",
+      "sublabel": "Keep data volumes",
+      "width": 160
+    },
+    {
+      "id": "health",
+      "lane": "host",
+      "col": 4,
+      "type": "backend",
+      "label": "App readiness",
+      "sublabel": "Loopback + SQLite",
+      "width": 160
+    }
   ],
   "edges": [
-    { "id": "trigger-workflow", "from": "push", "to": "runner", "label": "on: push", "variant": "emphasis" },
-    { "id": "remote-shell", "from": "runner", "to": "host", "label": "SSH", "variant": "security" },
-    { "id": "run-compose", "from": "host", "to": "compose", "label": "Branch checkout", "variant": "emphasis" },
-    { "id": "periodic-probe", "from": "compose", "to": "health", "label": "Every 30s", "variant": "dashed" }
+    {
+      "id": "validate-dev",
+      "from": "dev",
+      "to": "tests",
+      "label": "Push trigger",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gate-deploy",
+      "from": "tests",
+      "to": "devSsh",
+      "label": "needs: validate",
+      "variant": "security"
+    },
+    {
+      "id": "dev-shell",
+      "from": "devSsh",
+      "to": "compose",
+      "label": "Validated SHA",
+      "variant": "security"
+    },
+    {
+      "id": "prod-trigger",
+      "from": "main",
+      "to": "prodSsh",
+      "label": "Push trigger",
+      "role": "branch"
+    },
+    {
+      "id": "prod-shell",
+      "from": "prodSsh",
+      "to": "compose",
+      "label": "Main checkout",
+      "variant": "security",
+      "role": "branch"
+    },
+    {
+      "id": "readiness",
+      "from": "compose",
+      "to": "health",
+      "label": "Dev waits",
+      "variant": "emphasis"
+    }
   ],
   "cards": [
-    { "dot": "amber", "title": "Configuration, not live attestation", "items": ["The workflows do not run the full test suite, back up SQLite, or wait for application health.", "Public tunnel configuration and hosted feature activation need independent verification."] },
-    { "dot": "rose", "title": "Data safety", "items": ["Local/dev use port 3002; production uses 3003 on its intended host. Projects isolate volumes.", "After data migrations use a compatible image or forward fix, never a blind old-database restore."] }
+    {
+      "dot": "cyan",
+      "title": "Dev deployment gate",
+      "items": [
+        "Tests and offline diagram evidence must pass. A fresh image starts without external network access and serves its assets, health and auth endpoints.",
+        "WSL retains its Docker config. Dev deploys the exact validated commit with --wait --wait-timeout 120 before image cleanup."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Independent environments",
+      "items": [
+        "Local/dev both bind host port 3002; production binds 3003. Compose project names isolate data and log volumes.",
+        "Main remains on the existing workflow. Public HTTPS, provider availability, backups and user acceptance need separate verification."
+      ]
+    }
   ]
 }
